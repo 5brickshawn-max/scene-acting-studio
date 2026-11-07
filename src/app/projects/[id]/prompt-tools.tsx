@@ -14,7 +14,7 @@ export type VideoHandoffView = {
   version: number;
   recommendedModel: string;
   startFrame: string;
-  references: { assetId: string; label: string }[];
+  references: { assetId: string; label: string; parts?: { assetId: string; expressionId: string }[] }[];
   prompt: string;
   promptKo: string;
   cameraMove: boolean;

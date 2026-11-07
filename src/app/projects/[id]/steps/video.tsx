@@ -9,6 +9,7 @@ import { AiAction, CopyButton, Field, ImageSlot, Seg } from "../ui";
 import { StepFrame } from "./step-frame";
 import { FrameMaker, HiggsfieldVideo } from "./higgsfield-direct";
 import { uploadAsset } from "@/lib/upload";
+import { composeImages } from "@/lib/export";
 import { HiggsfieldVideoPack } from "../packs";
 import { EnglishBar, PromptApplyBar, TextDiff, useVideoPrompt, type VideoPrompt } from "../prompt-tools";
 import { englishStale } from "@/lib/domain/english";
@@ -277,6 +278,17 @@ async function cropPanel(url: string, cols: number, index: number): Promise<File
   return new File([out], `시작프레임_표정${index + 1}.png`, { type: "image/png" });
 }
 
+/** Download consecutive beat images joined side by side, padded to the video's aspect ratio. */
+async function downloadCombined(urls: string[], aspect: "16:9" | "9:16", name: string) {
+  const bytes = await Promise.all(urls.map(async (u) => new Uint8Array(await (await fetch(u)).arrayBuffer())));
+  const out = await composeImages(bytes, aspect);
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([out as BlobPart], { type: "image/png" }));
+  link.download = `${name.replace(/[\\/:*?"<>|]+/g, " ").trim()}_${aspect.replace(":", "x")}.png`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+}
+
 /** Download a reference padded with white to the video's aspect ratio (never stretched). */
 async function downloadPadded(url: string, aspect: "16:9" | "9:16", name: string) {
   const bmp = await createImageBitmap(await (await fetch(url)).blob());
@@ -458,6 +470,28 @@ export function VideoStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }
             </p>
             <div className="flex flex-wrap gap-3">
               {h.references.map((r, i) => {
+                const name = `${String(i + 1).padStart(2, "0")}_${r.label.split(" — ")[0]}`;
+                const fail = (e: unknown) => setError(e instanceof Error ? e.message : "받지 못했습니다.");
+                if (r.parts) {
+                  // consecutive beats joined in one reference (the model takes a limited number of images)
+                  const parts = r.parts.map((p) => assets.get(p.assetId));
+                  return (
+                    <div key={r.assetId} className="rounded-lg border border-line overflow-hidden w-60">
+                      <div className="flex gap-1 bg-white">
+                        {parts.map((a, k) => (a ? <img key={k} src={a.previewUrl} alt="" className="h-24 min-w-0 flex-1 object-contain checker" /> : null))}
+                      </div>
+                      <span className="block p-1 text-[13px]">
+                        <strong>{i + 1}.</strong> {r.label.split(" — ")[0]} — 한 장에 나란히 붙여 첨부
+                      </span>
+                      {parts.every(Boolean) && (
+                        <button type="button" className="btn btn-sm w-full rounded-none border-x-0 border-b-0"
+                          onClick={() => downloadCombined(parts.map((a) => a!.url), data.video.aspectRatio, name).catch(fail)}>
+                          합쳐서 {data.video.aspectRatio}로 받기
+                        </button>
+                      )}
+                    </div>
+                  );
+                }
                 const a = assets.get(r.assetId);
                 return (
                   <div key={r.assetId} className="rounded-lg border border-line overflow-hidden w-36">
@@ -469,7 +503,7 @@ export function VideoStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }
                     </span>
                     {a && (
                       <button type="button" className="btn btn-sm w-full rounded-none border-x-0 border-b-0"
-                        onClick={() => downloadPadded(a.url, data.video.aspectRatio, `${String(i + 1).padStart(2, "0")}_${r.label.split(" — ")[0]}`).catch((e) => setError(e instanceof Error ? e.message : "받지 못했습니다."))}>
+                        onClick={() => downloadPadded(a.url, data.video.aspectRatio, name).catch(fail)}>
                         {data.video.aspectRatio}로 받기
                       </button>
                     )}

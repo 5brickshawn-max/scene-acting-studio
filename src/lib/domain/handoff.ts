@@ -10,6 +10,7 @@
  * Only imported by server code (route handlers) so the templates are not
  * shipped to the browser bundle.
  */
+import { comboId, MAX_COMBO_PARTS } from "@/lib/combo";
 import { constraintsFor, directorAngle, directorBackground, directorRig, hasCameraMove, reconcile, type Adjustment } from "./constraints";
 import { freshEnglish } from "./english";
 import {
@@ -479,7 +480,15 @@ export function buildFrameHandoff(data: ProjectData, expressionId: string, shot:
   return { prompt, aspectRatio: data.video.aspectRatio, references };
 }
 
-export type VideoReference = { assetId: string; label: string; role: "identity" | "expression"; expressionId?: string; characterId?: string };
+export type VideoReference = {
+  assetId: string;
+  label: string;
+  role: "identity" | "expression";
+  expressionId?: string;
+  characterId?: string;
+  /** a combined image: consecutive beats side by side, left to right (assetId is the combo id) */
+  parts?: { assetId: string; expressionId: string }[];
+};
 
 /**
  * More beat images than the model takes: keep the most useful ones. First and last always; then the panel that
@@ -495,6 +504,40 @@ function pickReferences(data: ProjectData, ids: string[], max: number): Set<stri
     // equal scores: prefer panels far from those already kept (even spread) by position order of an even sample
     .sort((a, b) => b.s - a.s || Math.abs((a.k * (max - 1)) / (ids.length - 1) - Math.round((a.k * (max - 1)) / (ids.length - 1))) - Math.abs((b.k * (max - 1)) / (ids.length - 1) - Math.round((b.k * (max - 1)) / (ids.length - 1))) || a.k - b.k);
   return new Set(ranked.slice(0, max).map((r) => r.id));
+}
+
+/**
+ * Fit consecutive beats into `max` images by joining neighbours (at most MAX_COMBO_PARTS per image).
+ * Joins panels of the same shot first (one continuous camera move), keeps the first and last beats alone
+ * when it can, and only then joins across a cut.
+ */
+export function groupBeats(ids: string[], max: number, cuts: Map<string, boolean>): string[][] {
+  const groups = ids.map((id) => [id]);
+  while (groups.length > max) {
+    let best = -1;
+    let bestCost = Infinity;
+    for (let i = 0; i < groups.length - 1; i++) {
+      const size = groups[i].length + groups[i + 1].length;
+      if (size > MAX_COMBO_PARTS) continue;
+      const edge = i === 0 || i + 1 === groups.length - 1 ? 3 : 0;
+      const cost = size * 10 + (cuts.get(groups[i + 1][0]) ? 5 : 0) + edge;
+      if (cost < bestCost) {
+        bestCost = cost;
+        best = i;
+      }
+    }
+    if (best < 0) break;
+    groups.splice(best, 2, [...groups[best], ...groups[best + 1]]);
+  }
+  if (groups.length <= max) return groups;
+  // pairs left that cannot join (more than twice the slots): even runs over the timeline
+  const even: string[][] = [];
+  for (let g = 0, at = 0; g < max; g++) {
+    const size = Math.round(((g + 1) * ids.length) / max) - Math.round((g * ids.length) / max);
+    even.push(ids.slice(at, at + size));
+    at += size;
+  }
+  return even;
 }
 
 /** Reference images a video model takes at most (identity + beat images). */
@@ -523,39 +566,79 @@ export type VideoHandoff = {
 
 /**
  * Reference images for the video, in upload order:
- * the scene drawing (identity of the whole cast), then one image per beat in timeline order.
- * Capped (models accept a limited number of references).
+ * the scene drawing (identity of the whole cast), then the beat images in timeline order.
+ * Models accept a limited number of references: past the cap, consecutive beats share one image
+ * (side by side, left to right), so every beat still has its picture; only past
+ * MAX_COMBO_PARTS per image are the least useful beats left out.
  */
 export function videoReferences(data: ProjectData, maxExpressions = MAX_VIDEO_REFERENCES - 1): VideoReference[] {
   const refs: VideoReference[] = [];
   const multi = isMultiCast(data);
+  const story = isStoryboard(data);
   if (data.baseAssetId)
     refs.push({
       assetId: data.baseAssetId,
-      label: isStoryboard(data) ? "장면 기준 그림 — scene reference" : multi ? "장면 기준 그림 — the whole cast together (identity)" : "캐릭터 기본 그림 — original character identity",
+      label: story ? "장면 기준 그림 — scene reference" : multi ? "장면 기준 그림 — the whole cast together (identity)" : "캐릭터 기본 그림 — original character identity",
       role: "identity",
     });
+  // one image per beat in timeline order (the same image used twice is attached once)
   const seen = new Set<string>();
-  // more images than the model takes: keep them spread over the whole timeline, first and last included
-  const withImage = data.acting.segments.filter((seg) => data.expressions.find((e) => e.id === seg.expressionId)?.imageAssetId);
-  const keep = withImage.length > maxExpressions && maxExpressions > 1 ? pickReferences(data, withImage.map((x) => x.expressionId), maxExpressions) : null;
+  let beats: string[] = [];
   for (const seg of data.acting.segments) {
-    const i = data.expressions.findIndex((e) => e.id === seg.expressionId);
-    const e = data.expressions[i];
-    if (keep && !keep.has(seg.expressionId)) continue;
-    if (!e?.imageAssetId || seen.has(e.imageAssetId) || seen.size >= maxExpressions) continue;
+    const e = data.expressions.find((x) => x.id === seg.expressionId);
+    if (!e?.imageAssetId || seen.has(e.imageAssetId)) continue;
     seen.add(e.imageAssetId);
+    beats.push(e.id);
+  }
+  const max = Math.max(1, maxExpressions);
+  if (beats.length > max * MAX_COMBO_PARTS) {
+    const keep = pickReferences(data, beats, max * MAX_COMBO_PARTS);
+    beats = beats.filter((id) => keep.has(id));
+  }
+  const groups = beats.length > max ? groupBeats(beats, max, cutBefore(data)) : beats.map((id) => [id]);
+  const numOf = (id: string) => data.expressions.findIndex((e) => e.id === id) + 1;
+  const imageOf = (id: string) => data.expressions.find((e) => e.id === id)!.imageAssetId!;
+  for (const g of groups) {
+    if (g.length === 1) {
+      const e = data.expressions[numOf(g[0]) - 1];
+      refs.push({
+        assetId: e.imageAssetId!,
+        label: story ? `${numOf(e.id)}번 컷 ${e.emotion || ""} — storyboard frame target` : `${numOf(e.id)}번 ${e.emotion || "표정"} — approved expression target`,
+        role: "expression",
+        expressionId: e.id,
+      });
+      continue;
+    }
+    const parts = g.map((id) => ({ assetId: imageOf(id), expressionId: id }));
     refs.push({
-      assetId: e.imageAssetId,
-      label: isStoryboard(data) ? `${i + 1}번 컷 ${e.emotion || ""} — storyboard frame target` : `${i + 1}번 ${e.emotion || "표정"} — approved expression target`,
+      assetId: comboId(parts.map((p) => p.assetId)),
+      label: `${g.map(numOf).join("·")}번 ${story ? "컷" : "표정"} (나란히 ${g.length}장) — consecutive ${story ? "storyboard frames" : "expression targets"}, left to right`,
       role: "expression",
-      expressionId: e.id,
+      expressionId: g[0],
+      parts,
     });
   }
   if (!seen.size && data.expressionSetup.sheetAssetId)
     refs.push({ assetId: data.expressionSetup.sheetAssetId, label: "표정 시트 (이전 방식) — expression targets, panels left to right", role: "expression" });
   return refs;
 }
+
+const POSITION = [["left", "right"], ["left", "middle", "right"]];
+
+/** "reference image 3" or "reference image 3 (left frame)" for a beat; null when the beat has no image attached. */
+export function referenceTarget(refs: VideoReference[], expressionId: string): string | null {
+  for (const [k, r] of refs.entries()) {
+    if (r.parts) {
+      const at = r.parts.findIndex((p) => p.expressionId === expressionId);
+      if (at >= 0) return `reference image ${k + 1} (${POSITION[r.parts.length - 2]?.[at] ?? `frame ${at + 1}`} frame)`;
+    } else if (r.role === "expression" && r.expressionId === expressionId) return `reference image ${k + 1}`;
+  }
+  return null;
+}
+
+/** Beats whose image is attached (alone or inside a combined image). */
+export const shownBeats = (refs: VideoReference[]) =>
+  new Set(refs.flatMap((r) => (r.parts ? r.parts.map((p) => p.expressionId) : r.role === "expression" && r.expressionId ? [r.expressionId] : [])));
 
 /** Text length caps for each beat field in the video prompt (Infinity = full text, for the team's summary). */
 type Limits = { face: number; gesture: number; note: number; transition: number; delivery: number };
@@ -729,10 +812,7 @@ export function buildVideoHandoff(
   const byId = new Map(data.expressions.map((e, i) => [e.id, { e, i }]));
   const lineFor = (id: string) => data.dialogue.lines.find((l) => l.expressionId === id);
   const refs = source === "references" ? videoReferences(data) : [];
-  const refNo = (expressionId: string) => {
-    const k = refs.findIndex((r) => r.expressionId === expressionId);
-    return k >= 0 ? k + 1 : null;
-  };
+  const refNo = (expressionId: string) => referenceTarget(refs, expressionId);
   const vertical = data.video.aspectRatio === "9:16";
   const framing = data.expressionSetup.framing;
   const hands = showsHands(framing);
@@ -869,7 +949,7 @@ export function buildVideoHandoff(
       const time = `${k + 1}. ${fmtSec(seg.start)}–${fmtSec(seg.end)} seconds`;
       // nothing follows the last beat: no move "into the next expression" there
       const last = k === data.acting.segments.length - 1;
-      const target = n ? `${multi ? "Frame" : "Expression"} target: reference image ${n}.` : "";
+      const target = n ? `${multi ? "Frame" : "Expression"} target: ${n}.` : "";
       const eb = fixed ? enBeats.get(seg.expressionId) : undefined;
       const who = multi ? nameOf(seg.expressionId) : "";
       // the other characters at the same moment: English where fresh, else the team's Korean (`fixed` = for the model)
@@ -987,6 +1067,8 @@ export function buildVideoHandoff(
                 return multi
                   ? `${i + 1}. scene reference drawing of the whole cast — ${data.cast.map((c) => spotEn(data, c, en)).join("; ")}; use it for identity and relative sizes only`
                   : `${i + 1}. character design — may show several views of the same character; use it for identity only`;
+              if (r.parts)
+                return `${i + 1}. ${multi ? "frames" : "expressions"} ${r.parts.map((p) => numberOf(p.expressionId)).join(", ")} side by side, left to right — ${r.parts.length} consecutive ${multi ? "approved scene frames" : "approved expression targets"} in one image (separate moments, not one picture)`;
               const eb = r.expressionId ? enBeats.get(r.expressionId) : undefined;
               const label = multi ? "approved scene frame" : "approved expression target";
               return `${i + 1}. ${eb ? `${multi ? "frame" : "expression"} ${numberOf(r.expressionId!)} (${multi ? `${nameOf(r.expressionId!)}: ` : ""}${eb.emotion}) — ${label}` : r.label}`;
@@ -999,8 +1081,8 @@ export function buildVideoHandoff(
           }`,
       refs.some((r) => r.role === "expression") &&
         (multi
-          ? `Frame references are successive moments of this same shot of the whole cast. Do not render a grid or split screen; never duplicate a character.`
-          : refs.length > 1 && `Expression references are successive moments of this same shot for the same character. Do not render a grid, split screen or multiple faces.`),
+          ? `Frame references are successive moments of this same shot of the whole cast.${refs.some((r) => r.parts) ? " A reference with frames side by side holds consecutive moments, played one after another in full frame." : ""} Do not render a grid or split screen; never duplicate a character.`
+          : refs.length > 1 && `Expression references are successive moments of this same shot for the same character.${refs.some((r) => r.parts) ? " A reference with frames side by side holds consecutive moments, played one after another in full frame." : ""} Do not render a grid, split screen or multiple faces.`),
       voices.length &&
         (multi
           ? `Voices (each character keeps their own voice): ${voices
@@ -1187,10 +1269,7 @@ const STORY_BUDGETS = [
 function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "references", opts: { endFrame?: boolean }): VideoHandoff {
   const endFrame = source === "start_frame" && (opts.endFrame ?? Boolean(data.video.endFrameAssetId));
   const refs = source === "references" ? videoReferences(data) : [];
-  const refNo = (id: string) => {
-    const k = refs.findIndex((r) => r.expressionId === id);
-    return k >= 0 ? k + 1 : null;
-  };
+  const refNo = (id: string) => referenceTarget(refs, id);
   const en = freshEnglish(data);
   const lang = en.language ?? languageEn(data.dialogue.language || "");
   const adjustments: Adjustment[] = [];
@@ -1263,7 +1342,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
       return [
         `${k + 1}. ${fmtSec(seg.start)}–${fmtSec(seg.end)} seconds: panel ${panelNo(seg.expressionId)}${p?.title ? ` — ${p.title}` : ""}${multiShot ? ` (shot ${shotNo})` : ""}`,
         multiShot && k > 0 && (cuts.get(seg.expressionId) ? "HARD CUT to a new shot here." : "Same shot: the camera moves on continuously from the previous panel, no cut."),
-        n && `Frame target: reference image ${n}.`,
+        n && `Frame target: ${n}.`,
         cut(action, B.action) && `Action: ${sentence(cut(action, B.action))}`,
         cut(camera, B.camera) && `Camera: ${sentence(cut(camera, B.camera))}`,
         !last && B.transition && cut(transition, B.transition) && `Into the next panel: ${sentence(cut(transition, B.transition))}`,
@@ -1299,10 +1378,14 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
             ...refs.map((r, i) =>
               r.role === "identity"
                 ? `${i + 1}. scene reference drawing — named characters, style and world; identity only`
-                : `${i + 1}. panel ${r.expressionId ? panelNo(r.expressionId) : "?"}${r.expressionId && panels.get(r.expressionId)?.title ? ` (${panels.get(r.expressionId)!.title})` : ""} — storyboard frame target`,
+                : r.parts
+                  ? `${i + 1}. panels ${r.parts.map((p) => panelNo(p.expressionId)).join(", ")} side by side, left to right — ${r.parts.length} consecutive storyboard frames in one image (separate moments; each fills the whole frame in the video)`
+                  : `${i + 1}. panel ${r.expressionId ? panelNo(r.expressionId) : "?"}${r.expressionId && panels.get(r.expressionId)?.title ? ` (${panels.get(r.expressionId)!.title})` : ""} — storyboard frame target`,
             ),
           ].join("\n")
         : `Use the start frame as the exact first panel.${endFrame ? " The shot ends exactly on the end frame." : ""}`,
+      refs.some((r) => r.parts) &&
+        "Panels shown side by side in one reference are separate moments: each plays in full frame in turn; never show a split screen, grid or side-by-side frames.",
       speaking &&
         (voOnly
           ? `Dialogue: every line is voice-over — heard over the picture, never spoken on screen; nobody's lips move for it.`

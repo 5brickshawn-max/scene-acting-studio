@@ -348,8 +348,18 @@ export function ReviewView({ b, dataUrl }: { b: ReviewBundle; dataUrl: string })
           <div className="field-label">{d.video.startFrameAssetId ? "시작 프레임" : "참고 그림 (이 순서대로 첨부)"}</div>
           <ol className="flex flex-wrap gap-3">
             {(d.video.startFrameAssetId ? [{ assetId: d.video.startFrameAssetId, label: "시작 프레임" }] : video.references).map((r, i) => (
-              <li key={`${r.assetId}-${i}`} className="w-32 space-y-1">
-                <Media a={A(r.assetId)} label={r.label} />
+              <li key={`${r.assetId}-${i}`} className={`${"parts" in r && r.parts ? "w-56" : "w-32"} space-y-1`}>
+                {"parts" in r && r.parts ? (
+                  <div className="flex gap-1">
+                    {r.parts.map((p) => (
+                      <div key={p.assetId} className="min-w-0 flex-1">
+                        <Media a={A(p.assetId)} label={r.label} />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <Media a={A(r.assetId)} label={r.label} />
+                )}
                 <div className="text-[13px]">
                   <strong>{i + 1}.</strong> {r.label.split(" — ")[0]}
                 </div>

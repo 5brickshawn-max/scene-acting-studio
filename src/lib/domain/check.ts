@@ -5,7 +5,7 @@
  * Each warning carries the fix the team can apply with one click, when there is one.
  */
 import { hasCameraMove } from "./constraints";
-import { VIDEO_PROMPT_TARGET, type VideoHandoff } from "./handoff";
+import { VIDEO_PROMPT_TARGET, shownBeats, type VideoHandoff } from "./handoff";
 import { castLabel, continuityAnchor, imageAspectFor, imageIsStale, shotsOf, timelineOrder, type ProjectData } from "./project";
 import { estimateSpeechSeconds } from "./speech";
 import { retime, timingMismatch } from "./timing";
@@ -59,9 +59,16 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
   else add("ok", "한 쇼트", "‘컷 없는 한 쇼트’ 지시가 프롬프트 맨 앞에 있습니다.");
   // the model takes a limited number of images: say which ones are left out (any mode)
   {
-    const shown = new Set(h.references.filter((r) => r.role === "expression").map((r) => r.expressionId));
+    const shown = shownBeats(h.references);
     const left = order0(data).filter((e) => e.imageAssetId && !shown.has(e.id));
     const unit = data.mode === "storyboard" ? "컷" : "표정";
+    const combos = h.references.filter((r) => r.parts);
+    if (!data.video.startFrameAssetId && combos.length)
+      add(
+        "ok",
+        "참고 그림 수",
+        `영상 모델이 받는 참고 그림 수에 한도가 있어, 이어지는 ${unit} 그림을 한 장에 나란히 붙여 첨부합니다: ${combos.map((r) => r.label.split(" — ")[0]).join(", ")}. 빠지는 ${unit}은 없습니다.`,
+      );
     if (!data.video.startFrameAssetId && left.length)
       add(
         "warn",

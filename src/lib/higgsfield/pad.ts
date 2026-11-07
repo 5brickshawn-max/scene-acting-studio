@@ -5,6 +5,7 @@
  * has the output's shape keeps the drawing's proportions.
  */
 import sharp from "sharp";
+import { comboLayout } from "@/lib/combo";
 
 export type VideoAspect = "16:9" | "9:16";
 export const ratioOf = (a: VideoAspect) => (a === "16:9" ? 16 / 9 : 9 / 16);
@@ -28,4 +29,27 @@ export async function padToAspect(input: Buffer, aspect: VideoAspect): Promise<B
     .extend({ left, right: size.width - width - left, top, bottom: size.height - height - top, background: "#ffffff" })
     .png()
     .toBuffer();
+}
+
+/**
+ * Consecutive beat images side by side (left to right, common height, white gutter), padded with white
+ * to the video's aspect ratio: one reference that carries several panels when the model takes too few images.
+ */
+export async function composeSideBySide(inputs: Buffer[], aspect: VideoAspect): Promise<Buffer> {
+  const imgs = await Promise.all(
+    inputs.map(async (b) => {
+      const m = await sharp(b).metadata();
+      if (!m.width || !m.height) throw new Error("그림 크기를 읽지 못했습니다.");
+      return { b, width: m.width, height: m.height };
+    }),
+  );
+  const L = comboLayout(imgs);
+  const parts = await Promise.all(
+    imgs.map((im, k) => sharp(im.b).flatten({ background: "#ffffff" }).resize(L.widths[k], L.height, { fit: "fill" }).png().toBuffer()),
+  );
+  const strip = await sharp({ create: { width: L.width, height: L.height, channels: 3, background: "#ffffff" } })
+    .composite(parts.map((input, k) => ({ input, left: L.xs[k], top: 0 })))
+    .png()
+    .toBuffer();
+  return (await padToAspect(strip, aspect)) ?? strip;
 }

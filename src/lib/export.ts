@@ -6,6 +6,7 @@
  */
 import { zip, strToU8, type Zippable } from "fflate";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import { comboLayout } from "@/lib/combo";
 
 export type PackFile = { path: string; data: Uint8Array; compress?: boolean };
 
@@ -106,4 +107,24 @@ export async function padImage(bytes: Uint8Array, aspect: "16:9" | "9:16"): Prom
   ctx.drawImage(bmp, Math.floor((W - w) / 2), Math.floor((H - h) / 2));
   const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
   return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
+}
+
+/**
+ * Consecutive beat images side by side (left to right), padded with white to the video's aspect ratio —
+ * the same combined reference the app sends for direct generation when the model takes too few images.
+ */
+export async function composeImages(images: Uint8Array[], aspect: "16:9" | "9:16"): Promise<Uint8Array> {
+  const bmps = await Promise.all(images.map((b) => createImageBitmap(new Blob([b as BlobPart]))));
+  const L = comboLayout(bmps.map((b) => ({ width: b.width, height: b.height })));
+  const canvas = document.createElement("canvas");
+  canvas.width = L.width;
+  canvas.height = L.height;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, L.width, L.height);
+  bmps.forEach((b, k) => ctx.drawImage(b, L.xs[k], 0, L.widths[k], L.height));
+  const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
+  if (!blob) throw new Error("그림을 합치지 못했습니다.");
+  const strip = new Uint8Array(await blob.arrayBuffer());
+  return (await padImage(strip, aspect)) ?? strip;
 }

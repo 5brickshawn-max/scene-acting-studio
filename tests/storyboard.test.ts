@@ -203,7 +203,7 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     expect(h.prompt).not.toContain("다음 컷으로");
   });
 
-  it("spreads the attached panel images over the whole timeline when there are too many", () => {
+  it("joins consecutive panels side by side instead of leaving any out when there are too many", () => {
     const d = createProjectData("많은 컷", 1, "storyboard");
     d.baseAssetId = "scene-1";
     d.expressionSetup.count = 8;
@@ -211,8 +211,30 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     d.acting.segments = d.expressions.map((e, i) => ({ expressionId: e.id, start: i, end: i + 1, transition: "" }));
     d.acting.duration = 8;
     const refs = buildVideoHandoff(d).references;
-    expect(refs.map((r) => r.assetId)).toEqual(["scene-1", "img-0", "img-1", "img-3", "img-4", "img-6", "img-7"]);
-    expect(preRenderCheck(d, buildVideoHandoff(d)).find((i) => i.area === "참고 그림 수")?.text).toContain("컷 그림 2장(3번, 6번)");
+    // 8 panels, 6 slots: two pairs; first and last stay alone
+    expect(refs.map((r) => r.assetId)).toEqual(["scene-1", "img-0", "combo:img-1+img-2", "combo:img-3+img-4", "img-5", "img-6", "img-7"]);
+    const h = buildVideoHandoff(d);
+    expect(h.prompt).toContain("3. panels 2, 3 side by side, left to right");
+    expect(h.prompt).toContain("Frame target: reference image 3 (right frame).");
+    expect(h.prompt).toContain("never show a split screen");
+    const items = preRenderCheck(d, h).filter((i) => i.area === "참고 그림 수");
+    expect(items.map((i) => i.level)).toEqual(["ok"]);
+    expect(items[0].text).toContain("2·3번 컷 (나란히 2장)");
+  });
+
+  it("drops the least useful panels only past three per combined image", () => {
+    const d = createProjectData("아주 많은 컷", 1, "storyboard");
+    d.baseAssetId = "scene-1";
+    d.expressions = Array.from({ length: 20 }, (_, i) => ({ ...d.expressions[i % d.expressions.length], id: `p${i}`, action: "x", imageAssetId: `img-${i}` }));
+    d.acting.segments = d.expressions.map((e, i) => ({ expressionId: e.id, start: i, end: i + 1, transition: "" }));
+    d.acting.duration = 20;
+    const refs = buildVideoHandoff(d).references;
+    expect(refs).toHaveLength(7);
+    const shown = refs.flatMap((r) => r.parts?.map((p) => p.assetId) ?? (r.role === "expression" ? [r.assetId] : []));
+    expect(shown).toHaveLength(18);
+    expect(shown).toContain("img-0");
+    expect(shown).toContain("img-19");
+    expect(refs.every((r) => (r.parts?.length ?? 1) <= 3)).toBe(true);
   });
 
   it("voice-over lines are heard, not spoken on screen (auto from the delivery, or set by hand)", () => {
@@ -241,7 +263,7 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     expect(h.prompt).not.toContain("HANDHELD as in the Constraints");
   });
 
-  it("keeps the panels that open a shot or carry a line when there are too many images", () => {
+  it("fits nine panels (the reported case) by joining panels of the same shot first", () => {
     const d = createProjectData("많은 컷", 1, "storyboard");
     d.baseAssetId = "scene-1";
     d.expressionSetup.count = 9;
@@ -250,11 +272,7 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     d.acting.duration = 9;
     d.dialogue.lines = [{ expressionId: "p7", line: "Surely…", meaning: "", delivery: "" }];
     const imgs = buildVideoHandoff(d).references.filter((r) => r.role === "expression").map((r) => r.assetId);
-    expect(imgs).toHaveLength(6);
-    expect(imgs).toContain("img-0");
-    expect(imgs).toContain("img-8");
-    expect(imgs).toContain("img-7");
-    // a panel inside a shot (no cut, no line) is the first to go
-    expect(imgs).not.toContain("img-5");
+    // 9 panels in 6 images: panels of one shot share an image first (5·6, 8·9), then one pair across a cut
+    expect(imgs).toEqual(["img-0", "combo:img-1+img-2", "img-3", "combo:img-4+img-5", "img-6", "combo:img-7+img-8"]);
   });
 });

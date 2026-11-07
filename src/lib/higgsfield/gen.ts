@@ -11,7 +11,9 @@ import { FRAMING_LABEL, readProjectData, type Framing, type ProjectData } from "
 import { buildExpressionHandoffs, buildFrameHandoff, buildSceneImageHandoff, buildVideoHandoff } from "@/lib/domain/handoff";
 import { findJobIds, getConnection, openSession, withWorkspace, type McpSession } from "./client";
 import sharp from "sharp";
-import { padToAspect, type VideoAspect } from "./pad";
+import { composeSideBySide, padToAspect, type VideoAspect } from "./pad";
+import { comboParts } from "@/lib/combo";
+import { createHash } from "node:crypto";
 import { IMAGE_MODELS, VIDEO_MODELS, isImageModel, isVideoModel, videoDuration } from "./models";
 
 const TERMINAL_FAIL = new Set(["failed", "nsfw", "canceled", "cancelled", "ip_detected", "error"]);
@@ -186,6 +188,31 @@ async function importMedias(s: McpSession, assetIds: string[], padTo?: VideoAspe
   const sb = supabaseAdmin();
   const map = new Map<string, string>();
   for (const id of [...new Set(assetIds)]) {
+    const parts = comboParts(id);
+    if (parts) {
+      // consecutive beats in one image (composed once per aspect ratio, stored next to the first part)
+      const { data: rows } = await sb.from("assets").select("id, storage_path").in("id", parts);
+      const byId = new Map((rows ?? []).map((r) => [r.id as string, r.storage_path as string]));
+      const paths = parts.map((p) => byId.get(p));
+      if (paths.some((p) => !p)) continue;
+      const aspect = padTo ?? "16:9";
+      const hash = createHash("sha1").update(`${parts.join("+")}|${aspect}`).digest("hex").slice(0, 16);
+      const combo = `${paths[0]!.replace(/\/[^/]*$/, "")}/combo_${hash}.png`;
+      const { data: exists } = await sb.storage.from("assets").createSignedUrl(combo, 60);
+      if (!exists?.signedUrl) {
+        const files = await Promise.all(paths.map((p) => sb.storage.from("assets").download(p!)));
+        if (files.some((f) => !f.data)) continue;
+        const out = await composeSideBySide(await Promise.all(files.map(async (f) => Buffer.from(await f.data!.arrayBuffer()))), aspect).catch(() => null);
+        if (!out) continue;
+        const up = await sb.storage.from("assets").upload(combo, out, { contentType: "image/png", upsert: true });
+        if (up.error) continue;
+      }
+      const { data: signed } = await sb.storage.from("assets").createSignedUrl(combo, 600);
+      if (!signed?.signedUrl) continue;
+      const r = await s.call<{ media_id?: string }>("media_import_url", { url: signed.signedUrl, type: "image" });
+      if (r.media_id) map.set(id, r.media_id);
+      continue;
+    }
     const { data: a } = await sb.from("assets").select("storage_path, mime").eq("id", id).single();
     if (!a) continue;
     let path = a.storage_path as string;

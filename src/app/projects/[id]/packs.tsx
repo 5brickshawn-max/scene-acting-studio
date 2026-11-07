@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { continuityAnchor, imageAspectFor, timelineOrder } from "@/lib/domain/project";
-import { fetchAll, freshAssets, padImage, safeName, saveBlob, stamp, text, zipFiles, type PackFile } from "@/lib/export";
+import { composeImages, fetchAll, freshAssets, padImage, safeName, saveBlob, stamp, text, zipFiles, type PackFile } from "@/lib/export";
 import { useEditor } from "./editor-context";
 
 const two = (n: number) => String(n).padStart(2, "0");
@@ -16,7 +16,7 @@ type ExpressionItem = {
 };
 type VideoPack = {
   version: number;
-  references: { assetId: string; label: string }[];
+  references: { assetId: string; label: string; parts?: { assetId: string }[] }[];
   prompt: string;
   cameraMove: boolean;
   adjustments: { where: string; rule: string; before: string; after: string }[];
@@ -137,25 +137,38 @@ export function HiggsfieldVideoPack() {
               const h = await getHandoff<VideoPack>(projectId, "video");
               const start = data.video.startFrameAssetId;
               const end = start ? data.video.endFrameAssetId : null;
-              const slots = start
+              const slots: { assetId: string; label: string; parts?: string[] }[] = start
                 ? [{ assetId: start, label: "시작 프레임" }, ...(end ? [{ assetId: end, label: "끝 프레임" }] : [])]
-                : h.references.map((r) => ({ assetId: r.assetId, label: r.label.split(" — ")[0] }));
-              const rows = await freshAssets(slots.map((x) => x.assetId));
+                : h.references.map((r) => ({ assetId: r.assetId, label: r.label.split(" — ")[0], parts: r.parts?.map((p) => p.assetId) }));
+              const rows = await freshAssets(slots.flatMap((x) => x.parts ?? [x.assetId]));
               const byId = new Map(rows.map((r) => [r.id, r]));
-              const items = slots.map((x) => ({ ...x, row: byId.get(x.assetId), url: byId.get(x.assetId)?.url ?? "" }));
-              const bytes = await fetchAll(items, (d, t) => progress(`그림 받는 중 ${d}/${t}`));
+              // every file to fetch (the parts of a combined image are fetched one by one, then joined)
+              const flat = slots.flatMap((x, slot) => (x.parts ?? [x.assetId]).map((id) => ({ slot, row: byId.get(id), url: byId.get(id)?.url ?? "" })));
+              const fetched = await fetchAll(flat, (d, t) => progress(`그림 받는 중 ${d}/${t}`));
               progress("영상 비율에 맞추는 중…");
               const files: PackFile[] = [];
               const listed: string[] = [];
-              for (const [i, it] of items.entries()) {
-                const b = bytes[i];
-                if (!b || !it.row) {
+              for (const [i, it] of slots.entries()) {
+                const mine = flat.map((f, k) => ({ ...f, b: fetched[k] })).filter((f) => f.slot === i);
+                if (!mine.length || mine.some((f) => !f.b || !f.row)) {
                   listed.push(`${i + 1}. ${it.label} — (파일을 받지 못함)`);
                   continue;
                 }
-                const padded = it.row.mime.startsWith("image/") ? await padImage(b, data.video.aspectRatio).catch(() => null) : null;
-                const name = `${two(i + 1)}_${safeName(it.label)}.${padded ? "png" : it.row.ext}`;
-                files.push({ path: name, data: padded ?? b });
+                if (it.parts) {
+                  const joined = await composeImages(mine.map((f) => f.b!), data.video.aspectRatio).catch(() => null);
+                  if (!joined) {
+                    listed.push(`${i + 1}. ${it.label} — (그림을 합치지 못함)`);
+                    continue;
+                  }
+                  const name = `${two(i + 1)}_${safeName(it.label)}.png`;
+                  files.push({ path: name, data: joined });
+                  listed.push(`${i + 1}. ${name} (이어지는 컷을 왼쪽부터 나란히 붙인 그림)`);
+                  continue;
+                }
+                const { b, row } = mine[0];
+                const padded = row!.mime.startsWith("image/") ? await padImage(b!, data.video.aspectRatio).catch(() => null) : null;
+                const name = `${two(i + 1)}_${safeName(it.label)}.${padded ? "png" : row!.ext}`;
+                files.push({ path: name, data: padded ?? b! });
                 listed.push(`${i + 1}. ${name}`);
               }
               files.push(text("프롬프트.txt", h.prompt));
