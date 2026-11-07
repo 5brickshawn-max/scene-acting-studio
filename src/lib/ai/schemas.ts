@@ -102,6 +102,9 @@ export const StoryboardOut = z.object({
       action: z.string().describe("이 순간 화면 전체에서 일어나는 일: 누가 어디서 무엇을 하는지, 군중·소품, 표정과 자세의 핵심 (2~4문장)"),
       camera: z.string().describe("이 컷의 카메라: 샷 크기·앵글·다음 컷까지의 움직임 (한 문장)"),
       speaker: z.number().int().describe("대사가 있으면 말하는 주요 인물 번호(1부터), 없으면 0"),
+      link: z
+        .enum(["continuous", "cut"])
+        .describe("앞 컷과의 연결: continuous = 같은 쇼트에서 카메라가 이어서 움직여 이 컷이 됨, cut = 컷 분할(장면이 끊기고 새 쇼트). 첫 컷은 continuous"),
     }),
   ),
 });

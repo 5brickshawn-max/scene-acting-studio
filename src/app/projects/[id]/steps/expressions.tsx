@@ -26,6 +26,7 @@ import {
   imageIsStale,
   ratioLabel,
   castLabel,
+  shotsOf,
   imageAspectFor,
   performancesOf,
   setLead,
@@ -664,6 +665,7 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
 
       <section className="space-y-4">
         <h3 className="section-title">③ 컷 카드</h3>
+        <ShotStrip />
         <ol className="grid xl:grid-cols-2 gap-4">
           {d.expressions.map((e, i) => (
             <PanelCard key={e.id} e={e} index={i} />
@@ -695,6 +697,39 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
         <PendingProposal step={1} kinds={["check_sheet"]} />
       </section>
     </StepFrame>
+  );
+}
+
+/** The scene's shot structure at a glance: panels joined by camera moves (→) or split by cuts (|). */
+function ShotStrip() {
+  const { doc } = useEditor();
+  const d = doc.data;
+  const shots = shotsOf(d);
+  const no = (id: string) => d.expressions.findIndex((e) => e.id === id) + 1;
+  return (
+    <div className="rounded-lg border border-line bg-white p-3 space-y-1" aria-label="쇼트 구성">
+      <div className="flex flex-wrap items-center gap-1 text-[14px]">
+        {shots.map((sh, i) => (
+          <span key={i} className="inline-flex items-center gap-1">
+            {i > 0 && <span className="px-1 font-bold text-accent" title="컷 분할">✂</span>}
+            <span className="rounded-md border border-line bg-[#f7f8fa] px-2 py-1">
+              <span className="text-[12px] text-muted mr-1">쇼트 {i + 1}</span>
+              {sh.map((id, k) => (
+                <span key={id}>
+                  {k > 0 && <span className="text-muted"> → </span>}
+                  {no(id)}
+                </span>
+              ))}
+            </span>
+          </span>
+        ))}
+      </div>
+      <p className="field-help">
+        {shots.length > 1
+          ? `컷 분할 ${shots.length - 1}곳, 쇼트 ${shots.length}개. ✂ 에서 화면이 끊기고 새 쇼트가 시작되며, → 는 같은 쇼트 안에서 카메라가 이어서 움직입니다.`
+          : "지금은 모든 컷이 카메라 이동으로 이어지는 한 쇼트입니다. 컷 카드의 ‘앞 컷과의 연결’에서 컷 분할을 고를 수 있습니다."}
+      </p>
+    </div>
   );
 }
 
@@ -737,7 +772,21 @@ function PanelCard({ e, index }: { e: Expression; index: number }) {
         onChange={(v) => update({ action: v })}
         placeholder="예: 횃불을 든 군중이 좌우로 갈라지고, 그 사이로 칼리엘라가 걸어 나온다. 브람은 오른쪽 앞에서 칼자루를 쥔 채 그녀를 노려본다."
       />
-      <Field label="카메라" value={e.camera} onChange={(v) => update({ camera: v })} placeholder="예: 와이드 로우앵글에서 칼리엘라 쪽으로 천천히 다가감" />
+      {index > 0 && (
+        <Seg
+          label="앞 컷과의 연결"
+          value={e.link}
+          options={["continuous", "cut"] as const}
+          labels={{ continuous: "→ 이어짐 (카메라 이동)", cut: "✂ 컷 분할 (새 쇼트)" }}
+          onChange={(v) => update({ link: v })}
+        />
+      )}
+      <Field
+        label="카메라"
+        value={e.camera}
+        onChange={(v) => update({ camera: v })}
+        placeholder={e.link === "cut" && index > 0 ? "예: 입술 특대 클로즈업, 고정" : "예: 와이드 로우앵글에서 칼리엘라 쪽으로 천천히 다가감"}
+      />
       {d.cast.length > 1 && (
         <div>
           <label className="field-label" htmlFor={`speaker-${e.id}`}>말하는 인물 (이 컷에 대사가 있을 때)</label>

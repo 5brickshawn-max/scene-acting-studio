@@ -216,10 +216,12 @@ const RULES: Rule[] = [
   },
 ];
 
-function applyRules(text: string, kind: FieldKind, cameraClause: boolean, applied: Set<string>): string {
+function applyRules(text: string, kind: FieldKind, cameraClause: boolean, applied: Set<string>, allowCuts = false): string {
   let t = text;
   for (const rule of RULES) {
     if (!rule.kinds.includes(kind)) continue;
+    // a storyboard with cut panels: talk of cuts is the team's intent, not a slip
+    if (allowCuts && rule.id === "cut") continue;
     // the director's camera sentences (a Steadicam that "glides smoothly") are the director's call
     if (cameraClause && (rule.id === "interp" || rule.id === "smooth")) continue;
     if (!rule.test(t, kind)) continue;
@@ -241,7 +243,7 @@ const CAMERA_TITLE = /camera|카메라|촬영/i;
  * breaks are kept; only the parts that break a rule change. Each change is
  * recorded in `log` (one entry per field, with every rule that applied).
  */
-export function reconcile(text: string, kind: FieldKind, where: string, log: Adjustment[]): string {
+export function reconcile(text: string, kind: FieldKind, where: string, log: Adjustment[], opts: { allowCuts?: boolean } = {}): string {
   const original = text.trim();
   if (!original) return original;
   const applied = new Set<string>();
@@ -250,11 +252,11 @@ export function reconcile(text: string, kind: FieldKind, where: string, log: Adj
   let cameraSection = false;
   const out = lines.map((line) => {
     if (!line.trim()) return line;
-    if (kind !== "direction") return applyRules(line, kind, false, applied);
+    if (kind !== "direction") return applyRules(line, kind, false, applied, opts.allowCuts);
     if (SECTION_TITLE.test(line)) cameraSection = CAMERA_TITLE.test(line);
     const clauses = line.split(/(?<=[,，;；.!?。])\s+/);
     return clauses
-      .map((c) => applyRules(c, kind, cameraSection || CAMERA_TALK.test(c), applied))
+      .map((c) => applyRules(c, kind, cameraSection || CAMERA_TALK.test(c), applied, opts.allowCuts))
       .filter((c) => c.trim() !== "")
       .join(" ")
       .replace(/[,，;；]\s*$/, "");

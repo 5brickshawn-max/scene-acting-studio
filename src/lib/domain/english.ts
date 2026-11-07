@@ -43,6 +43,7 @@ export function englishSources(d: ProjectData) {
           e.action,
           e.camera,
           e.sketchAssetId,
+          e.link,
           e.reactions.map((r) => [r.characterId, r.emotion, r.intensity, r.brows, r.eyes, r.mouth, r.gesture]),
           e.emotion,
           e.intensity,

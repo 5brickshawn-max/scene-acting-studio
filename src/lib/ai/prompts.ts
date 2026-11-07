@@ -17,7 +17,7 @@ export const BASE_SYSTEM = `당신은 2D 애니메이션 스튜디오의 장면 
 
 스토리보드 방식 장면 (모드가 '스토리보드'일 때):
 - 표정(비트) 대신 컷(콘티의 한 칸)으로 다룹니다. 컷마다 그 순간 화면 전체를 한 장의 그림으로 정합니다: 장면 묘사(누가 무엇을 하는지, 군중 포함), 카메라, 말하는 인물.
-- 인물별 얼굴 근육·방향은 따로 정하지 않고, 화면 위치도 컷마다 바뀔 수 있습니다. 컷끼리는 여전히 컷 없는 한 쇼트로 이어집니다.
+- 인물별 얼굴 근육·방향은 따로 정하지 않고, 화면 위치도 컷마다 바뀔 수 있습니다. 컷끼리는 카메라 이동으로 이어지거나(이어짐), 컷 분할로 새 쇼트가 시작됩니다(컷 분할).
 
 여러 인물 장면:
 - 인물은 출연진 번호(1부터)와 이름으로 구분합니다. 인물마다 화면 위치(왼쪽·가운데·오른쪽)가 정해져 있고, 쇼트 내내 바뀌지 않습니다.
@@ -62,7 +62,11 @@ export function projectContext(d: ProjectData, step: number): string {
     lines.push(`영상 전체 길이: ${d.acting.duration}초 (고정)`);
     if (d.expressionSetup.scene.trim()) lines.push(`상황 설정·기초 대사:\n${d.expressionSetup.scene.trim()}`);
     d.expressions.forEach((e, i) => {
-      lines.push(`컷 ${i + 1}: ${e.emotion || "(제목 없음)"} · 장면 묘사: ${e.action || "(없음)"}${e.camera ? ` · 카메라: ${e.camera}` : ""} · 말하는 인물(대사가 있을 때): ${castLabel(d, e.characterId)}`);
+      lines.push(
+        `컷 ${i + 1}: ${i > 0 ? (e.link === "cut" ? "[컷 분할 — 새 쇼트] " : "[이어짐] ") : ""}${e.emotion || "(제목 없음)"} · 장면 묘사: ${e.action || "(없음)"}${
+          e.camera ? ` · 카메라: ${e.camera}` : ""
+        } · 말하는 인물(대사가 있을 때): ${castLabel(d, e.characterId)}`,
+      );
     });
   } else if (step >= 1) {
     lines.push(`표정 개수: ${d.expressionSetup.count}`);

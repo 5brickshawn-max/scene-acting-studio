@@ -6,7 +6,7 @@
  */
 import { hasCameraMove } from "./constraints";
 import { VIDEO_PROMPT_TARGET, type VideoHandoff } from "./handoff";
-import { castLabel, continuityAnchor, imageAspectFor, imageIsStale, timelineOrder, type ProjectData } from "./project";
+import { castLabel, continuityAnchor, imageAspectFor, imageIsStale, shotsOf, timelineOrder, type ProjectData } from "./project";
 import { estimateSpeechSeconds } from "./speech";
 import { retime, timingMismatch } from "./timing";
 import { englishStale } from "./english";
@@ -53,7 +53,22 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
   const duration = data.acting.duration;
 
   // ── the prompt's fixed frame ──
-  add("ok", "한 쇼트", "‘컷 없는 한 쇼트’ 지시가 프롬프트 맨 앞에 있습니다.");
+  const shots = shotsOf(data);
+  if (shots.length > 1)
+    add("ok", "컷 분할", `컷 분할로 ${shots.length}개 쇼트입니다. 표시한 곳에서만 컷이 바뀌고, 쇼트 안에서는 카메라가 이어서 움직이도록 지시합니다.`);
+  else add("ok", "한 쇼트", "‘컷 없는 한 쇼트’ 지시가 프롬프트 맨 앞에 있습니다.");
+  // the model takes a limited number of images: say which ones are left out (any mode)
+  {
+    const shown = new Set(h.references.filter((r) => r.role === "expression").map((r) => r.expressionId));
+    const left = order0(data).filter((e) => e.imageAssetId && !shown.has(e.id));
+    const unit = data.mode === "storyboard" ? "컷" : "표정";
+    if (!data.video.startFrameAssetId && left.length)
+      add(
+        "warn",
+        "참고 그림 수",
+        `영상 모델이 받는 참고 그림 수에 한도가 있어 ${unit} 그림 ${left.length}장(${left.map((e) => `${data.expressions.indexOf(e) + 1}번`).join(", ")})은 첨부하지 않습니다. 장면 기준 그림과, 타임라인 전체에 고르게 고른 그림이 들어갑니다. ${unit} 수를 줄이면 모두 들어갑니다.`,
+      );
+  }
   if (h.prompt.endsWith(h.constraints)) add("ok", "제약사항", "스튜디오 제약사항이 프롬프트 맨 끝에 있습니다.");
   else add("warn", "제약사항", "스튜디오 제약사항이 프롬프트 맨 끝에 없습니다.");
 
@@ -69,14 +84,6 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
     const silent = data.cast.filter((c) => speakers.has(c.id) && !c.voice.trim());
     if (silent.length)
       add("warn", "목소리", `${silent.map((c) => castLabel(data, c.id)).join(", ")}의 목소리 설정이 없어 영상 모델이 목소리를 구분하지 못할 수 있습니다.`, { kind: "goto", step: 2, label: "3단계 대사로" });
-    const shown = new Set(h.references.filter((r) => r.role === "expression").map((r) => r.expressionId));
-    const left = order0(data).filter((e) => e.imageAssetId && !shown.has(e.id));
-    if (!data.video.startFrameAssetId && left.length)
-      add(
-        "warn",
-        "참고 그림 수",
-        `영상 모델이 받는 참고 그림 수에 한도가 있어 표정 그림 ${left.length}장(${left.map((e) => `${data.expressions.indexOf(e) + 1}번`).join(", ")})은 첨부하지 않습니다. 장면 기준 그림이 먼저 들어가고, 그다음 타임라인 순서로 들어갑니다.`,
-      );
   }
 
   // ── the director's direction wins over the app's general lines ──

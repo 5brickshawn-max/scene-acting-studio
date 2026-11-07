@@ -145,7 +145,7 @@ export function applyStoryboard(data: ProjectData, out: StoryboardOutT, indexes?
     const o = out.panels[i];
     if (!o || !pick.has(i)) return prev;
     const speaker = data.cast[o.speaker - 1]?.id ?? prev.characterId;
-    return withReactionsFor(data.cast, { ...prev, characterId: speaker, emotion: o.title, action: o.action, camera: o.camera });
+    return withReactionsFor(data.cast, { ...prev, characterId: speaker, emotion: o.title, action: o.action, camera: o.camera, link: i === 0 ? "continuous" : o.link ?? prev.link });
   });
   return reopenFrom({ ...data, expressions }, 1);
 }

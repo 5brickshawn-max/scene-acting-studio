@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addCastMember, approve, canApprove, createProjectData, imageAspectFor, MAX_CAST, MAX_CAST_STORYBOARD, parseProjectData, stepIssues, type ProjectData } from "@/lib/domain/project";
+import { addCastMember, shotsOf, approve, canApprove, createProjectData, imageAspectFor, MAX_CAST, MAX_CAST_STORYBOARD, parseProjectData, stepIssues, type ProjectData } from "@/lib/domain/project";
 import { buildExpressionHandoffs, buildFrameHandoff, buildVideoHandoff } from "@/lib/domain/handoff";
 import { applyStoryboard } from "@/lib/domain/apply";
 import { buildEnglishSheet, englishStale } from "@/lib/domain/english";
@@ -103,12 +103,13 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     const d = market();
     const out = StoryboardOut.parse({
       summary: "",
-      panels: d.expressions.map((_, i) => ({ title: `T${i}`, action: `A${i}`, camera: `C${i}`, speaker: i === 3 ? 2 : 0 })),
+      panels: d.expressions.map((_, i) => ({ title: `T${i}`, action: `A${i}`, camera: `C${i}`, speaker: i === 3 ? 2 : 0, link: i === 3 ? "cut" : "continuous" })),
     });
     const next = applyStoryboard(d, out, [0, 3]);
     expect(next.expressions[0]).toMatchObject({ emotion: "T0", action: "A0", camera: "C0" });
     expect(next.expressions[1].action).toBe(d.expressions[1].action);
     expect(next.expressions[3].characterId).toBe(d.cast[1].id);
+    expect(next.expressions[3].link).toBe("cut");
 
     d.english = buildEnglishSheet(d, {
       language: "English",
@@ -129,8 +130,8 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     const ctx = projectContext(market(), 1);
     expect(ctx).toContain("통제 방식: 스토리보드");
     expect(ctx).toContain("군중·배경 인물: 횃불을 든 상인과 구경꾼 수십 명");
-    expect(ctx).toContain("컷 2: 칼리엘라 등장 · 장면 묘사: 그 사이로 칼리엘라가 걸어 나온다.");
-    const panels = { summary: "", panels: [{ title: "t", action: "a", camera: "c", speaker: 0 }] };
+    expect(ctx).toContain("컷 2: [이어짐] 칼리엘라 등장 · 장면 묘사: 그 사이로 칼리엘라가 걸어 나온다.");
+    const panels = { summary: "", panels: [{ title: "t", action: "a", camera: "c", speaker: 0, link: "continuous" }] };
     expect(consultSchemaFor(1, true).safeParse({ reply: "", proposal: panels }).success).toBe(true);
     expect(consultSchemaFor(1, false).safeParse({ reply: "", proposal: panels }).success).toBe(false);
   });
@@ -165,5 +166,52 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     const h = buildVideoHandoff(d);
     expect(h.lengthTarget).toBe(3500 + 3 * 200);
     expect(h.prompt.length).toBeLessThanOrEqual(h.lengthTarget);
+  });
+
+  it("cuts panels into shots where the team marks a cut (컷 분할)", () => {
+    const d = market();
+    d.expressions[1].link = "cut";
+    d.expressions[3].link = "cut";
+    expect(shotsOf(d).map((sh) => sh.map((id) => d.expressions.findIndex((e) => e.id === id) + 1))).toEqual([[1], [2, 3], [4]]);
+    // the first panel never cuts
+    d.expressions[0].link = "cut";
+    expect(shotsOf(d)).toHaveLength(3);
+
+    d.expressions[2].action = "다음 컷으로 넘어가며 브람이 앞으로 나선다.";
+    const h = buildVideoHandoff(d);
+    expect(h.prompt).toContain("edited in 3 shots: shot 1 = panel 1; shot 2 = panels 2–3; shot 3 = panel 4. Cut ONLY where a beat says HARD CUT");
+    expect(h.prompt).not.toContain("ONE single continuous shot");
+    expect(h.prompt).toContain("panel 2 — 칼리엘라 등장 (shot 2)\nHARD CUT to a new shot here.");
+    expect(h.prompt).toContain("panel 3 — 브람의 경고 (shot 2)\nSame shot: the camera moves on continuously from the previous panel, no cut.");
+    // talk of cuts is kept as written when the scene is cut on purpose
+    expect(h.prompt).toContain("다음 컷으로 넘어가며");
+    expect(h.adjustments.some((a) => a.rule.includes("‘컷’"))).toBe(false);
+    expect(preRenderCheck(d, h).find((i) => i.area === "컷 분할")?.text).toContain("3개 쇼트");
+
+    const imgs = buildExpressionHandoffs(d);
+    expect(imgs[1].prompt).toContain("ONE scene of 3 shots");
+    expect(imgs[1].prompt).toContain("This panel is in shot 2 and opens it with a hard cut");
+    expect(imgs[2].prompt).toContain("This panel is in shot 2.");
+  });
+
+  it("keeps one continuous shot (and rewrites stray cut talk) when nothing is cut", () => {
+    const d = market();
+    d.expressions[2].action = "다음 컷으로 넘어가며 브람이 앞으로 나선다.";
+    const h = buildVideoHandoff(d);
+    expect(h.prompt).toContain("ONE single continuous shot with no cuts");
+    expect(h.prompt).not.toContain("HARD CUT");
+    expect(h.prompt).not.toContain("다음 컷으로");
+  });
+
+  it("spreads the attached panel images over the whole timeline when there are too many", () => {
+    const d = createProjectData("많은 컷", 1, "storyboard");
+    d.baseAssetId = "scene-1";
+    d.expressionSetup.count = 8;
+    d.expressions = Array.from({ length: 8 }, (_, i) => ({ ...d.expressions[i % d.expressions.length], id: `p${i}`, action: "x", imageAssetId: `img-${i}` }));
+    d.acting.segments = d.expressions.map((e, i) => ({ expressionId: e.id, start: i, end: i + 1, transition: "" }));
+    d.acting.duration = 8;
+    const refs = buildVideoHandoff(d).references;
+    expect(refs.map((r) => r.assetId)).toEqual(["scene-1", "img-0", "img-1", "img-3", "img-4", "img-6", "img-7"]);
+    expect(preRenderCheck(d, buildVideoHandoff(d)).find((i) => i.area === "참고 그림 수")?.text).toContain("컷 그림 2장(3번, 6번)");
   });
 });

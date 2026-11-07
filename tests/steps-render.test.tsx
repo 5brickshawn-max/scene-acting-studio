@@ -82,6 +82,9 @@ describe("step screens render for one and for several characters", () => {
     expect(s2).toContain("콘티를 만드세요");
     expect(s2).toContain("장면 묘사 (이 순간 화면 전체)");
     expect(s2).toContain("러프 스케치 (선택)");
+    expect(s2).toContain("앞 컷과의 연결");
+    expect(s2).toContain("✂ 컷 분할 (새 쇼트)");
+    expect(s2).toContain("쇼트 1");
     expect(s2).toContain("말하는 인물 (이 컷에 대사가 있을 때)");
     expect(s2).not.toContain("중심 인물");
   });

@@ -226,6 +226,7 @@ export function ReviewView({ b, dataUrl }: { b: ReviewBundle; dataUrl: string })
               return (
                 <li key={e.id} className="rounded-xl border border-line p-3 space-y-2 min-w-0">
                   <div className="font-semibold">
+                    {i > 0 ? (e.link === "cut" ? "✂ " : "→ ") : ""}
                     {i + 1}번 컷 · {e.emotion || "제목 없음"}
                   </div>
                   <Media a={A(e.imageAssetId)} label={`${i + 1}번 컷 그림`} />

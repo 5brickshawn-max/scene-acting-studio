@@ -13,6 +13,8 @@
 import { constraintsFor, directorAngle, directorBackground, directorRig, hasCameraMove, reconcile, type Adjustment } from "./constraints";
 import { freshEnglish } from "./english";
 import {
+  cutBefore,
+  shotsOf,
   isStoryboard,
   beatActor,
   performancesOf,
@@ -488,9 +490,16 @@ export function videoReferences(data: ProjectData, maxExpressions = MAX_VIDEO_RE
       role: "identity",
     });
   const seen = new Set<string>();
+  // more images than the model takes: keep them spread over the whole timeline, first and last included
+  const withImage = data.acting.segments.filter((seg) => data.expressions.find((e) => e.id === seg.expressionId)?.imageAssetId);
+  const keep =
+    withImage.length > maxExpressions && maxExpressions > 1
+      ? new Set(Array.from({ length: maxExpressions }, (_, k) => withImage[Math.round((k * (withImage.length - 1)) / (maxExpressions - 1))].expressionId))
+      : null;
   for (const seg of data.acting.segments) {
     const i = data.expressions.findIndex((e) => e.id === seg.expressionId);
     const e = data.expressions[i];
+    if (keep && !keep.has(seg.expressionId)) continue;
     if (!e?.imageAssetId || seen.has(e.imageAssetId) || seen.size >= maxExpressions) continue;
     seen.add(e.imageAssetId);
     refs.push({ assetId: e.imageAssetId, label: `${i + 1}번 ${e.emotion || "표정"} — approved expression target`, role: "expression", expressionId: e.id });
@@ -1003,7 +1012,7 @@ function storyboardCastEn(data: ProjectData, en: ReturnType<typeof freshEnglish>
   return [
     named && `Named characters (each keeps their identity exactly as in the scene reference; never mix features between them): ${named}.`,
     data.extras.trim() &&
-      `Crowd and background people (unnamed): ${clean(data.extras)}. Keep them consistent across panels and never let them cover the named characters' faces.`,
+      `Crowd and background people (unnamed): ${noEndDot(clean(data.extras))}. Keep them consistent across panels and never let them cover the named characters' faces.`,
   ].filter((x): x is string => Boolean(x));
 }
 
@@ -1033,8 +1042,12 @@ function buildStoryboardHandoffs(data: ProjectData): ExpressionHandoff[] {
   const anchor = continuityAnchor(data);
   const anchorNo = anchor ? data.expressions.findIndex((x) => x.id === anchor.id) + 1 : 0;
   const n = data.expressions.length;
+  const shots = shotsOf(data);
+  const cuts = cutBefore(data);
+  const multiShot = shots.length > 1;
   return data.expressions.map((e, i) => {
     const t = panelTexts(data, e, en);
+    const shotNo = shots.findIndex((sh) => sh.includes(e.id)) + 1;
     const references = storyboardRefs(data);
     const sketchNo = e.sketchAssetId ? references.length + 1 : 0;
     if (e.sketchAssetId) references.push({ role: `image reference ${sketchNo}`, assetId: e.sketchAssetId, why: `${i + 1}번 컷 러프 스케치 — 구도·자세·카메라만` });
@@ -1043,13 +1056,17 @@ function buildStoryboardHandoffs(data: ProjectData): ExpressionHandoff[] {
     const line = data.dialogue.lines.find((l) => l.expressionId === e.id)?.line.trim();
     const prompt = [
       `Storyboard panel ${i + 1} of ${n}, drawn as a finished ${aspect} frame of the animation — not a rough sketch, not a comic page; no panel borders, no text, no speech bubbles.`,
-      `All panels are successive moments of ONE continuous shot: the same world, lighting, characters and art style; only the moment and the camera framing change.`,
+      multiShot
+        ? `All panels belong to ONE scene of ${shots.length} shots: the same world, lighting, characters and art style. This panel is in shot ${shotNo}${
+            cuts.get(e.id) ? " and opens it with a hard cut — its own camera position and framing" : ""
+          }.`
+        : `All panels are successive moments of ONE continuous shot: the same world, lighting, characters and art style; only the moment and the camera framing change.`,
       data.baseAssetId &&
         `Image reference 1 is the scene reference drawing: it sets the look of the named characters, their relative sizes, the art style, the colors and the world of this scene.`,
       ...storyboardCastEn(data, en),
       style && `Art style: ${style.replace(/[.。]+$/, "")}. Keep this style for everyone in the frame; never photorealistic or 3D.`,
       usesAnchor &&
-        `Image reference ${references.length} is panel ${anchorNo} of this same shot: keep its world, lighting, line quality and character designs exactly; follow this panel's own composition and camera below.`,
+        `Image reference ${references.length} is panel ${anchorNo} of this same ${multiShot ? "scene" : "shot"}: keep its world, lighting, line quality and character designs exactly; follow this panel's own composition and camera below.`,
       sketchNo &&
         `Image reference ${sketchNo} is a rough storyboard sketch of this panel: follow its composition, character placement, poses and camera angle; do NOT copy its rough lines or missing details — render it fully in the art style above.`,
       t.action ? `This moment: ${sentence(t.action)}` : sketchNo ? "This moment: exactly as in the sketch." : "",
@@ -1109,6 +1126,16 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
   const adjustments: Adjustment[] = [];
   const fixOf = (target: "transition" | "delivery" | "voice", id: string | null, text: string) => effectiveText(data, target, id, text);
   const panelNo = (id: string) => data.expressions.findIndex((e) => e.id === id) + 1;
+  // 컷 분할: where the team cut the panels into separate shots
+  const shots = shotsOf(data);
+  const cuts = cutBefore(data);
+  const multiShot = shots.length > 1;
+  const allowCuts = { allowCuts: multiShot };
+  const rangeOf = (ids: string[]) => {
+    const a = panelNo(ids[0]);
+    const b = panelNo(ids[ids.length - 1]);
+    return a === b ? `panel ${a}` : `panels ${a}–${b}`;
+  };
   // the team's texts, reconciled once with the studio rules (camera wording is kept as written)
   const panels = new Map(
     data.expressions.map((e, i) => {
@@ -1119,9 +1146,9 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         e.id,
         {
           title: t.title,
-          action: reconcile(t.action, "motion", `${i + 1}번 컷 장면 묘사`, adjustments),
-          camera: reconcile(t.camera, "direction", `${i + 1}번 컷 카메라`, adjustments),
-          transition: reconcile(t.transition ?? fixOf("transition", e.id, seg?.transition ?? ""), "motion", `${i + 1}번 컷 다음 컷으로`, adjustments),
+          action: reconcile(t.action, "motion", `${i + 1}번 컷 장면 묘사`, adjustments, allowCuts),
+          camera: reconcile(t.camera, "direction", `${i + 1}번 컷 카메라`, adjustments, allowCuts),
+          transition: reconcile(t.transition ?? fixOf("transition", e.id, seg?.transition ?? ""), "motion", `${i + 1}번 컷 다음 컷으로`, adjustments, allowCuts),
           delivery: reconcile(t.delivery ?? fixOf("delivery", e.id, line?.delivery ?? ""), "voice", `${i + 1}번 컷 대사 말투`, adjustments),
         },
       ] as const;
@@ -1130,7 +1157,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
   const voices = data.cast
     .map((c) => ({ id: c.id, text: reconcile(en.cast.get(c.id)?.voice ?? fixOf("voice", c.id, c.voice), "voice", `${castLabel(data, c.id)} 목소리`, adjustments) }))
     .filter((v) => v.text.trim());
-  const director = reconcile(data.video.extraDirection, "direction", "추가 연출", adjustments);
+  const director = reconcile(data.video.extraDirection, "direction", "추가 연출", adjustments, allowCuts);
   const rig = directorRig(director);
   const angle = directorAngle(director);
   const background = directorBackground(director);
@@ -1155,8 +1182,10 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
       const transition = fixed ? p?.transition ?? "" : seg.transition;
       const delivery = fixed ? p?.delivery ?? "" : l?.delivery ?? "";
       const cut = (t: string, max: number) => (max === Infinity ? clean(t) : clip(t, max));
+      const shotNo = shots.findIndex((sh) => sh.includes(seg.expressionId)) + 1;
       return [
-        `${k + 1}. ${fmtSec(seg.start)}–${fmtSec(seg.end)} seconds: panel ${panelNo(seg.expressionId)}${p?.title ? ` — ${p.title}` : ""}`,
+        `${k + 1}. ${fmtSec(seg.start)}–${fmtSec(seg.end)} seconds: panel ${panelNo(seg.expressionId)}${p?.title ? ` — ${p.title}` : ""}${multiShot ? ` (shot ${shotNo})` : ""}`,
+        multiShot && k > 0 && (cuts.get(seg.expressionId) ? "HARD CUT to a new shot here." : "Same shot: the camera moves on continuously from the previous panel, no cut."),
         n && `Frame target: reference image ${n}.`,
         cut(action, B.action) && `Action: ${sentence(cut(action, B.action))}`,
         cut(camera, B.camera) && `Camera: ${sentence(cut(camera, B.camera))}`,
@@ -1171,15 +1200,17 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
 
   const headerWith = (B: (typeof STORY_BUDGETS)[number]) =>
     [
-      `ONE single continuous shot with no cuts: a ${data.acting.duration}-second animated scene, ${data.video.aspectRatio}. The beats below follow storyboard panels — successive moments of this same shot; the camera travels continuously from one panel's framing to the next and never cuts.`,
+      multiShot
+        ? `A ${data.acting.duration}-second animated scene, ${data.video.aspectRatio}, edited in ${shots.length} shots: ${shots.map((sh, i) => `shot ${i + 1} = ${rangeOf(sh)}`).join("; ")}. Cut ONLY where a beat says HARD CUT; inside a shot the camera travels continuously from one panel's framing to the next.`
+        : `ONE single continuous shot with no cuts: a ${data.acting.duration}-second animated scene, ${data.video.aspectRatio}. The beats below follow storyboard panels — successive moments of this same shot; the camera travels continuously from one panel's framing to the next and never cuts.`,
       ...storyboardCastEn(data, en, B.features),
       (en.style || data.style.trim()) && `Art style: ${sentence(clip(en.style ?? data.style, 200) || clean(en.style ?? data.style).slice(0, 200))} Stay in this 2D style; never photorealistic or 3D.`,
       `Match the reference images exactly: the named characters' faces, hair, colors and costumes, the world, the lighting and the drawing style; nobody's proportions change and no character is duplicated.`,
       background ? "Background as in the DIRECTOR'S DIRECTION below." : "Background and world as in the panel references.",
       directorCamera
-        ? "Camera: exactly as in the DIRECTOR'S DIRECTION below; one continuous take with no cuts."
+        ? `Camera: exactly as in the DIRECTOR'S DIRECTION below${multiShot ? "" : "; one continuous take with no cuts"}.`
         : cameraMove
-          ? "Camera: follows the panel cameras below, moving continuously between them (HANDHELD as in the Constraints at the end); one continuous take with no cuts."
+          ? `Camera: follows the panel cameras below${multiShot ? ", moving continuously inside each shot" : ", moving continuously between them"} (HANDHELD as in the Constraints at the end)${multiShot ? "" : "; one continuous take with no cuts"}.`
           : "Camera move: none. The framing holds still for the whole shot.",
       refs.length
         ? [
@@ -1195,7 +1226,9 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         `Dialogue: only the character named for a line speaks it, with their own voice and lip movement; everyone else keeps their mouth closed. Crowd sound only as quiet natural ambience, never words.`,
       voices.length &&
         `Voices: ${voices.map((v) => `${castName(data, v.id)} — ${noEndDot(clip(v.text, 160) || clean(v.text).slice(0, 80))}`).join("; ")}. Speak only the exact dialogue below; never read direction text aloud.`,
-      `Everyone stays alive between the panels (breathing, blinks, small weight shifts); every change is acted through a physical action and in-between poses, never morphed.`,
+      `Everyone stays alive between the panels (breathing, blinks, small weight shifts); every change ${multiShot ? "inside a shot " : ""}is acted through a physical action and in-between poses, never morphed.${
+        multiShot ? " Across a cut, the characters, costumes, world and light stay the same." : ""
+      }`,
     ]
       .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
       .join("\n");

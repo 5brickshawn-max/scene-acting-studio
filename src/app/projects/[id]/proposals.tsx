@@ -349,7 +349,9 @@ export function StoryboardProposal({ job, out }: { job: JobView; out: Storyboard
                 <span className="text-[14px] space-y-1">
                   <span className="block font-semibold">{i + 1}. {p.title}</span>
                   <span className="block">{p.action}</span>
-                  <span className="block text-muted">카메라: {p.camera}</span>
+                  <span className="block text-muted">
+                    {i > 0 ? (p.link === "cut" ? "✂ 컷 분할 · " : "→ 이어짐 · ") : ""}카메라: {p.camera}
+                  </span>
                   {speaker && <span className="block text-muted">말하는 인물: {castLabel(doc.data, speaker.id)}</span>}
                 </span>
               </label>

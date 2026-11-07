@@ -159,6 +159,11 @@ export const ExpressionSchema = z.object({
   camera: z.string().default(""),
   /** a rough storyboard sketch for this panel: composition, poses and camera are taken from it, not its drawing style */
   sketchAssetId: z.string().nullable().default(null),
+  /**
+   * storyboard: how this panel follows the previous one — "continuous" (the camera moves on in the same shot)
+   * or "cut" (컷 분할: a hard cut, a new shot). Ignored for the first panel.
+   */
+  link: z.enum(["continuous", "cut"]).default("continuous"),
   /** group scenes: the acting of every other cast member in this same moment (one per member, cast order) */
   reactions: z.array(PerformanceSchema).default([]),
   /** 1-based panel number in the expression reference sheet, or null */
@@ -369,6 +374,7 @@ export function blankExpression(panel: number | null = null, characterId = ""): 
     action: "",
     camera: "",
     sketchAssetId: null,
+    link: "continuous",
     reactions: [],
     panel,
     emotion: "",
@@ -585,6 +591,24 @@ function performanceDirectionIssues(e: Pick<Performance, "direction" | "directio
 
 export const isMultiCast = (data: Pick<ProjectData, "cast">) => data.cast.length > 1;
 export const isStoryboard = (data: Pick<ProjectData, "mode">) => data.mode === "storyboard";
+
+/** Panel links in timeline order: false for the first panel, true where a panel starts with a hard cut. */
+export function cutBefore(data: Pick<ProjectData, "mode" | "expressions" | "acting">): Map<string, boolean> {
+  const order = data.acting.segments.map((s) => s.expressionId);
+  const byId = new Map(data.expressions.map((e) => [e.id, e]));
+  return new Map(order.map((id, k) => [id, data.mode === "storyboard" && k > 0 && byId.get(id)?.link === "cut"]));
+}
+
+/** Shots of a storyboard scene: runs of panels joined by continuous camera moves (one shot when nothing is cut). */
+export function shotsOf(data: Pick<ProjectData, "mode" | "expressions" | "acting">): string[][] {
+  const cuts = cutBefore(data);
+  const shots: string[][] = [];
+  for (const s of data.acting.segments) {
+    if (!shots.length || cuts.get(s.expressionId)) shots.push([]);
+    shots[shots.length - 1].push(s.expressionId);
+  }
+  return shots;
+}
 
 /**
  * Beat images: portrait 3:4 for one character acting; a scene frame at the video's aspect ratio when several
