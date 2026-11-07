@@ -93,4 +93,18 @@ describe("step screens render for one and for several characters", () => {
     const cast = createProjectData("넷", 4, "cast");
     expect(render(cast, createElement(CharacterStep, nav))).not.toContain("+ 인물 추가");
   });
+
+  it("shows the cast size controls: −/+, a remove button per character, and a way out when over the limit", () => {
+    const six = createProjectData("대화", 6, "storyboard");
+    six.cast = six.cast.map((c, i) => ({ ...c, name: `인물${i + 1}` }));
+    const html = render({ ...six, mode: "cast" }, createElement(CharacterStep, nav));
+    expect(html).toContain('aria-label="마지막 인물 빼기"');
+    expect(html).toContain('aria-label="A 인물1 빼기"');
+    expect(html).toContain('aria-label="F 인물6 빼기"');
+    expect(html).toContain("스토리보드 방식으로 바꾸기");
+    expect(html).toContain("최대 4명");
+    const solo = render(createProjectData("혼자"), createElement(CharacterStep, nav));
+    expect(solo).not.toMatch(/aria-label="A [^"]* 빼기"/);
+    expect(solo).toContain("+ 인물 추가");
+  });
 });

@@ -33,6 +33,19 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
   const [source, setSource] = useState<"generate" | "upload">(d.baseAssetId ? "upload" : "generate");
   const current = d.cast.find((c) => c.id === active) ?? d.cast[0];
 
+  const max = maxCastFor(d.mode);
+  const addMember = () => {
+    const next = addCastMember(doc.data);
+    doc.edit(0, () => next);
+    setActive(next.cast[next.cast.length - 1].id);
+  };
+  const removeMember = (id: string) => {
+    if (d.cast.length <= 1) return;
+    const rest = d.cast.filter((c) => c.id !== id);
+    if (!window.confirm(`${castLabel(d, id)}을(를) 빼까요? 이 인물이 중심인 표정·컷은 ${castLabel(d, rest[0].id)}에게 넘어갑니다.`)) return;
+    doc.edit(0, (x) => removeCastMember(x, id));
+    if (active === id) setActive(rest[0].id);
+  };
   const setMember = (id: string, patch: Partial<CastMember>) =>
     doc.edit(0, (x) => ({ ...x, cast: x.cast.map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
 
@@ -62,21 +75,30 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
           <Field label="장면 이름" value={d.title} onChange={(v) => doc.edit(0, (x) => ({ ...x, title: v }))} />
           <div>
             <div className="field-label">{story ? "주요 인물 (이름이 있는 인물)" : "출연진"}</div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="pill">{d.cast.length}명</span>
-              {canEdit && d.cast.length < maxCastFor(d.mode) && (
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  onClick={() => {
-                    const next = addCastMember(doc.data);
-                    doc.edit(0, () => next);
-                    setActive(next.cast[next.cast.length - 1].id);
-                  }}
-                >
-                  + 인물 추가
-                </button>
-              )}
+            <div className="flex flex-wrap items-center gap-2" role="group" aria-label="인물 수">
+              <button
+                type="button"
+                className="btn btn-sm min-w-10"
+                aria-label="마지막 인물 빼기"
+                disabled={!canEdit || d.cast.length <= 1}
+                onClick={() => removeMember(d.cast[d.cast.length - 1].id)}
+              >
+                −
+              </button>
+              <span className="pill min-w-14 justify-center" aria-live="polite">
+                {d.cast.length}명
+              </span>
+              <button
+                type="button"
+                className="btn btn-sm min-w-10"
+                aria-label="인물 추가"
+                disabled={!canEdit || d.cast.length >= max}
+                title={d.cast.length >= max ? `이 방식은 최대 ${max}명입니다` : undefined}
+                onClick={addMember}
+              >
+                +
+              </button>
+              <span className="text-[13px] text-muted">최대 {max}명</span>
             </div>
             <p className="field-help">
               {story
@@ -84,7 +106,16 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
                 : `한 명이면 인물 연기 쇼트, 2명 이상이면 모든 인물이 한 화면에 나오는 장면이 됩니다(최대 ${maxCastFor("cast")}명).`}
               {!story && d.cast.length > maxCastFor("cast") && (
                 <span className="block notice notice-warn mt-2">
-                  인물별 연기 방식은 최대 {maxCastFor("cast")}명입니다. 지금 {d.cast.length}명이라 승인할 수 없습니다. 스토리보드 방식으로 바꾸거나 인물을 줄이세요.
+                  인물별 연기 방식은 최대 {maxCastFor("cast")}명입니다. 지금 {d.cast.length}명이라 승인할 수 없습니다. 아래 인물 이름 옆의 × 로 줄이거나, 스토리보드 방식으로 바꾸세요.
+                  {canEdit && (
+                    <button
+                      type="button"
+                      className="btn btn-sm ml-2 mt-1"
+                      onClick={() => doc.edit(0, (x) => ({ ...x, mode: "storyboard", expressionSetup: { ...x.expressionSetup, framing: "medium" } }))}
+                    >
+                      스토리보드 방식으로 바꾸기
+                    </button>
+                  )}
                 </span>
               )}
             </p>
@@ -229,19 +260,38 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
           </div>
         )}
 
-        <div role="tablist" aria-label="출연진" className="flex flex-wrap gap-2">
-          {d.cast.map((c, i) => (
-            <button
-              key={c.id}
-              role="tab"
-              type="button"
-              aria-selected={c.id === current.id}
-              className={`btn btn-sm ${c.id === current.id ? "btn-dark" : ""}`}
-              onClick={() => setActive(c.id)}
-            >
-              {castLetter(i)} · {c.name.trim() || "이름 없음"}
+        <div className="flex flex-wrap items-center gap-2">
+          <div role="tablist" aria-label="출연진" className="flex flex-wrap gap-2">
+            {d.cast.map((c, i) => (
+              <span key={c.id} className="inline-flex items-center">
+                <button
+                  role="tab"
+                  type="button"
+                  aria-selected={c.id === current.id}
+                  className={`btn btn-sm ${c.id === current.id ? "btn-dark" : ""} ${canEdit && group ? "rounded-r-none" : ""}`}
+                  onClick={() => setActive(c.id)}
+                >
+                  {castLetter(i)} · {c.name.trim() || "이름 없음"}
+                </button>
+                {canEdit && group && (
+                  <button
+                    type="button"
+                    className="btn btn-sm rounded-l-none border-l-0 px-2"
+                    aria-label={`${castLabel(d, c.id)} 빼기`}
+                    title="이 인물 빼기"
+                    onClick={() => removeMember(c.id)}
+                  >
+                    ×
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+          {canEdit && d.cast.length < max && (
+            <button type="button" className="btn btn-sm" onClick={addMember}>
+              + 인물 추가
             </button>
-          ))}
+          )}
         </div>
 
         <CastCard
@@ -252,16 +302,7 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
           positions={group}
           story={story}
           onChange={(patch) => setMember(current.id, patch)}
-          onRemove={
-            canEdit && group
-              ? () => {
-                  const rest = d.cast.filter((c) => c.id !== current.id);
-                  if (!window.confirm(`${castLabel(d, current.id)}을(를) 출연진에서 뺄까요? 이 인물이 맡은 표정은 ${castLabel(d, rest[0].id)}에게 넘어갑니다.`)) return;
-                  doc.edit(0, (x) => removeCastMember(x, current.id));
-                  setActive(rest[0].id);
-                }
-              : undefined
-          }
+          onRemove={canEdit && group ? () => removeMember(current.id) : undefined}
         />
 
         {story && (
