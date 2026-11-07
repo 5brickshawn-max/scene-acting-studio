@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { canApprove, createProjectData, stepIssues, updatePerformance } from "@/lib/domain/project";
-import { applyComposition } from "@/lib/domain/apply";
+import { canApprove, createProjectData, shotsOf, stepIssues, updatePerformance } from "@/lib/domain/project";
+import { applyComposition, composeStructure } from "@/lib/domain/apply";
 import { buildSceneImageHandoff } from "@/lib/domain/handoff";
 import { SceneComposeOut, JOB_STEP } from "@/lib/ai/schemas";
 
@@ -15,6 +15,12 @@ const OUT = SceneComposeOut.parse({
   style: "굵은 외곽선의 2D 셀 채색",
   opening: "해 질 녘 광장, 군중 사이로 칼리엘라가 걸어 나오고 브람이 막아선다. 세라는 노점 뒤에서 지켜본다.",
   questions: ["칼리엘라의 키를 브람보다 크게 정했습니다, 맞나요?"],
+  duration: 16,
+  shots: [
+    { title: "광장 와이드", seconds: 4, panels: ["군중이 술렁이는 광장", "카메라가 다가가 칼리엘라를 찾음"] },
+    { title: "칼리엘라 클로즈업", seconds: 2, panels: ["칼리엘라의 눈"] },
+    { title: "대치", seconds: 10, panels: ["브람이 막아섬", "두 사람의 투샷", "칼리엘라가 한 걸음"] },
+  ],
 });
 
 describe("씬 구성 (scene composed from the scenario)", () => {
@@ -91,5 +97,36 @@ describe("첫 장면 (opening scene picture drawn from the scenario)", () => {
     const s = buildSceneImageHandoff(solo);
     expect(s.aspectRatio).toBe("3:4");
     expect(s.prompt).toContain("Single character illustration of ONE character, portrait 3:4");
+  });
+});
+
+describe("쇼트 구성 (shots and panels proposed by the scene composition)", () => {
+  it("sets the panel count, titles, cut links and the time split for a storyboard", () => {
+    const d = applyComposition(createProjectData("광장", 2, "storyboard"), OUT, ["structure"]);
+    expect(d.expressionSetup.count).toBe(6);
+    expect(d.expressions.map((e) => e.emotion)).toEqual(["군중이 술렁이는 광장", "카메라가 다가가 칼리엘라를 찾음", "칼리엘라의 눈", "브람이 막아섬", "두 사람의 투샷", "칼리엘라가 한 걸음"]);
+    expect(d.expressions.map((e) => e.link)).toEqual(["continuous", "continuous", "cut", "cut", "continuous", "continuous"]);
+    expect(shotsOf(d)).toHaveLength(3);
+    expect(d.acting.duration).toBe(16);
+    // each shot's seconds are shared by its panels: 2 + 2 | 2 | 3.3 + 3.3 + 3.4
+    expect(d.acting.segments.map((x) => x.end)).toEqual([2, 4, 6, 9.3, 12.7, 16]);
+    expect(d.expressions.every((e) => e.reactions.length === 1)).toBe(true);
+  });
+
+  it("keeps character-by-character scenes in one shot: the panels become beats", () => {
+    const d = applyComposition(createProjectData("둘", 2, "cast"), OUT, ["structure"]);
+    expect(d.expressionSetup.count).toBe(6);
+    expect(d.expressions.every((e) => e.link === "continuous")).toBe(true);
+    expect(d.expressions[2].notes).toBe("칼리엘라의 눈");
+    expect(d.acting.duration).toBe(16);
+  });
+
+  it("caps at 12 panels and 60 seconds, and leaves the structure alone when not picked", () => {
+    const big = { ...OUT, duration: 90, shots: Array.from({ length: 5 }, (_, k) => ({ title: `s${k}`, seconds: 18, panels: ["a", "b", "c"] })) };
+    const st = composeStructure({ mode: "storyboard" }, big);
+    expect(st).toMatchObject({ shots: 5, total: 15, clipped: true, duration: 60 });
+    expect(st.panels).toHaveLength(12);
+    const before = createProjectData("x", 1, "storyboard");
+    expect(applyComposition(before, OUT, ["style"]).expressionSetup.count).toBe(before.expressionSetup.count);
   });
 });

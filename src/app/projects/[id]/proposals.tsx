@@ -2,7 +2,7 @@
 import { useState } from "react";
 import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, SceneComposeOutT, SheetCheckOutT, StoryboardOutT } from "@/lib/ai/schemas";
 import { JOB_LABEL, type JobKind } from "@/lib/ai/schemas";
-import { applyActing, applyCharacter, applyComposition, applyDialogue, applyExpressions, applyStoryboard, type CharacterField, type ComposeField } from "@/lib/domain/apply";
+import { composeStructure, applyActing, applyCharacter, applyComposition, applyDialogue, applyExpressions, applyStoryboard, type CharacterField, type ComposeField } from "@/lib/domain/apply";
 import { castLabel, FACING_LABEL, GAZE_LABEL, INTENSITY_LABEL, maxCastFor, type ProjectData } from "@/lib/domain/project";
 import type { JobView } from "@/lib/types";
 import { useEditor } from "./editor-context";
@@ -177,7 +177,8 @@ export function ComposeProposal({ job, out }: { job: JobView; out: SceneComposeO
   const d = doc.data;
   const story = d.mode === "storyboard";
   const max = maxCastFor(d.mode);
-  const [picked, setPicked] = useState<Set<ComposeField>>(new Set<ComposeField>(["cast", "style", "extras", "opening", "questions"]));
+  const [picked, setPicked] = useState<Set<ComposeField>>(new Set<ComposeField>(["cast", "style", "extras", "opening", "questions", "structure"]));
+  const st = composeStructure(d, out);
   const toggle = (k: ComposeField) =>
     setPicked((s) => {
       const n = new Set(s);
@@ -225,6 +226,41 @@ export function ComposeProposal({ job, out }: { job: JobView; out: SceneComposeO
         {story && out.extras.trim() && (
           <Row k="extras" title="군중·배경 인물">
             <span className="block whitespace-pre-wrap">{out.extras}</span>
+          </Row>
+        )}
+        {!st.tooFew && (
+          <Row
+            k="structure"
+            title={
+              st.story
+                ? `쇼트 구성 · 쇼트 ${st.shots}개 · 패널 ${st.panels.length}개 · ${st.duration}초`
+                : `표정 비트 ${st.panels.length}개 · ${st.duration}초 (컷 없는 한 쇼트)`
+            }
+          >
+            <span className="block text-[13px] text-muted">
+              적용하면 {st.story ? "컷 수·컷 제목·연결(✂/→)" : "표정 수"}과 영상 길이·시간 배분이 이 구성으로 바뀝니다. 그다음 2단계의 ‘AI로 {st.story ? "콘티" : "표정"} 설계’가 내용을 채웁니다.
+            </span>
+            {st.story ? (
+              <ol className="space-y-1 text-[14px]">
+                {out.shots.map((s, k) => (
+                  <li key={k}>
+                    <span className="font-semibold">
+                      {k > 0 ? "✂ " : ""}쇼트 {k + 1} · {s.seconds}초 · 패널 {s.panels.length}개
+                    </span>{" "}
+                    {s.title}
+                    <span className="block text-muted">{s.panels.map((p, i) => `${i > 0 ? "→ " : ""}${p}`).join("  ")}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <ol className="list-decimal pl-5 text-[14px]">
+                {st.panels.map((p, i) => (
+                  <li key={i}>{p.title}</li>
+                ))}
+              </ol>
+            )}
+            {st.clipped && <span className="block notice notice-warn">패널이 {st.total}개라 앞의 12개만 들어갑니다(한 장면 최대 12개). 장면을 둘로 나누는 것도 방법입니다.</span>}
+            {st.duration > 30 && <span className="block notice notice-warn">{st.duration}초는 영상 모델 한도(Kling·Seedance 30초, MiniMax 15초)를 넘습니다. 생성할 때 모델 한도로 잘립니다.</span>}
           </Row>
         )}
         <Row k="opening" title="첫 장면 묘사 (장면 기준 그림 생성에 씀)">

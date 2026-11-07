@@ -2,6 +2,11 @@
  * always an explicit user action; fields can be picked individually. */
 import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, SceneComposeOutT, StoryboardOutT } from "@/lib/ai/schemas";
 import {
+  MAX_EXPRESSIONS,
+  MAX_VIDEO_SECONDS,
+  MIN_EXPRESSIONS,
+  round3,
+  setExpressionCount,
   blankCastMember,
   defaultPositions,
   maxCastFor,
@@ -37,7 +42,20 @@ export function applyCharacter(data: ProjectData, out: CharacterOutT, fields: Ch
   return reopenFrom({ ...data, cast, style: pick.has("style") ? out.style : data.style }, 0);
 }
 
-export type ComposeField = "cast" | "style" | "extras" | "opening" | "questions";
+export type ComposeField = "cast" | "style" | "extras" | "opening" | "questions" | "structure";
+
+/** The proposed structure as the app can build it: at most 12 panels, at least 2, within 60 seconds. */
+export function composeStructure(data: Pick<ProjectData, "mode">, out: Pick<SceneComposeOutT, "shots" | "duration">) {
+  const story = data.mode === "storyboard";
+  // character-by-character scenes are one continuous shot: its panels are the beats
+  const shots = (story ? out.shots : [{ title: "", seconds: out.duration, panels: out.shots.flatMap((s) => s.panels) }]).filter((s) => s.panels.length);
+  const panels: { title: string; shot: number; weight: number }[] = [];
+  shots.forEach((s, k) => s.panels.forEach((t) => panels.push({ title: t, shot: k, weight: Math.max(0.2, s.seconds || 1) / s.panels.length })));
+  const total = panels.length;
+  const kept = panels.slice(0, MAX_EXPRESSIONS);
+  const duration = round3(Math.min(MAX_VIDEO_SECONDS, Math.max(1, out.duration || kept.reduce((a, p) => a + p.weight, 0))));
+  return { story, shots: shots.length, panels: kept, total, clipped: total > MAX_EXPRESSIONS, tooFew: kept.length < MIN_EXPRESSIONS, duration };
+}
 
 /**
  * Apply a scene composition (씬 구성). "cast" replaces the named characters with the AI's list (up to the
@@ -68,14 +86,32 @@ export function applyComposition(data: ProjectData, out: SceneComposeOutT, field
     first.questions = [...first.questions, ...out.questions.filter((q) => !existing.has(q)).map((q) => ({ question: q, answer: "" }))];
     cast = [first, ...cast.slice(1)];
   }
-  const next: ProjectData = {
+  let next: ProjectData = withActors({
     ...data,
     cast,
     style: pick.has("style") && out.style.trim() ? out.style : data.style,
     extras: pick.has("extras") ? out.extras : data.extras,
     opening: pick.has("opening") && out.opening.trim() ? out.opening : data.opening,
-  };
-  return reopenFrom(withActors(next), 0);
+  });
+  // 쇼트 구성: panel count, cut links (storyboard), titles and the time split, all at once
+  const st = composeStructure(data, out);
+  if (pick.has("structure") && !st.tooFew) {
+    next = setExpressionCount(next, st.panels.length);
+    const expressions = next.expressions.map((e, i) => {
+      const p = st.panels[i];
+      const opensShot = i > 0 && p.shot !== st.panels[i - 1].shot;
+      return st.story
+        ? { ...e, emotion: p.title, link: opensShot ? ("cut" as const) : ("continuous" as const) }
+        : { ...e, notes: e.notes.trim() || p.title, link: "continuous" as const };
+    });
+    const ids = expressions.map((e) => e.id);
+    next = {
+      ...next,
+      expressions,
+      acting: { duration: st.duration, segments: weightedSegments(ids, st.panels.map((p) => p.weight), st.duration) },
+    };
+  }
+  return reopenFrom(next, 0);
 }
 
 /** AI directions are marked "ai" so the step cannot be approved until a person confirms them. */

@@ -43,6 +43,18 @@ export const SceneComposeOut = z.object({
     .string()
     .describe("첫 장면 묘사: 장소·시간·빛, 모든 주요 인물이 어디서 무엇을 하는지(얼굴이 보이게), 군중·소품 (3~5문장)"),
   questions: z.array(z.string()).describe("시나리오와 자료만으로 정할 수 없어 앱이 정한 것이나 확인이 필요한 것"),
+  duration: z.number().describe("장면 전체 길이(초). 시나리오에 타임코드가 있으면 그 길이, 없으면 대사·동작에 맞는 길이. 60초 이하"),
+  shots: z
+    .array(
+      z.object({
+        title: z.string().describe("쇼트 내용 한 줄 (예: 입술 특대 클로즈업)"),
+        seconds: z.number().describe("이 쇼트의 길이(초)"),
+        panels: z
+          .array(z.string().describe("패널(콘티 칸) 한 줄 설명: 이 쇼트 안에서 카메라나 연기가 크게 달라지는 순간"))
+          .describe("이 쇼트 안의 패널, 순서대로. 카메라가 한 구도에 머무는 쇼트는 1개, 쇼트 안에서 카메라가 움직여 구도가 바뀌면 바뀌는 구도마다 1개"),
+      }),
+    )
+    .describe("쇼트(컷 분할) 구성, 순서대로. 쇼트와 쇼트 사이는 컷으로 끊김. 인물별 연기 방식이면 쇼트 1개(그 안의 패널 = 표정 비트)"),
 });
 
 /** Another character's acting at the same moment (group scenes). */
