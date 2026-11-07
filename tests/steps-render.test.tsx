@@ -81,4 +81,12 @@ describe("step screens render for one and for several characters", () => {
     expect(s2).toContain("말하는 인물 (이 컷에 대사가 있을 때)");
     expect(s2).not.toContain("중심 인물");
   });
+
+  it("offers more named characters in storyboard mode than in character-by-character mode", () => {
+    const story = createProjectData("광장", 4, "storyboard");
+    expect(render(story, createElement(CharacterStep, nav))).toContain("+ 인물 추가");
+    expect(render(story, createElement(CharacterStep, nav))).toContain("최대 8명");
+    const cast = createProjectData("넷", 4, "cast");
+    expect(render(cast, createElement(CharacterStep, nav))).not.toContain("+ 인물 추가");
+  });
 });

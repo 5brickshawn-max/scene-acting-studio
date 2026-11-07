@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
-import { MAX_CAST, SCENE_MODE_HELP, SCENE_MODE_LABEL, SCENE_MODES, STEPS, createProjectData, type SceneMode } from "@/lib/domain/project";
+import { MAX_CAST, MAX_CAST_STORYBOARD, maxCastFor, SCENE_MODE_HELP, SCENE_MODE_LABEL, SCENE_MODES, STEPS, createProjectData, type SceneMode } from "@/lib/domain/project";
 
 export type ProjectRow = {
   id: string;
@@ -91,7 +91,7 @@ export function ProjectList({ projects, workspaceId, canEdit }: { projects: Proj
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">작업 목록</h1>
-          <p className="text-muted">장면 하나가 작업 하나입니다(출연진 1~{MAX_CAST}명). 저장할 때마다 버전이 쌓이고, 언제든 이전 버전으로 되돌릴 수 있습니다.</p>
+          <p className="text-muted">장면 하나가 작업 하나입니다(인물별 연기 1~{MAX_CAST}명, 스토리보드 주요 인물 1~{MAX_CAST_STORYBOARD}명). 저장할 때마다 버전이 쌓이고, 언제든 이전 버전으로 되돌릴 수 있습니다.</p>
         </div>
         {canEdit && !creating && (
           <button className="btn btn-primary" onClick={() => setCreating(true)} disabled={busy}>
@@ -116,7 +116,15 @@ export function ProjectList({ projects, workspaceId, canEdit }: { projects: Proj
             <div className="field-label">통제 방식</div>
             <div className="seg">
               {SCENE_MODES.map((m) => (
-                <button key={m} type="button" aria-pressed={mode === m} onClick={() => setMode(m)}>
+                <button
+                  key={m}
+                  type="button"
+                  aria-pressed={mode === m}
+                  onClick={() => {
+                    setMode(m);
+                    setCastCount((c) => Math.min(c, maxCastFor(m)));
+                  }}
+                >
                   {SCENE_MODE_LABEL[m]}
                 </button>
               ))}
@@ -125,7 +133,7 @@ export function ProjectList({ projects, workspaceId, canEdit }: { projects: Proj
           <div role="group" aria-label="출연진 수">
             <div className="field-label">{mode === "storyboard" ? "주요 인물 (이름이 있는 인물)" : "출연진"}</div>
             <div className="seg">
-              {Array.from({ length: MAX_CAST }, (_, i) => i + 1).map((n) => (
+              {Array.from({ length: maxCastFor(mode) }, (_, i) => i + 1).map((n) => (
                 <button key={n} type="button" aria-pressed={castCount === n} onClick={() => setCastCount(n)}>
                   {n === 1 && mode === "cast" ? "1명 (인물 연기)" : `${n}명`}
                 </button>

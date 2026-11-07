@@ -70,7 +70,11 @@ export const EXPRESSION_IMAGE_ASPECT = "3:4";
 /* ───────────── Cast (출연진) ───────────── */
 
 export const MIN_CAST = 1;
+/** Character-by-character mode: every character's acting is set per beat, so the cast stays small. */
 export const MAX_CAST = 4;
+/** Storyboard mode: named characters are kept by name and features only, so more of them fit. */
+export const MAX_CAST_STORYBOARD = 8;
+export const maxCastFor = (mode: string | undefined) => (mode === "storyboard" ? MAX_CAST_STORYBOARD : MAX_CAST);
 
 /** Where a character stands on screen (viewer-relative). */
 export const POSITIONS = ["left", "center_left", "center", "center_right", "right"] as const;
@@ -87,7 +91,9 @@ export function defaultPositions(n: number): Position[] {
   if (n <= 1) return ["center"];
   if (n === 2) return ["left", "right"];
   if (n === 3) return ["left", "center", "right"];
-  return ["left", "center_left", "center_right", "right"];
+  if (n === 4) return ["left", "center_left", "center_right", "right"];
+  // larger storyboard casts: spread over the five places (several share one; it only helps find them in the drawing)
+  return Array.from({ length: n }, (_, i) => POSITIONS[Math.round((i * (POSITIONS.length - 1)) / (n - 1))]);
 }
 /**
  * How a scene is controlled:
@@ -279,7 +285,7 @@ export const ProjectDataSchema = z.object({
   /** extra references for the whole scene (other views, close-ups of a character, props) */
   designRefAssetIds: z.array(z.string()).default([]),
   /** 출연진: 1–4 characters in one shot; each is found in the scene drawing by name, position and features */
-  cast: z.array(CastMemberSchema).min(MIN_CAST).max(MAX_CAST),
+  cast: z.array(CastMemberSchema).min(MIN_CAST).max(MAX_CAST_STORYBOARD),
   expressionSetup: z.object({
     count: z.number().int(),
     refAssetId: z.string().nullable(),
@@ -377,7 +383,7 @@ export function blankExpression(panel: number | null = null, characterId = ""): 
 }
 
 export function createProjectData(title = "새 장면", castCount = 1, mode: SceneMode = "cast"): ProjectData {
-  const n = Math.min(MAX_CAST, Math.max(MIN_CAST, Math.round(castCount)));
+  const n = Math.min(maxCastFor(mode), Math.max(MIN_CAST, Math.round(castCount)));
   const positions = defaultPositions(n);
   const cast = positions.map((p) => blankCastMember(p));
   const count = mode === "storyboard" ? 6 : n === 1 ? 4 : Math.min(MAX_EXPRESSIONS, n * 2);
@@ -610,9 +616,9 @@ export function beatActor(data: Pick<ProjectData, "cast">, e: Pick<Expression, "
   return castMember(data, e.characterId) ?? data.cast[0];
 }
 
-/** Add a cast member (up to MAX_CAST); positions are re-spread left to right. */
+/** Add a cast member (up to the mode's limit); positions are re-spread left to right. */
 export function addCastMember(data: ProjectData): ProjectData {
-  if (data.cast.length >= MAX_CAST) return data;
+  if (data.cast.length >= maxCastFor(data.mode)) return data;
   const positions = defaultPositions(data.cast.length + 1);
   const cast = [...data.cast, blankCastMember()].map((c, i) => ({ ...c, position: positions[i] }));
   return reopenFrom(
@@ -696,7 +702,13 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
 
   if (step === 0) {
     if (!filled(data.title)) block("장면 이름을 입력하세요.");
-    if (!(data.cast.length >= MIN_CAST && data.cast.length <= MAX_CAST)) block(`출연진은 ${MIN_CAST}~${MAX_CAST}명이어야 합니다.`);
+    const max = maxCastFor(data.mode);
+    if (!(data.cast.length >= MIN_CAST && data.cast.length <= max))
+      block(
+        isStoryboard(data)
+          ? `주요 인물은 ${MIN_CAST}~${max}명이어야 합니다.`
+          : `인물별 연기 방식의 출연진은 ${MIN_CAST}~${max}명이어야 합니다. 인물이 더 많으면 스토리보드 방식을 쓰거나 인물을 줄이세요.`,
+      );
     data.cast.forEach((c, i) => {
       const who = castLabel(data, c.id);
       if (!filled(c.name)) block(`${castLetter(i)} 캐릭터의 이름을 입력하세요.`);
@@ -904,7 +916,7 @@ export function parseProjectData(raw: unknown): ProjectData {
   const merged = {
     ...base,
     ...obj,
-    cast: Array.isArray(obj.cast) && obj.cast.length ? obj.cast.slice(0, MAX_CAST).map((c) => ({ ...blankCastMember(), ...c })) : base.cast,
+    cast: Array.isArray(obj.cast) && obj.cast.length ? obj.cast.slice(0, MAX_CAST_STORYBOARD).map((c) => ({ ...blankCastMember(), ...c })) : base.cast,
     expressionSetup: { ...base.expressionSetup, ...(obj.expressionSetup ?? {}) },
     dialogue: { ...base.dialogue, ...(obj.dialogue ?? {}) },
     acting: { ...base.acting, ...(obj.acting ?? {}) },

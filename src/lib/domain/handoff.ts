@@ -991,7 +991,9 @@ export function buildVideoHandoff(
  */
 
 /** Named characters by name and their key features (no fixed positions), then the crowd. */
-function storyboardCastEn(data: ProjectData, en: ReturnType<typeof freshEnglish>, features = 4): string[] {
+function storyboardCastEn(data: ProjectData, en: ReturnType<typeof freshEnglish>, wanted = 4): string[] {
+  // a big named cast keeps each line short: the two most telling features per character
+  const features = data.cast.length > 4 ? Math.min(wanted, 2) : wanted;
   const named = data.cast
     .map((c) => {
       const look = en.cast.get(c.id)?.look ?? shortLocks(c.locks, features);
@@ -1202,7 +1204,8 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
     ? `DIRECTOR'S DIRECTION (the director's own words: follow exactly; where it differs from the general camera, framing or background lines above, this wins):\n${director}`
     : "";
   const constraints = constraintsFor(rig);
-  const lengthTarget = en.beats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET;
+  // room for the named characters beyond four (their names, features and voices)
+  const lengthTarget = (en.beats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) + Math.max(0, data.cast.length - 4) * 200;
   let prompt = "";
   for (const B of STORY_BUDGETS) {
     prompt = [headerWith(B), beatsWith(B).join("\n\n"), directorBlock, constraints].filter(Boolean).join("\n\n");

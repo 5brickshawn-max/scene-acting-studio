@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approve, canApprove, createProjectData, imageAspectFor, parseProjectData, stepIssues, type ProjectData } from "@/lib/domain/project";
+import { addCastMember, approve, canApprove, createProjectData, imageAspectFor, MAX_CAST, MAX_CAST_STORYBOARD, parseProjectData, stepIssues, type ProjectData } from "@/lib/domain/project";
 import { buildExpressionHandoffs, buildFrameHandoff, buildVideoHandoff } from "@/lib/domain/handoff";
 import { applyStoryboard } from "@/lib/domain/apply";
 import { buildEnglishSheet, englishStale } from "@/lib/domain/english";
@@ -133,5 +133,37 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     const panels = { summary: "", panels: [{ title: "t", action: "a", camera: "c", speaker: 0 }] };
     expect(consultSchemaFor(1, true).safeParse({ reply: "", proposal: panels }).success).toBe(true);
     expect(consultSchemaFor(1, false).safeParse({ reply: "", proposal: panels }).success).toBe(false);
+  });
+
+  it("takes up to eight named characters; character-by-character mode stays at four", () => {
+    expect(MAX_CAST_STORYBOARD).toBe(8);
+    let d = createProjectData("대연회", 6, "storyboard");
+    expect(d.cast).toHaveLength(6);
+    expect(createProjectData("x", 9, "storyboard").cast).toHaveLength(8);
+    expect(createProjectData("x", 6, "cast").cast).toHaveLength(MAX_CAST);
+    d = addCastMember(addCastMember(addCastMember(d)));
+    expect(d.cast).toHaveLength(8);
+    expect(d.cast[0].position).toBe("left");
+    expect(d.cast[7].position).toBe("right");
+    // survives saving and loading
+    expect(parseProjectData(JSON.parse(JSON.stringify(d))).cast).toHaveLength(8);
+    // switching such a scene to character-by-character mode cannot be approved
+    d.cast = d.cast.map((c, i) => ({ ...c, name: `인물${i + 1}`, locks: "1. 특징", appearance: "외형" }));
+    d.baseAssetId = "scene-1";
+    d.style = "2D";
+    expect(canApprove(d, 0)).toBe(true);
+    expect(stepIssues({ ...d, mode: "cast" }, 0).map((i) => i.message).join(" ")).toContain("인물별 연기 방식의 출연진은 1~4명");
+  });
+
+  it("keeps a big named cast short in the prompts and gives the video prompt more room", () => {
+    const d = market();
+    const extra = ["세라", "도윤", "미라", "카이", "루엔"];
+    d.cast = [...d.cast, ...extra.map((name) => ({ ...d.cast[0], id: name, name, locks: "1. 첫째 특징\n2. 둘째 특징\n3. 셋째 특징" }))];
+    const p = buildExpressionHandoffs(d)[0].prompt;
+    expect(p).toContain("세라 — 첫째 특징, 둘째 특징;");
+    expect(p).not.toContain("셋째 특징");
+    const h = buildVideoHandoff(d);
+    expect(h.lengthTarget).toBe(3500 + 3 * 200);
+    expect(h.prompt.length).toBeLessThanOrEqual(h.lengthTarget);
   });
 });

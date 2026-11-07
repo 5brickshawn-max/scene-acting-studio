@@ -4,7 +4,7 @@ import {
   addCastMember,
   castLabel,
   castLetter,
-  MAX_CAST,
+  maxCastFor,
   POSITION_LABEL,
   POSITIONS,
   removeCastMember,
@@ -61,7 +61,7 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
             <div className="field-label">{story ? "주요 인물 (이름이 있는 인물)" : "출연진"}</div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="pill">{d.cast.length}명</span>
-              {canEdit && d.cast.length < MAX_CAST && (
+              {canEdit && d.cast.length < maxCastFor(d.mode) && (
                 <button
                   type="button"
                   className="btn btn-sm"
@@ -77,8 +77,13 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
             </div>
             <p className="field-help">
               {story
-                ? `대사를 하거나 이름으로 부를 인물만 등록합니다(최대 ${MAX_CAST}명). 군중·배경 인물은 아래에 글로 적습니다.`
-                : `한 명이면 인물 연기 쇼트, 2명 이상이면 모든 인물이 한 화면에 나오는 장면이 됩니다(최대 ${MAX_CAST}명).`}
+                ? `대사를 하거나 이름으로 부를 인물만 등록합니다(최대 ${maxCastFor("storyboard")}명). 군중·배경 인물은 아래에 글로 적습니다.`
+                : `한 명이면 인물 연기 쇼트, 2명 이상이면 모든 인물이 한 화면에 나오는 장면이 됩니다(최대 ${maxCastFor("cast")}명).`}
+              {!story && d.cast.length > maxCastFor("cast") && (
+                <span className="block notice notice-warn mt-2">
+                  인물별 연기 방식은 최대 {maxCastFor("cast")}명입니다. 지금 {d.cast.length}명이라 승인할 수 없습니다. 스토리보드 방식으로 바꾸거나 인물을 줄이세요.
+                </span>
+              )}
             </p>
           </div>
         </div>
