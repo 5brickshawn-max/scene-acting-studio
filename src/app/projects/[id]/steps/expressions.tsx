@@ -170,7 +170,7 @@ function SceneField() {
       />
       <p className="field-help">
         {doc.data.cast.length > 1 ? "여러 인물 장면은 대사 앞에 말하는 인물 이름을 적으면(예: “브람 : …”) AI가 그 인물에게 표정을 배정합니다. " : ""}
-        장면 상황과 기초 대사를 적으면, 아래 ‘AI로 표정 설계’가 이 장면을 연기하는 표정을 순서대로 설계합니다(대사마다 표정 배정, 남는 표정은 대사 사이 반응).
+        장면 상황과 기초 대사를 적으면, 아래 ‘{doc.data.mode === "storyboard" ? "AI로 콘티 설계’가 이 장면을 컷으로 나눠" : "AI로 표정 설계’가 이 장면을 연기하는 표정을"} 순서대로 설계합니다(대사마다 {doc.data.mode === "storyboard" ? "컷" : "표정"} 배정).
         표정 참고 시트를 올렸다면 그 그림도 함께 분석해 장면에 맞는 칸을 고릅니다. 기초 대사는 3단계 대사 작성에 그대로 쓰입니다. 카메라 움직임·배경은 영상(5단계) 추가
         연출에 적어 주세요.
       </p>
@@ -580,7 +580,7 @@ function DurationField() {
         </div>
       </div>
       <p className="field-help">
-        표정 {doc.data.expressions.length}개 · 표정당 평균 {per}초. 대사(3단계)는 이 시간 안에서 쓰고, 액팅(4단계)에서는 이 시간을 어떻게 나눌지만 정합니다.
+        {doc.data.mode === "storyboard" ? "컷" : "표정"} {doc.data.expressions.length}개 · 하나당 평균 {per}초. 대사(3단계)는 이 시간 안에서 쓰고, 액팅(4단계)에서는 이 시간을 어떻게 나눌지만 정합니다.
         영상 모델 한도: Kling 4.0·Seedance 2.5 최대 30초, MiniMax H3 최대 15초.
       </p>
     </div>
@@ -588,6 +588,172 @@ function DurationField() {
 }
 
 export function ExpressionStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) {
+  const { doc } = useEditor();
+  return doc.data.mode === "storyboard" ? <StoryboardStep onNavigate={onNavigate} /> : <CastExpressionStep onNavigate={onNavigate} />;
+}
+
+/* ───────────── Storyboard mode: panels (콘티) ───────────── */
+
+function useImageSetter() {
+  const { doc } = useEditor();
+  return (expressionId: string, assetId: string, framing: Framing | null, aspect: string | null) =>
+    doc.edit(1, (d) => ({
+      ...d,
+      expressions: d.expressions.map((x) => (x.id === expressionId ? { ...x, imageAssetId: assetId, imageFraming: framing, imageAspect: aspect } : x)),
+    }));
+}
+
+function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) {
+  const { doc, canEdit } = useEditor();
+  const d = doc.data;
+  const s = d.expressionSetup;
+  const setImage = useImageSetter();
+  return (
+    <StepFrame
+      step={1}
+      title="콘티를 만드세요"
+      intro="장면을 컷으로 나누고, 컷마다 그 순간 화면 전체(장면 묘사·카메라)를 정해 한 장씩 그립니다. 러프 스케치를 올리면 그 구도를 따릅니다. 컷들은 영상에서 컷 없는 한 쇼트로 이어집니다."
+      onNavigate={onNavigate}
+    >
+      <section className="space-y-4">
+        <h3 className="section-title">① 컷 수·영상 길이·화면 비율</h3>
+        <div>
+          <div className="field-label">컷 수</div>
+          <div className="seg">
+            {Array.from({ length: MAX_EXPRESSIONS - MIN_EXPRESSIONS + 1 }, (_, i) => i + MIN_EXPRESSIONS).map((n) => (
+              <button key={n} aria-pressed={s.count === n} disabled={!canEdit} onClick={() => doc.edit(1, (x) => setExpressionCount(x, n))}>
+                {n}컷
+              </button>
+            ))}
+          </div>
+        </div>
+        <DurationField />
+        <div>
+          <Seg
+            label="화면 비율 (컷 그림과 영상이 함께 씀)"
+            value={d.video.aspectRatio}
+            options={["16:9", "9:16"] as const}
+            labels={{ "16:9": "가로 16:9", "9:16": "세로 9:16" }}
+            onChange={(v) => doc.edit(1, (x) => ({ ...x, video: { ...x.video, aspectRatio: v } }))}
+          />
+          <p className="field-help">컷 그림은 영상과 같은 비율로 그려, 영상에 그대로 참고 그림으로 들어갑니다.</p>
+        </div>
+        <SceneField />
+        <Field
+          label="모든 컷에 공통 연출 지시 (선택)"
+          multiline
+          rows={2}
+          value={s.instruction}
+          onChange={(v) => doc.edit(1, (x) => ({ ...x, expressionSetup: { ...x.expressionSetup, instruction: v } }))}
+          placeholder="예: 해 질 녘 역광, 먼지가 날리는 분위기"
+        />
+      </section>
+
+      <section className="space-y-4">
+        <h3 className="section-title">② AI 콘티 설계</h3>
+        <AiAction
+          kind="design_expressions"
+          step={1}
+          label={s.scene.trim() ? "상황 설정에 맞춰 AI로 콘티 설계" : "AI로 콘티 설계"}
+          disabled={!d.baseAssetId}
+          disabledReason="1단계에서 장면 기준 그림을 먼저 올리세요."
+          description={`컷 ${s.count}개의 제목·장면 묘사·카메라·말하는 인물을 제안합니다. 러프 스케치를 올린 컷은 그 구도를 따릅니다.`}
+        />
+        <PendingProposal step={1} except={["check_sheet"]} />
+      </section>
+
+      <section className="space-y-4">
+        <h3 className="section-title">③ 컷 카드</h3>
+        <ol className="grid xl:grid-cols-2 gap-4">
+          {d.expressions.map((e, i) => (
+            <PanelCard key={e.id} e={e} index={i} />
+          ))}
+        </ol>
+      </section>
+
+      <EnglishBar />
+
+      <HiggsfieldDirect onUse={setImage} />
+
+      <details className="rounded-xl border border-line">
+        <summary className="cursor-pointer p-4 font-semibold">수동으로 만들기·직접 올리기 (컷별 프롬프트 · ZIP 다운로드)</summary>
+        <div className="px-1 pb-1">
+          <HiggsfieldHandoff />
+        </div>
+      </details>
+
+      <section className="space-y-4">
+        <h3 className="section-title">④ 컷 그림 검사</h3>
+        <AiAction
+          kind="check_sheet"
+          step={1}
+          label="AI로 컷 그림 검사"
+          disabled={!d.expressions.some((e) => e.imageAssetId)}
+          disabledReason="컷 그림을 생성하거나 올리면 검사할 수 있습니다."
+          description="장면 묘사대로인지, 주요 인물이 섞이지 않았는지, 컷끼리 한 쇼트처럼 이어지는지 확인합니다."
+        />
+        <PendingProposal step={1} kinds={["check_sheet"]} />
+      </section>
+    </StepFrame>
+  );
+}
+
+/** One storyboard panel: title, the whole moment, the camera, who speaks, a rough sketch and the panel image. */
+function PanelCard({ e, index }: { e: Expression; index: number }) {
+  const { doc, assets } = useEditor();
+  const d = doc.data;
+  const update = (patch: Partial<Expression>) =>
+    doc.edit(1, (x) => ({ ...x, expressions: x.expressions.map((y) => (y.id === e.id ? { ...y, ...patch } : y)) }));
+  const own = e.imageAssetId ? assets.get(e.imageAssetId) : undefined;
+  const aspect = d.video.aspectRatio.replace(":", "/");
+  return (
+    <li className="rounded-xl border border-line p-4 space-y-3" aria-label={`${index + 1}번 컷`}>
+      <div className="flex items-center gap-2">
+        <span className="grid place-items-center size-8 rounded-full bg-[#26301f] text-white font-bold">{index + 1}</span>
+        <span className="font-semibold truncate">{e.emotion || "제목 없음"}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <ImageSlot
+          label="러프 스케치 (선택)"
+          kind="acting_ref"
+          assetId={e.sketchAssetId}
+          removable
+          emptyText="콘티 칸을 올리면 구도·자세·카메라를 따릅니다 (선 그림체는 따르지 않음)."
+          onChange={(id) => update({ sketchAssetId: id })}
+        />
+        <figure>
+          <div className="field-label">컷 그림</div>
+          <div className="rounded-lg border border-line checker grid place-items-center overflow-hidden" style={{ aspectRatio: aspect }}>
+            {own ? <img src={own.previewUrl} alt={`${index + 1}번 컷 그림`} className="w-full h-full object-contain" /> : <span className="text-[13px] text-muted p-2 text-center">아래 Higgsfield에서 생성</span>}
+          </div>
+        </figure>
+      </div>
+      <Field label="컷 제목" value={e.emotion} onChange={(v) => update({ emotion: v })} placeholder="예: 군중이 갈라지며 칼리엘라 등장" />
+      <Field
+        label="장면 묘사 (이 순간 화면 전체)"
+        multiline
+        rows={4}
+        value={e.action}
+        onChange={(v) => update({ action: v })}
+        placeholder="예: 횃불을 든 군중이 좌우로 갈라지고, 그 사이로 칼리엘라가 걸어 나온다. 브람은 오른쪽 앞에서 칼자루를 쥔 채 그녀를 노려본다."
+      />
+      <Field label="카메라" value={e.camera} onChange={(v) => update({ camera: v })} placeholder="예: 와이드 로우앵글에서 칼리엘라 쪽으로 천천히 다가감" />
+      {d.cast.length > 1 && (
+        <div>
+          <label className="field-label" htmlFor={`speaker-${e.id}`}>말하는 인물 (이 컷에 대사가 있을 때)</label>
+          <select id={`speaker-${e.id}`} className="select" value={e.characterId} onChange={(ev) => update({ characterId: ev.target.value })}>
+            {d.cast.map((c) => (
+              <option key={c.id} value={c.id}>{castLabel(d, c.id)}</option>
+            ))}
+          </select>
+        </div>
+      )}
+      <Field label="메모 (팀용, 프롬프트에는 들어가지 않음)" value={e.notes} onChange={(v) => update({ notes: v })} />
+    </li>
+  );
+}
+
+function CastExpressionStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) {
   const { doc, canEdit } = useEditor();
   const s = doc.data.expressionSetup;
   const setSetup = (patch: Partial<typeof s>) => doc.edit(1, (d) => ({ ...d, expressionSetup: { ...d.expressionSetup, ...patch } }));

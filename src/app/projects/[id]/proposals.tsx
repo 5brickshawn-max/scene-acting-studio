@@ -1,8 +1,8 @@
 "use client";
 import { useState } from "react";
-import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, SheetCheckOutT } from "@/lib/ai/schemas";
+import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, SheetCheckOutT, StoryboardOutT } from "@/lib/ai/schemas";
 import { JOB_LABEL, type JobKind } from "@/lib/ai/schemas";
-import { applyActing, applyCharacter, applyDialogue, applyExpressions, type CharacterField } from "@/lib/domain/apply";
+import { applyActing, applyCharacter, applyDialogue, applyExpressions, applyStoryboard, type CharacterField } from "@/lib/domain/apply";
 import { castLabel, FACING_LABEL, GAZE_LABEL, INTENSITY_LABEL, type ProjectData } from "@/lib/domain/project";
 import type { JobView } from "@/lib/types";
 import { useEditor } from "./editor-context";
@@ -236,6 +236,57 @@ export function ExpressionsProposal({ job, out }: { job: JobView; out: Expressio
   );
 }
 
+export function StoryboardProposal({ job, out }: { job: JobView; out: StoryboardOutT }) {
+  const { doc } = useEditor();
+  const apply = useApply(job);
+  const count = doc.data.expressionSetup.count;
+  const [picked, setPicked] = useState<Set<number>>(new Set(out.panels.map((_, i) => i).filter((i) => i < count)));
+  return (
+    <ProposalShell
+      job={job}
+      title={`콘티 ${out.panels.length}컷`}
+      summary={out.summary}
+      applyDisabled={picked.size === 0}
+      onApply={() => apply(applyStoryboard(doc.data, out, [...picked]), "AI 콘티 적용")}
+    >
+      {out.panels.length !== count && (
+        <p className="notice notice-warn">설정한 컷 수는 {count}개인데 AI가 {out.panels.length}개를 제안했습니다. 앞에서부터 {count}개까지만 적용됩니다.</p>
+      )}
+      <ol className="grid sm:grid-cols-2 gap-3">
+        {out.panels.map((p, i) => {
+          const speaker = doc.data.cast[p.speaker - 1];
+          return (
+            <li key={i}>
+              <label className={`flex gap-3 items-start rounded-lg bg-white border border-line p-3 ${i >= count ? "opacity-50" : ""}`}>
+                <input
+                  type="checkbox"
+                  className="mt-1 size-5"
+                  disabled={i >= count}
+                  checked={picked.has(i)}
+                  onChange={() =>
+                    setPicked((s) => {
+                      const n = new Set(s);
+                      if (n.has(i)) n.delete(i);
+                      else n.add(i);
+                      return n;
+                    })
+                  }
+                />
+                <span className="text-[14px] space-y-1">
+                  <span className="block font-semibold">{i + 1}. {p.title}</span>
+                  <span className="block">{p.action}</span>
+                  <span className="block text-muted">카메라: {p.camera}</span>
+                  {speaker && <span className="block text-muted">말하는 인물: {castLabel(doc.data, speaker.id)}</span>}
+                </span>
+              </label>
+            </li>
+          );
+        })}
+      </ol>
+    </ProposalShell>
+  );
+}
+
 export function SheetCheckResult({ job, out }: { job: JobView; out: SheetCheckOutT }) {
   return (
     <ProposalShell job={job} title="표정 시트 검사 결과" summary={out.summary}>
@@ -329,7 +380,11 @@ export function PendingProposal({ step, kinds, except }: { step: number; kinds?:
     case 0:
       return <CharacterProposal job={job} out={proposal as CharacterOutT} />;
     case 1:
-      return <ExpressionsProposal job={job} out={proposal as ExpressionsOutT} />;
+      return (proposal as { panels?: unknown }).panels ? (
+        <StoryboardProposal job={job} out={proposal as StoryboardOutT} />
+      ) : (
+        <ExpressionsProposal job={job} out={proposal as ExpressionsOutT} />
+      );
     case 2:
       return <DialogueProposal job={job} out={proposal as DialogueOutT} />;
     case 3:

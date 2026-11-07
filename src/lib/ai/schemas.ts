@@ -71,6 +71,19 @@ export const ExpressionsOut = z.object({
   expressions: z.array(ExpressionOutItem),
 });
 
+/** Storyboard mode: the scene as successive panels, each described as a whole. */
+export const StoryboardOut = z.object({
+  summary: z.string(),
+  panels: z.array(
+    z.object({
+      title: z.string().describe("컷 제목, 짧게 (예: 군중이 갈라지며 칼리엘라 등장)"),
+      action: z.string().describe("이 순간 화면 전체에서 일어나는 일: 누가 어디서 무엇을 하는지, 군중·소품, 표정과 자세의 핵심 (2~4문장)"),
+      camera: z.string().describe("이 컷의 카메라: 샷 크기·앵글·다음 컷까지의 움직임 (한 문장)"),
+      speaker: z.number().int().describe("대사가 있으면 말하는 주요 인물 번호(1부터), 없으면 0"),
+    }),
+  ),
+});
+
 export const SheetCheckOut = z.object({
   summary: z.string(),
   panelCountMatches: z.boolean(),
@@ -206,12 +219,12 @@ export const JOB_LABEL: Record<JobKind, string> = {
 };
 
 /** Proposal schema the consult chat may return for a given step. */
-export function proposalSchemaFor(step: number) {
+export function proposalSchemaFor(step: number, storyboard = false) {
   switch (step) {
     case 0:
       return CharacterOut;
     case 1:
-      return ExpressionsOut;
+      return storyboard ? StoryboardOut : ExpressionsOut;
     case 2:
       return DialogueOut;
     case 3:
@@ -221,8 +234,8 @@ export function proposalSchemaFor(step: number) {
   }
 }
 
-export function consultSchemaFor(step: number) {
-  const p = proposalSchemaFor(step);
+export function consultSchemaFor(step: number, storyboard = false) {
+  const p = proposalSchemaFor(step, storyboard);
   return z.object({
     reply: z.string(),
     proposal: p ? p.nullable().describe("내용 수정을 제안할 때만 채움. 질문에 답만 할 때는 null") : z.null(),
@@ -231,6 +244,7 @@ export function consultSchemaFor(step: number) {
 
 export type CharacterOutT = z.infer<typeof CharacterOut>;
 export type ExpressionsOutT = z.infer<typeof ExpressionsOut>;
+export type StoryboardOutT = z.infer<typeof StoryboardOut>;
 export type SheetCheckOutT = z.infer<typeof SheetCheckOut>;
 export type DialogueOutT = z.infer<typeof DialogueOut>;
 export type ActingOutT = z.infer<typeof ActingOut>;

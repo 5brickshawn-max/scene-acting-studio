@@ -37,7 +37,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     ...data.designRefAssetIds,
     data.expressionSetup.refAssetId,
     data.expressionSetup.sheetAssetId,
-    ...data.expressions.map((e) => e.imageAssetId),
+    ...data.expressions.flatMap((e) => [e.imageAssetId, e.sketchAssetId]),
     data.video.startFrameAssetId,
     data.video.endFrameAssetId,
     ...data.video.resultAssetIds,

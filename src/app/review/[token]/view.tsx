@@ -125,7 +125,9 @@ function JobRow({ j, b }: { j: ReviewJob; b: ReviewBundle }) {
 
 export function ReviewView({ b, dataUrl }: { b: ReviewBundle; dataUrl: string }) {
   const d = b.data;
-  const multi = d.cast.length > 1;
+  const story = d.mode === "storyboard";
+  const multi = d.cast.length > 1 && !story;
+  const group = d.cast.length > 1;
   const s = d.expressionSetup;
   const f = s.framing;
   const A = (id: string | null | undefined) => (id ? b.assets[id] : undefined);
@@ -156,9 +158,9 @@ export function ReviewView({ b, dataUrl }: { b: ReviewBundle; dataUrl: string })
         </ol>
       </header>
 
-      <Step n={1} title={multi ? `출연진 ${d.cast.length}명` : "캐릭터"} approved={approved(0)}>
+      <Step n={1} title={story ? `스토리보드 · 주요 인물 ${d.cast.length}명` : multi ? `출연진 ${d.cast.length}명` : "캐릭터"} approved={approved(0)}>
         <div className="space-y-2 max-w-xl">
-          <div className="field-label">{multi ? "장면 기준 그림 (출연진 전원)" : "기본 그림"}</div>
+          <div className="field-label">{group || story ? "장면 기준 그림" : "기본 그림"}</div>
           <Media a={A(d.baseAssetId)} label={multi ? "장면 기준 그림" : "기본 그림"} />
           {d.designRefAssetIds.length > 0 && (
             <>
@@ -174,7 +176,7 @@ export function ReviewView({ b, dataUrl }: { b: ReviewBundle; dataUrl: string })
         {d.cast.map((c) => (
           <div key={c.id} className="rounded-xl border border-line p-3">
             <div className="space-y-3 min-w-0">
-              {multi && <div className="font-semibold">{`${castLabel(d, c.id)} · ${POSITION_LABEL[c.position]}`}</div>}
+              {group && <div className="font-semibold">{story ? castLabel(d, c.id) : `${castLabel(d, c.id)} · ${POSITION_LABEL[c.position]}`}</div>}
               <Field label="꼭 유지할 특징" value={c.locks} />
               <Field label="외형" value={c.appearance} />
               <Field label="의상" value={c.outfit} />
@@ -196,9 +198,10 @@ export function ReviewView({ b, dataUrl }: { b: ReviewBundle; dataUrl: string })
           </div>
         ))}
         <Field label="그림체 (장면 공통)" value={d.style} />
+        {story && <Field label="군중·배경 인물" value={d.extras} />}
       </Step>
 
-      <Step n={2} title="표정" approved={approved(1)}>
+      <Step n={2} title={story ? "콘티" : "표정"} approved={approved(1)}>
         <p>
           표정 {d.expressions.length}개 · 구도 <strong>{FRAMING_LABEL[f]}</strong> ({FRAMING_CUT[f]}) · {imageAspectFor(d)} · 영상 길이 {d.acting.duration}초
         </p>
@@ -218,6 +221,25 @@ export function ReviewView({ b, dataUrl }: { b: ReviewBundle; dataUrl: string })
             const dir = e.direction;
             const stale = imageIsStale(e, f, imageAspectFor(d));
             const p = promptOf(e.id);
+            if (story)
+              return (
+                <li key={e.id} className="rounded-xl border border-line p-3 space-y-2 min-w-0">
+                  <div className="font-semibold">
+                    {i + 1}번 컷 · {e.emotion || "제목 없음"}
+                  </div>
+                  <Media a={A(e.imageAssetId)} label={`${i + 1}번 컷 그림`} />
+                  {e.sketchAssetId && (
+                    <div className="max-w-[200px]">
+                      <div className="field-label">러프 스케치</div>
+                      <Media a={A(e.sketchAssetId)} label="러프 스케치" />
+                    </div>
+                  )}
+                  <Field label="장면 묘사" value={e.action} />
+                  <Field label="카메라" value={e.camera} />
+                  {d.cast.length > 1 && <Field label="말하는 인물" value={castLabel(d, e.characterId)} />}
+                  {p && <Prompt title="그림 프롬프트" text={p.prompt} />}
+                </li>
+              );
             return (
               <li key={e.id} className="rounded-xl border border-line p-3 space-y-2 min-w-0">
                 <div className="font-semibold">
@@ -264,7 +286,7 @@ export function ReviewView({ b, dataUrl }: { b: ReviewBundle; dataUrl: string })
         <ul className="space-y-1">
           {d.cast.map((c) => (
             <li key={c.id}>
-              목소리{multi ? ` (${castLabel(d, c.id)})` : ""}: {c.voice || <span className="text-muted">(없음)</span>}
+              목소리{group ? ` (${castLabel(d, c.id)})` : ""}: {c.voice || <span className="text-muted">(없음)</span>}
             </li>
           ))}
           <li>언어: {d.dialogue.language}</li>
@@ -278,7 +300,7 @@ export function ReviewView({ b, dataUrl }: { b: ReviewBundle; dataUrl: string })
             return (
               <li key={e.id} className="rounded-lg border border-line p-3 text-[14px] space-y-1">
                 <div className="font-semibold">
-                  {i + 1}. {multi ? `${castLabel(d, e.characterId)} · ` : ""}{e.emotion || "감정 미정"}
+                  {i + 1}. {group ? `${castLabel(d, e.characterId)} · ` : ""}{e.emotion || (story ? "제목 없음" : "감정 미정")}
                 </div>
                 {l?.line ? <p className="text-[15px]">“{l.line}”</p> : <p className="text-muted">(대사 없음)</p>}
                 {l?.meaning && <p>의미: {l.meaning}</p>}

@@ -13,6 +13,7 @@
 import { constraintsFor, directorAngle, directorBackground, directorRig, hasCameraMove, reconcile, type Adjustment } from "./constraints";
 import { freshEnglish } from "./english";
 import {
+  isStoryboard,
   beatActor,
   performancesOf,
   type Performance,
@@ -288,6 +289,7 @@ export type ExpressionHandoff = {
  * the beat's actor performs, the others react.
  */
 export function buildExpressionHandoffs(data: ProjectData): ExpressionHandoff[] {
+  if (isStoryboard(data)) return buildStoryboardHandoffs(data);
   const s = data.expressionSetup;
   const framing = s.framing;
   const hands = showsHands(framing);
@@ -411,6 +413,7 @@ export type FrameHandoff = { prompt: string; aspectRatio: string; references: Re
  * instead of by words. Same character, same acting; only the framing changes.
  */
 export function buildFrameHandoff(data: ProjectData, expressionId: string, shot: Framing): FrameHandoff {
+  if (isStoryboard(data)) return buildStoryboardFrame(data, expressionId, shot);
   const e = data.expressions.find((x) => x.id === expressionId);
   if (!e) throw new Error("표정을 찾을 수 없습니다.");
   const multi = isMultiCast(data);
@@ -659,6 +662,7 @@ export function buildVideoHandoff(
   /** the last frame is attached too (start-frame mode, models that take one) */
   opts: { endFrame?: boolean } = {},
 ): VideoHandoff {
+  if (isStoryboard(data)) return buildStoryboardVideo(data, source, opts);
   const endFrame = source === "start_frame" && (opts.endFrame ?? Boolean(data.video.endFrameAssetId));
   const multi = isMultiCast(data);
   const nameOf = (expressionId: string) => {
@@ -969,6 +973,247 @@ export function buildVideoHandoff(
     prompt,
     // full beat text in the team's original wording ("한국어로 내용 확인")
     promptKo: beatsWith(FULL, false).join("\n\n"),
+    cameraMove,
+    adjustments,
+    constraints,
+    overrides,
+    directorBlock,
+    lengthTarget,
+  };
+}
+
+/* ───────────── Storyboard mode (스토리보드 · 컷 단위) ───────────── */
+/*
+ * Each beat is a storyboard panel: one finished picture of the whole moment, described as a whole
+ * (action, camera, an optional rough sketch). Named characters are kept by identity, not by fixed
+ * screen positions — they may move between panels — and the crowd is described once for the scene.
+ * The panels are still moments of ONE continuous shot: the camera travels between them, never cuts.
+ */
+
+/** Named characters by name and their key features (no fixed positions), then the crowd. */
+function storyboardCastEn(data: ProjectData, en: ReturnType<typeof freshEnglish>, features = 4): string[] {
+  const named = data.cast
+    .map((c) => {
+      const look = en.cast.get(c.id)?.look ?? shortLocks(c.locks, features);
+      return `${castName(data, c.id)}${look.length ? ` — ${look.slice(0, features).join(", ")}` : ""}`;
+    })
+    .join("; ");
+  return [
+    named && `Named characters (each keeps their identity exactly as in the scene reference; never mix features between them): ${named}.`,
+    data.extras.trim() &&
+      `Crowd and background people (unnamed): ${clean(data.extras)}. Keep them consistent across panels and never let them cover the named characters' faces.`,
+  ].filter((x): x is string => Boolean(x));
+}
+
+/** The panel's acting: English where fresh (face = the action, body = the camera), else the team's words. */
+function panelTexts(data: ProjectData, e: Expression, en: ReturnType<typeof freshEnglish>) {
+  const b = en.beats.get(e.id);
+  return {
+    title: b?.emotion || e.emotion,
+    action: b?.face || clean(e.action),
+    camera: b?.body || clean(e.camera),
+    transition: b?.transition,
+    delivery: b?.delivery,
+  };
+}
+
+function storyboardRefs(data: ProjectData): ReferenceSlot[] {
+  const refs: ReferenceSlot[] = [];
+  if (data.baseAssetId) refs.push({ role: "image reference 1", assetId: data.baseAssetId, why: "장면 기준 그림 — 주요 인물·그림체·세계" });
+  for (const id of data.designRefAssetIds) refs.push({ role: `image reference ${refs.length + 1}`, assetId: id, why: "추가 참고 그림" });
+  return refs;
+}
+
+function buildStoryboardHandoffs(data: ProjectData): ExpressionHandoff[] {
+  const aspect = data.video.aspectRatio;
+  const en = freshEnglish(data);
+  const style = en.style ?? clean(data.style);
+  const anchor = continuityAnchor(data);
+  const anchorNo = anchor ? data.expressions.findIndex((x) => x.id === anchor.id) + 1 : 0;
+  const n = data.expressions.length;
+  return data.expressions.map((e, i) => {
+    const t = panelTexts(data, e, en);
+    const references = storyboardRefs(data);
+    const sketchNo = e.sketchAssetId ? references.length + 1 : 0;
+    if (e.sketchAssetId) references.push({ role: `image reference ${sketchNo}`, assetId: e.sketchAssetId, why: `${i + 1}번 컷 러프 스케치 — 구도·자세·카메라만` });
+    const usesAnchor = Boolean(anchor?.imageAssetId && anchor.id !== e.id);
+    if (usesAnchor) references.push({ role: `image reference ${references.length + 1}`, assetId: anchor!.imageAssetId!, why: `연결 기준: ${anchorNo}번 컷 그림 (같은 쇼트의 다른 순간)` });
+    const line = data.dialogue.lines.find((l) => l.expressionId === e.id)?.line.trim();
+    const prompt = [
+      `Storyboard panel ${i + 1} of ${n}, drawn as a finished ${aspect} frame of the animation — not a rough sketch, not a comic page; no panel borders, no text, no speech bubbles.`,
+      `All panels are successive moments of ONE continuous shot: the same world, lighting, characters and art style; only the moment and the camera framing change.`,
+      data.baseAssetId &&
+        `Image reference 1 is the scene reference drawing: it sets the look of the named characters, their relative sizes, the art style, the colors and the world of this scene.`,
+      ...storyboardCastEn(data, en),
+      style && `Art style: ${style.replace(/[.。]+$/, "")}. Keep this style for everyone in the frame; never photorealistic or 3D.`,
+      usesAnchor &&
+        `Image reference ${references.length} is panel ${anchorNo} of this same shot: keep its world, lighting, line quality and character designs exactly; follow this panel's own composition and camera below.`,
+      sketchNo &&
+        `Image reference ${sketchNo} is a rough storyboard sketch of this panel: follow its composition, character placement, poses and camera angle; do NOT copy its rough lines or missing details — render it fully in the art style above.`,
+      t.action ? `This moment: ${sentence(t.action)}` : sketchNo ? "This moment: exactly as in the sketch." : "",
+      t.camera && `Camera: ${sentence(t.camera)}`,
+      line && `${castName(data, beatActor(data, e).id)} is speaking in this moment (mouth open mid-word); everyone else keeps their mouth closed.`,
+      data.expressionSetup.instruction && `Additional direction: ${clean(data.expressionSetup.instruction)}`,
+      `Background: the world of the scene as in the references and the description (not an empty white background) unless the description says otherwise.`,
+      `Hands drawn clearly with natural anatomy; faces of the named characters readable.`,
+    ]
+      .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+      .join("\n");
+    return { expressionId: e.id, index: i, emotion: t.title || `컷 ${i + 1}`, aspectRatio: aspect, references, prompt };
+  });
+}
+
+function buildStoryboardFrame(data: ProjectData, expressionId: string, shot: Framing): FrameHandoff {
+  const e = data.expressions.find((x) => x.id === expressionId);
+  if (!e) throw new Error("컷을 찾을 수 없습니다.");
+  const en = freshEnglish(data);
+  const t = panelTexts(data, e, en);
+  const references = storyboardRefs(data);
+  const momentRef = e.imageAssetId ? references.length + 1 : 0;
+  if (e.imageAssetId) references.push({ role: `image reference ${momentRef}`, assetId: e.imageAssetId, why: "이 컷의 순간" });
+  const style = en.style ?? clean(data.style);
+  const prompt = [
+    `One frame of a ${data.video.aspectRatio} ${data.video.aspectRatio === "9:16" ? "vertical" : "horizontal"} video, ${FRAMING_FRAME_EN[shot].split(":")[0]} framing of the moment below. No panels, no text.`,
+    data.baseAssetId && `Image reference 1 is the scene reference drawing (named characters, style, world).`,
+    ...storyboardCastEn(data, en, 3),
+    momentRef
+      ? `Image reference ${momentRef} is the exact moment to draw: the same poses and acting of everyone in it; only the camera framing changes to this shot size.`
+      : t.action && `This moment: ${sentence(t.action)}`,
+    style && `Art style: ${style.replace(/[.。]+$/, "")}. Never photorealistic or 3D.`,
+    `Fill the ${data.video.aspectRatio} frame (no white bars or padding).`,
+  ]
+    .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+    .join("\n");
+  return { prompt, aspectRatio: data.video.aspectRatio, references };
+}
+
+/** Caps per panel field, tried in order until the prompt fits (the last is used regardless). */
+const STORY_BUDGETS = [
+  { action: Infinity, camera: Infinity, transition: 140, delivery: 100, features: 4 },
+  { action: 400, camera: 200, transition: 100, delivery: 80, features: 4 },
+  { action: 250, camera: 140, transition: 70, delivery: 50, features: 3 },
+  { action: 150, camera: 80, transition: 0, delivery: 40, features: 2 },
+];
+
+function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "references", opts: { endFrame?: boolean }): VideoHandoff {
+  const endFrame = source === "start_frame" && (opts.endFrame ?? Boolean(data.video.endFrameAssetId));
+  const refs = source === "references" ? videoReferences(data) : [];
+  const refNo = (id: string) => {
+    const k = refs.findIndex((r) => r.expressionId === id);
+    return k >= 0 ? k + 1 : null;
+  };
+  const en = freshEnglish(data);
+  const lang = en.language ?? languageEn(data.dialogue.language || "");
+  const adjustments: Adjustment[] = [];
+  const fixOf = (target: "transition" | "delivery" | "voice", id: string | null, text: string) => effectiveText(data, target, id, text);
+  const panelNo = (id: string) => data.expressions.findIndex((e) => e.id === id) + 1;
+  // the team's texts, reconciled once with the studio rules (camera wording is kept as written)
+  const panels = new Map(
+    data.expressions.map((e, i) => {
+      const t = panelTexts(data, e, en);
+      const seg = data.acting.segments.find((x) => x.expressionId === e.id);
+      const line = data.dialogue.lines.find((l) => l.expressionId === e.id);
+      return [
+        e.id,
+        {
+          title: t.title,
+          action: reconcile(t.action, "motion", `${i + 1}번 컷 장면 묘사`, adjustments),
+          camera: reconcile(t.camera, "direction", `${i + 1}번 컷 카메라`, adjustments),
+          transition: reconcile(t.transition ?? fixOf("transition", e.id, seg?.transition ?? ""), "motion", `${i + 1}번 컷 다음 컷으로`, adjustments),
+          delivery: reconcile(t.delivery ?? fixOf("delivery", e.id, line?.delivery ?? ""), "voice", `${i + 1}번 컷 대사 말투`, adjustments),
+        },
+      ] as const;
+    }),
+  );
+  const voices = data.cast
+    .map((c) => ({ id: c.id, text: reconcile(en.cast.get(c.id)?.voice ?? fixOf("voice", c.id, c.voice), "voice", `${castLabel(data, c.id)} 목소리`, adjustments) }))
+    .filter((v) => v.text.trim());
+  const director = reconcile(data.video.extraDirection, "direction", "추가 연출", adjustments);
+  const rig = directorRig(director);
+  const angle = directorAngle(director);
+  const background = directorBackground(director);
+  const directorCamera = Boolean(rig) || angle || hasCameraMove([director]);
+  const cameraMove = directorCamera || data.expressions.some((e) => e.camera.trim()) || hasCameraMove(data.expressions.map((e) => e.action));
+  const overrides = [
+    rig && `카메라 장비: 추가 연출의 ‘${rig}’을(를) 따름 — 제약사항의 HANDHELD 문장 대신 적용`,
+    directorCamera && !rig && "카메라: 추가 연출을 따름",
+    background && "배경: 추가 연출을 따름",
+  ].filter((x): x is string => Boolean(x));
+  const speaking = data.dialogue.lines.some((l) => l.line.trim());
+
+  const beatsWith = (B: (typeof STORY_BUDGETS)[number], fixed = true) =>
+    data.acting.segments.map((seg, k) => {
+      const e = data.expressions.find((x) => x.id === seg.expressionId);
+      const p = panels.get(seg.expressionId);
+      const l = data.dialogue.lines.find((x) => x.expressionId === seg.expressionId);
+      const last = k === data.acting.segments.length - 1;
+      const n = refNo(seg.expressionId);
+      const action = fixed ? p?.action ?? "" : e?.action ?? "";
+      const camera = fixed ? p?.camera ?? "" : e?.camera ?? "";
+      const transition = fixed ? p?.transition ?? "" : seg.transition;
+      const delivery = fixed ? p?.delivery ?? "" : l?.delivery ?? "";
+      const cut = (t: string, max: number) => (max === Infinity ? clean(t) : clip(t, max));
+      return [
+        `${k + 1}. ${fmtSec(seg.start)}–${fmtSec(seg.end)} seconds: panel ${panelNo(seg.expressionId)}${p?.title ? ` — ${p.title}` : ""}`,
+        n && `Frame target: reference image ${n}.`,
+        cut(action, B.action) && `Action: ${sentence(cut(action, B.action))}`,
+        cut(camera, B.camera) && `Camera: ${sentence(cut(camera, B.camera))}`,
+        !last && B.transition && cut(transition, B.transition) && `Into the next panel: ${sentence(cut(transition, B.transition))}`,
+        l?.line.trim()
+          ? `${e ? castName(data, beatActor(data, e).id) : "The speaker"} says exactly (${lang}): "${l.line}"${B.delivery && cut(delivery, B.delivery) ? ` — ${cut(delivery, B.delivery)}` : ""}`
+          : "No dialogue in this beat.",
+      ]
+        .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+        .join("\n");
+    });
+
+  const headerWith = (B: (typeof STORY_BUDGETS)[number]) =>
+    [
+      `ONE single continuous shot with no cuts: a ${data.acting.duration}-second animated scene, ${data.video.aspectRatio}. The beats below follow storyboard panels — successive moments of this same shot; the camera travels continuously from one panel's framing to the next and never cuts.`,
+      ...storyboardCastEn(data, en, B.features),
+      (en.style || data.style.trim()) && `Art style: ${sentence(clip(en.style ?? data.style, 200) || clean(en.style ?? data.style).slice(0, 200))} Stay in this 2D style; never photorealistic or 3D.`,
+      `Match the reference images exactly: the named characters' faces, hair, colors and costumes, the world, the lighting and the drawing style; nobody's proportions change and no character is duplicated.`,
+      background ? "Background as in the DIRECTOR'S DIRECTION below." : "Background and world as in the panel references.",
+      directorCamera
+        ? "Camera: exactly as in the DIRECTOR'S DIRECTION below; one continuous take with no cuts."
+        : cameraMove
+          ? "Camera: follows the panel cameras below, moving continuously between them (HANDHELD as in the Constraints at the end); one continuous take with no cuts."
+          : "Camera move: none. The framing holds still for the whole shot.",
+      refs.length
+        ? [
+            "Reference images (upload in this order):",
+            ...refs.map((r, i) =>
+              r.role === "identity"
+                ? `${i + 1}. scene reference drawing — named characters, style and world; identity only`
+                : `${i + 1}. panel ${r.expressionId ? panelNo(r.expressionId) : "?"}${r.expressionId && panels.get(r.expressionId)?.title ? ` (${panels.get(r.expressionId)!.title})` : ""} — storyboard frame target`,
+            ),
+          ].join("\n")
+        : `Use the start frame as the exact first panel.${endFrame ? " The shot ends exactly on the end frame." : ""}`,
+      speaking &&
+        `Dialogue: only the character named for a line speaks it, with their own voice and lip movement; everyone else keeps their mouth closed. Crowd sound only as quiet natural ambience, never words.`,
+      voices.length &&
+        `Voices: ${voices.map((v) => `${castName(data, v.id)} — ${noEndDot(clip(v.text, 160) || clean(v.text).slice(0, 80))}`).join("; ")}. Speak only the exact dialogue below; never read direction text aloud.`,
+      `Everyone stays alive between the panels (breathing, blinks, small weight shifts); every change is acted through a physical action and in-between poses, never morphed.`,
+    ]
+      .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+      .join("\n");
+
+  const directorBlock = director
+    ? `DIRECTOR'S DIRECTION (the director's own words: follow exactly; where it differs from the general camera, framing or background lines above, this wins):\n${director}`
+    : "";
+  const constraints = constraintsFor(rig);
+  const lengthTarget = en.beats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET;
+  let prompt = "";
+  for (const B of STORY_BUDGETS) {
+    prompt = [headerWith(B), beatsWith(B).join("\n\n"), directorBlock, constraints].filter(Boolean).join("\n\n");
+    if (prompt.length <= lengthTarget) break;
+  }
+  return {
+    recommendedModel: "Kling 4.0 (컷 그림을 참고 그림으로 순서대로 첨부)",
+    startFrame: refs.length ? "시작 프레임 없이, 아래 참고 그림을 순서대로 첨부하세요." : "첫 컷 그림을 시작 프레임으로 첨부하세요.",
+    references: refs,
+    prompt,
+    promptKo: beatsWith(STORY_BUDGETS[0], false).join("\n\n"),
     cameraMove,
     adjustments,
     constraints,

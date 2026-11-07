@@ -247,9 +247,13 @@ export function HiggsfieldDirect({
   return (
     <section className="rounded-xl border-2 border-[#c6dfbf] bg-[#f7fbf5] p-5 space-y-4" aria-labelledby="hf-direct">
       <div>
-        <h3 id="hf-direct" className="section-title">Higgsfield로 표정 그림 생성</h3>
+        <h3 id="hf-direct" className="section-title">{data.mode === "storyboard" ? "Higgsfield로 컷 그림 생성" : "Higgsfield로 표정 그림 생성"}</h3>
         <p className="text-muted">
-          {multi ? (
+          {data.mode === "storyboard" ? (
+            <>
+              컷마다 <strong className="text-ink">그 순간 화면 전체를 {aspect} 완성 그림 한 장으로</strong> 1K로 그립니다(장면 기준 그림의 인물·그림체·세계 유지, 러프 스케치가 있으면 그 구도).
+            </>
+          ) : multi ? (
             <>
               표정마다 <strong className="text-ink">출연진 {data.cast.length}명이 모두 들어간 {aspect} 장면 그림을 한 장씩</strong> 1K로 그립니다({FRAMING_LABEL[framing]}·흰 배경·눈높이·인물 위치 고정).
             </>

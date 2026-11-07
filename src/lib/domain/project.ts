@@ -3,6 +3,8 @@ import { estimateSpeechSeconds } from "./speech";
 
 /** The five workflow steps. Index = step number. */
 export const STEPS = ["출연진", "표정", "대사", "액팅", "영상 프롬프트"] as const;
+/** Step names as a scene shows them (storyboard mode calls step 2 콘티). */
+export const stepName = (data: { mode?: string }, step: number) => (data.mode === "storyboard" && step === 1 ? "콘티" : STEPS[step]);
 export type StepIndex = 0 | 1 | 2 | 3 | 4;
 
 /* ───────────── Directions (always viewer-relative) ─────────────
@@ -87,6 +89,20 @@ export function defaultPositions(n: number): Position[] {
   if (n === 3) return ["left", "center", "right"];
   return ["left", "center_left", "center_right", "right"];
 }
+/**
+ * How a scene is controlled:
+ * - cast: every character's acting is set separately in each beat (one character, or a small group)
+ * - storyboard: each beat is a storyboard panel (콘티) — one picture of the whole moment described as a whole
+ *   (who does what, camera), with an optional rough sketch. Fast to set up, and works for crowd scenes.
+ */
+export const SCENE_MODES = ["cast", "storyboard"] as const;
+export type SceneMode = (typeof SCENE_MODES)[number];
+export const SCENE_MODE_LABEL: Record<SceneMode, string> = { cast: "인물별 연기", storyboard: "스토리보드 (컷 단위)" };
+export const SCENE_MODE_HELP: Record<SceneMode, string> = {
+  cast: "표정(비트)마다 인물 한 명 한 명의 감정·얼굴·팔손·방향을 따로 정합니다. 1~4명이 연기하는 장면을 정밀하게 다룰 때.",
+  storyboard: "콘티처럼 컷마다 그 순간 전체를 한 장으로 정합니다(장면 묘사·카메라·러프 스케치). 군중 장면이나 빠르게 만들 때.",
+};
+
 /** "A", "B", "C" … — short cast labels used in prompts and the UI. */
 export const castLetter = (i: number) => String.fromCharCode(65 + i);
 
@@ -130,6 +146,13 @@ export const ExpressionSchema = z.object({
   id: z.string(),
   /** the beat's lead: the cast member who speaks in this beat (or carries it) ("" = the first cast member) */
   characterId: z.string().default(""),
+  /* storyboard mode: the panel as a whole */
+  /** what happens in the whole frame at this moment (who does what, crowd, props) */
+  action: z.string().default(""),
+  /** the camera for this panel (shot size, angle, move toward the next panel) */
+  camera: z.string().default(""),
+  /** a rough storyboard sketch for this panel: composition, poses and camera are taken from it, not its drawing style */
+  sketchAssetId: z.string().nullable().default(null),
   /** group scenes: the acting of every other cast member in this same moment (one per member, cast order) */
   reactions: z.array(PerformanceSchema).default([]),
   /** 1-based panel number in the expression reference sheet, or null */
@@ -243,6 +266,9 @@ export const ProjectDataSchema = z.object({
   approvedThrough: z.number().int(),
   /** scene (project) name */
   title: z.string(),
+  mode: z.enum(SCENE_MODES).default("cast"),
+  /** storyboard mode: the crowd and background people (unnamed), described once for the whole scene */
+  extras: z.string().default(""),
   /** one art style for the whole scene (every character is drawn in it) */
   style: z.string(),
   /**
@@ -330,6 +356,9 @@ export function blankExpression(panel: number | null = null, characterId = ""): 
   return {
     id: uid(),
     characterId,
+    action: "",
+    camera: "",
+    sketchAssetId: null,
     reactions: [],
     panel,
     emotion: "",
@@ -347,17 +376,19 @@ export function blankExpression(panel: number | null = null, characterId = ""): 
   };
 }
 
-export function createProjectData(title = "새 장면", castCount = 1): ProjectData {
+export function createProjectData(title = "새 장면", castCount = 1, mode: SceneMode = "cast"): ProjectData {
   const n = Math.min(MAX_CAST, Math.max(MIN_CAST, Math.round(castCount)));
   const positions = defaultPositions(n);
   const cast = positions.map((p) => blankCastMember(p));
-  const count = n === 1 ? 4 : Math.min(MAX_EXPRESSIONS, n * 2);
+  const count = mode === "storyboard" ? 6 : n === 1 ? 4 : Math.min(MAX_EXPRESSIONS, n * 2);
   const expressions = Array.from({ length: count }, (_, i) => withReactionsFor(cast, blankExpression(i + 1, cast[i % n].id)));
   return {
     schemaVersion: 1,
     currentStep: 0,
     approvedThrough: -1,
     title,
+    mode,
+    extras: "",
     style: "",
     baseAssetId: null,
     designRefAssetIds: [],
@@ -371,7 +402,7 @@ export function createProjectData(title = "새 장면", castCount = 1): ProjectD
       instruction: "",
       styleWarning: null,
       sheetAssetId: null,
-      framing: n === 1 ? "bust" : "medium",
+      framing: n === 1 && mode === "cast" ? "bust" : "medium",
       scene: "",
     },
     expressions,
@@ -542,9 +573,14 @@ function performanceDirectionIssues(e: Pick<Performance, "direction" | "directio
 /* ───────────── Cast helpers ───────────── */
 
 export const isMultiCast = (data: Pick<ProjectData, "cast">) => data.cast.length > 1;
+export const isStoryboard = (data: Pick<ProjectData, "mode">) => data.mode === "storyboard";
 
-/** Beat images: portrait 3:4 for one character; a scene frame at the video's aspect ratio when several share the shot. */
-export const imageAspectFor = (data: Pick<ProjectData, "cast" | "video">) => (isMultiCast(data) ? data.video.aspectRatio : EXPRESSION_IMAGE_ASPECT);
+/**
+ * Beat images: portrait 3:4 for one character acting; a scene frame at the video's aspect ratio when several
+ * share the shot, and always for storyboard panels.
+ */
+export const imageAspectFor = (data: Pick<ProjectData, "cast" | "video"> & Partial<Pick<ProjectData, "mode">>) =>
+  isMultiCast(data) || data.mode === "storyboard" ? data.video.aspectRatio : EXPRESSION_IMAGE_ASPECT;
 
 export function castIndex(data: Pick<ProjectData, "cast">, id: string): number {
   return data.cast.findIndex((c) => c.id === id);
@@ -669,15 +705,29 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
       const open = c.questions.filter((q) => !filled(q.answer)).length;
       if (open) warn(`${who}: AI 확인 질문 ${open}개에 아직 답하지 않았습니다.`);
     });
-    if (!data.baseAssetId) block(data.cast.length > 1 ? "출연진이 함께 있는 장면 기준 그림을 올리세요." : "기본 그림을 올리세요.");
+    if (!data.baseAssetId)
+      block(isStoryboard(data) ? "장면 기준 그림(주요 인물·분위기)을 올리세요." : data.cast.length > 1 ? "출연진이 함께 있는 장면 기준 그림을 올리세요." : "기본 그림을 올리세요.");
     if (!filled(data.style)) block("장면의 그림체와 색감을 작성하세요.");
     const names = data.cast.map((c) => c.name.trim()).filter(Boolean);
     if (new Set(names).size !== names.length) block("출연진 이름이 겹칩니다. 프롬프트에서 인물을 구분할 수 있게 서로 다른 이름을 쓰세요.");
     const pos = data.cast.map((c) => c.position);
-    if (data.cast.length > 1 && new Set(pos).size !== pos.length) warn("두 인물의 화면 위치가 같습니다. 겹쳐 서는 연출이 아니라면 위치를 나누세요.");
+    if (!isStoryboard(data) && data.cast.length > 1 && new Set(pos).size !== pos.length) warn("두 인물의 화면 위치가 같습니다. 겹쳐 서는 연출이 아니라면 위치를 나누세요.");
   }
 
-  if (step === 1) {
+  if (step === 1 && isStoryboard(data)) {
+    // storyboard: each panel is described as a whole; no per-character acting or direction checks
+    if (data.expressions.length !== data.expressionSetup.count) block("컷 수가 설정과 다릅니다.");
+    data.expressions.forEach((e, i) => {
+      if (!filled(e.action) && !e.sketchAssetId) block(`${i + 1}번 컷: 장면 묘사를 쓰거나 러프 스케치를 올리세요.`);
+    });
+    if (!(data.acting.duration > 0 && data.acting.duration <= MAX_VIDEO_SECONDS))
+      block(`영상 전체 길이는 0초 초과 ${MAX_VIDEO_SECONDS}초 이하로 정하세요.`);
+    const missing = data.expressions.filter((e) => !e.imageAssetId).length;
+    if (missing) warn(`그림이 없는 컷이 ${missing}개 있습니다. Higgsfield로 생성하거나 직접 올리세요.`);
+    const aspect = imageAspectFor(data);
+    const stale = data.expressions.filter((e) => e.imageAssetId && e.imageAspect !== aspect).length;
+    if (stale) warn(`컷 그림 ${stale}장이 지금 화면 비율(${aspect})로 만든 그림이 아닙니다. 다시 생성하세요.`);
+  } else if (step === 1) {
     if (data.expressions.length !== data.expressionSetup.count) block("표정 개수가 설정과 다릅니다.");
     data.expressions.forEach((e, i) => {
       if (!data.cast.some((c) => c.id === e.characterId)) block(`${i + 1}번 표정의 중심 인물을 고르세요.`);

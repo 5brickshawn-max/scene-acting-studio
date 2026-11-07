@@ -57,7 +57,7 @@ function referencedAssetIds(d: ProjectData): string[] {
     ...d.designRefAssetIds,
     d.expressionSetup.refAssetId,
     d.expressionSetup.sheetAssetId,
-    ...d.expressions.map((e) => e.imageAssetId),
+    ...d.expressions.flatMap((e) => [e.imageAssetId, e.sketchAssetId]),
     d.video.startFrameAssetId,
     d.video.endFrameAssetId,
     ...d.video.resultAssetIds,

@@ -66,4 +66,19 @@ describe("step screens render for one and for several characters", () => {
     const html = render(trio(), createElement(ActingStep, nav));
     expect(html).toContain("A 칼리엘라 · ");
   });
+
+  it("storyboard mode: crowd field in step 1, panel cards in step 2", () => {
+    const d = createProjectData("광장", 2, "storyboard");
+    d.cast = d.cast.map((c, i) => ({ ...c, name: ["칼리엘라", "브람"][i] }));
+    const s1 = render(d, createElement(CharacterStep, nav));
+    expect(s1).toContain("군중·배경 인물 (선택)");
+    expect(s1).toContain("주요 인물 (이름이 있는 인물)");
+    expect(s1).not.toContain("화면 배치");
+    const s2 = render(d, createElement(ExpressionStep, nav));
+    expect(s2).toContain("콘티를 만드세요");
+    expect(s2).toContain("장면 묘사 (이 순간 화면 전체)");
+    expect(s2).toContain("러프 스케치 (선택)");
+    expect(s2).toContain("말하는 인물 (이 컷에 대사가 있을 때)");
+    expect(s2).not.toContain("중심 인물");
+  });
 });

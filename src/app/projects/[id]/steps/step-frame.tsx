@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import {
-  STEPS,
+  stepName,
   approve,
   canApprove,
   stepIssues,
@@ -29,14 +29,14 @@ export function StepFrame(props: {
   async function doApprove() {
     setBusy(true);
     const next = approve(data, step);
-    const ok = await doc.commit(next, "approve", `${STEPS[step]} 승인`);
+    const ok = await doc.commit(next, "approve", `${stepName(data, step)} 승인`);
     setBusy(false);
     if (ok && step < 4) props.onNavigate((step + 1) as StepIndex);
   }
 
   async function undoApprove() {
     setBusy(true);
-    await doc.commit({ ...data, approvedThrough: step - 1 }, "unapprove", `${STEPS[step]} 승인 취소`);
+    await doc.commit({ ...data, approvedThrough: step - 1 }, "unapprove", `${stepName(data, step)} 승인 취소`);
     setBusy(false);
   }
 
@@ -44,7 +44,7 @@ export function StepFrame(props: {
     <section className="card" aria-labelledby={`step-${step}-title`}>
       <header className="p-6 border-b border-line">
         <div className="flex flex-wrap items-center gap-2 mb-2">
-          <span className="eyebrow">{step + 1}단계 · {STEPS[step]}</span>
+          <span className="eyebrow">{step + 1}단계 · {stepName(data, step)}</span>
           {approved ? <span className="pill pill-ok">승인됨</span> : <span className="pill">작성 중</span>}
         </div>
         <h2 id={`step-${step}-title`} className="text-2xl font-bold">{props.title}</h2>
@@ -54,7 +54,7 @@ export function StepFrame(props: {
         )}
         {!prevApproved && (
           <p className="notice notice-warn mt-3">
-            앞 단계({STEPS[step - 1]})가 아직 승인되지 않았습니다. 미리 작성할 수는 있지만 승인은 앞 단계부터 진행됩니다.
+            앞 단계({stepName(data, step - 1)})가 아직 승인되지 않았습니다. 미리 작성할 수는 있지만 승인은 앞 단계부터 진행됩니다.
           </p>
         )}
       </header>

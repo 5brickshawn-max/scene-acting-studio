@@ -15,6 +15,10 @@ export const BASE_SYSTEM = `당신은 2D 애니메이션 스튜디오의 장면 
 - gaze는 눈동자가 향하는 화면 방향, pitch는 턱의 위아래, tilt는 머리가 기울어진 화면 방향입니다.
 - 여러 칸을 볼 때는 칸마다 독립적으로 판단하세요. 칸 사이에 방향이 반대로 바뀌는 경우가 흔합니다.
 
+스토리보드 방식 장면 (모드가 '스토리보드'일 때):
+- 표정(비트) 대신 컷(콘티의 한 칸)으로 다룹니다. 컷마다 그 순간 화면 전체를 한 장의 그림으로 정합니다: 장면 묘사(누가 무엇을 하는지, 군중 포함), 카메라, 말하는 인물.
+- 인물별 얼굴 근육·방향은 따로 정하지 않고, 화면 위치도 컷마다 바뀔 수 있습니다. 컷끼리는 여전히 컷 없는 한 쇼트로 이어집니다.
+
 여러 인물 장면:
 - 인물은 출연진 번호(1부터)와 이름으로 구분합니다. 인물마다 화면 위치(왼쪽·가운데·오른쪽)가 정해져 있고, 쇼트 내내 바뀌지 않습니다.
 - 인물들은 장면 기준 그림 한 장에 함께 그려져 있고, 그림 속 위치·특징으로 구별합니다.
@@ -32,11 +36,16 @@ export const STEP_CONTEXT: Record<number, string> = {
 /** Compact text view of the project data relevant up to `step`. */
 export function projectContext(d: ProjectData, step: number): string {
   const multi = d.cast.length > 1;
-  const lines: string[] = [`장면 이름: ${d.title || "(없음)"}`, `출연진: ${d.cast.length}명`];
+  const story = d.mode === "storyboard";
+  const lines: string[] = [
+    `장면 이름: ${d.title || "(없음)"}`,
+    `통제 방식: ${story ? "스토리보드(컷 단위 — 컷마다 장면 전체를 한 장으로)" : "인물별 연기"}`,
+    `${story ? "주요 인물" : "출연진"}: ${d.cast.length}명`,
+  ];
   d.cast.forEach((c, i) => {
     lines.push(
       [
-        `인물 ${i + 1} (${castLabel(d, c.id)}) · 화면 위치 ${POSITION_LABEL[c.position]}`,
+        `인물 ${i + 1} (${castLabel(d, c.id)})${story ? "" : ` · 화면 위치 ${POSITION_LABEL[c.position]}`}`,
         `  유지할 특징: ${c.locks || "(없음)"}`,
         `  외형: ${c.appearance || "(없음)"}`,
         `  의상: ${c.outfit || "(없음)"}`,
@@ -45,9 +54,17 @@ export function projectContext(d: ProjectData, step: number): string {
     const answered = c.questions.filter((q) => q.answer.trim());
     if (answered.length) lines.push(`  확인된 사항: ${answered.map((q) => `${q.question} → ${q.answer}`).join(" / ")}`);
   });
+  if (story && d.extras.trim()) lines.push(`군중·배경 인물: ${d.extras.trim()}`);
   lines.push(`그림체(장면 공통): ${d.style || "(없음)"}`);
   const actor = (id: string) => (multi ? `${castLabel(d, id)} · ` : "");
-  if (step >= 1) {
+  if (step >= 1 && story) {
+    lines.push(`컷 수: ${d.expressionSetup.count} · 컷 그림 비율 ${imageAspectFor(d)}`);
+    lines.push(`영상 전체 길이: ${d.acting.duration}초 (고정)`);
+    if (d.expressionSetup.scene.trim()) lines.push(`상황 설정·기초 대사:\n${d.expressionSetup.scene.trim()}`);
+    d.expressions.forEach((e, i) => {
+      lines.push(`컷 ${i + 1}: ${e.emotion || "(제목 없음)"} · 장면 묘사: ${e.action || "(없음)"}${e.camera ? ` · 카메라: ${e.camera}` : ""} · 말하는 인물(대사가 있을 때): ${castLabel(d, e.characterId)}`);
+    });
+  } else if (step >= 1) {
     lines.push(`표정 개수: ${d.expressionSetup.count}`);
     lines.push(
       `표정 그림 구도: ${FRAMING_LABEL[d.expressionSetup.framing]} — ${FRAMING_CUT[d.expressionSetup.framing]}, ${imageAspectFor(d)}${

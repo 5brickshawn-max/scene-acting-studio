@@ -59,7 +59,10 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
 
   // ── the cast: who is in the shot, who speaks with which voice ──
   if (data.cast.length > 1) {
-    add("ok", "출연진", `${data.cast.length}명이 한 화면에 나옵니다: ${data.cast.map((c) => castLabel(data, c.id)).join(", ")}. 구간마다 모든 인물의 연기를 함께 지시하고, 대사마다 말하는 인물을 지정해 입 모양이 섞이지 않게 합니다.`);
+    if (data.mode === "storyboard")
+      add("ok", "출연진", `스토리보드 방식: 주요 인물 ${data.cast.length}명(${data.cast.map((c) => castLabel(data, c.id)).join(", ")})을 이름과 특징으로 지키고, 컷마다 장면 전체를 한 장으로 지시합니다.`);
+    else
+      add("ok", "출연진", `${data.cast.length}명이 한 화면에 나옵니다: ${data.cast.map((c) => castLabel(data, c.id)).join(", ")}. 구간마다 모든 인물의 연기를 함께 지시하고, 대사마다 말하는 인물을 지정해 입 모양이 섞이지 않게 합니다.`);
     const speakers = new Set(
       data.dialogue.lines.filter((l) => l.line.trim()).map((l) => data.expressions.find((e) => e.id === l.expressionId)?.characterId),
     );

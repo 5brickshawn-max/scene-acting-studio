@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
-import { MAX_CAST, STEPS, createProjectData } from "@/lib/domain/project";
+import { MAX_CAST, SCENE_MODE_HELP, SCENE_MODE_LABEL, SCENE_MODES, STEPS, createProjectData, type SceneMode } from "@/lib/domain/project";
 
 export type ProjectRow = {
   id: string;
@@ -54,6 +54,7 @@ export function ProjectList({ projects, workspaceId, canEdit }: { projects: Proj
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [castCount, setCastCount] = useState(1);
+  const [mode, setMode] = useState<SceneMode>("cast");
 
   async function create() {
     const name = newTitle.trim();
@@ -63,7 +64,7 @@ export function ProjectList({ projects, workspaceId, canEdit }: { projects: Proj
     const { data, error } = await supabaseBrowser().rpc("create_project", {
       p_workspace_id: workspaceId,
       p_name: name,
-      p_data: createProjectData(name, castCount),
+      p_data: createProjectData(name, castCount, mode),
     });
     setBusy(false);
     if (error) return setError("작업을 만들지 못했습니다: " + error.message);
@@ -111,12 +112,22 @@ export function ProjectList({ projects, workspaceId, canEdit }: { projects: Proj
             <span className="field-label">장면 이름</span>
             <input className="input" autoFocus value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="예: 칼리엘라와 브람의 결투 직전" />
           </label>
+          <div role="group" aria-label="통제 방식">
+            <div className="field-label">통제 방식</div>
+            <div className="seg">
+              {SCENE_MODES.map((m) => (
+                <button key={m} type="button" aria-pressed={mode === m} onClick={() => setMode(m)}>
+                  {SCENE_MODE_LABEL[m]}
+                </button>
+              ))}
+            </div>
+          </div>
           <div role="group" aria-label="출연진 수">
-            <div className="field-label">출연진</div>
+            <div className="field-label">{mode === "storyboard" ? "주요 인물 (이름이 있는 인물)" : "출연진"}</div>
             <div className="seg">
               {Array.from({ length: MAX_CAST }, (_, i) => i + 1).map((n) => (
                 <button key={n} type="button" aria-pressed={castCount === n} onClick={() => setCastCount(n)}>
-                  {n === 1 ? "1명 (인물 연기)" : `${n}명`}
+                  {n === 1 && mode === "cast" ? "1명 (인물 연기)" : `${n}명`}
                 </button>
               ))}
             </div>
@@ -129,7 +140,9 @@ export function ProjectList({ projects, workspaceId, canEdit }: { projects: Proj
               취소
             </button>
           </div>
-          <p className="field-help w-full">출연진은 1단계에서 언제든 더하거나 뺄 수 있습니다.</p>
+          <p className="field-help w-full">
+            {SCENE_MODE_HELP[mode]} {mode === "storyboard" ? "군중·배경 인물은 인원 수와 상관없이 1단계에서 글로 적습니다. " : ""}출연진과 통제 방식은 1단계에서 언제든 바꿀 수 있습니다.
+          </p>
         </form>
       )}
 

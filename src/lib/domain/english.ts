@@ -39,6 +39,10 @@ export function englishSources(d: ProjectData) {
         source: JSON.stringify([
           d.expressionSetup.framing,
           e.characterId,
+          // storyboard panels: the whole moment and the camera
+          e.action,
+          e.camera,
+          e.sketchAssetId,
           e.reactions.map((r) => [r.characterId, r.emotion, r.intensity, r.brows, r.eyes, r.mouth, r.gesture]),
           e.emotion,
           e.intensity,
@@ -121,7 +125,7 @@ export function englishStale(d: ProjectData): string[] {
   if (src.style && !fresh.style) out.push("그림체");
   if (src.language && !fresh.language) out.push("대사 언어");
   d.expressions.forEach((e, i) => {
-    if (!fresh.beats.has(e.id)) out.push(`${i + 1}번 표정`);
+    if (!fresh.beats.has(e.id)) out.push(d.mode === "storyboard" ? `${i + 1}번 컷` : `${i + 1}번 표정`);
   });
   return out;
 }

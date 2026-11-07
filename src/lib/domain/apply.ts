@@ -1,6 +1,6 @@
 /** Pure functions that merge an AI proposal into project data. Applying is
  * always an explicit user action; fields can be picked individually. */
-import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT } from "@/lib/ai/schemas";
+import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, StoryboardOutT } from "@/lib/ai/schemas";
 import {
   blankExpression,
   withReactionsFor,
@@ -89,6 +89,20 @@ export function applyExpressions(data: ProjectData, out: ExpressionsOutT, indexe
     },
     1,
   );
+}
+
+/** Storyboard mode: the AI's panels (picked ones) become the beats; the speaker names who talks in that panel. */
+export function applyStoryboard(data: ProjectData, out: StoryboardOutT, indexes?: number[]): ProjectData {
+  const count = data.expressionSetup.count;
+  const pick = new Set(indexes ?? out.panels.map((_, i) => i));
+  const expressions: Expression[] = Array.from({ length: count }, (_, i) => {
+    const prev = data.expressions[i] ?? blankExpression(i + 1, data.cast[0].id);
+    const o = out.panels[i];
+    if (!o || !pick.has(i)) return prev;
+    const speaker = data.cast[o.speaker - 1]?.id ?? prev.characterId;
+    return withReactionsFor(data.cast, { ...prev, characterId: speaker, emotion: o.title, action: o.action, camera: o.camera });
+  });
+  return reopenFrom({ ...data, expressions }, 1);
 }
 
 export function applyDialogue(data: ProjectData, out: DialogueOutT): ProjectData {

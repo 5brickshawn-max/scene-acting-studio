@@ -8,6 +8,9 @@ import {
   POSITION_LABEL,
   POSITIONS,
   removeCastMember,
+  SCENE_MODE_HELP,
+  SCENE_MODE_LABEL,
+  SCENE_MODES,
   type CastMember,
   type StepIndex,
 } from "@/lib/domain/project";
@@ -20,7 +23,10 @@ import { StepFrame } from "./step-frame";
 export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) {
   const { doc, canEdit } = useEditor();
   const d = doc.data;
-  const multi = d.cast.length > 1;
+  const story = d.mode === "storyboard";
+  // in storyboard mode positions change from panel to panel: no fixed blocking
+  const multi = d.cast.length > 1 && !story;
+  const group = d.cast.length > 1;
   const [active, setActive] = useState(d.cast[0].id);
   const current = d.cast.find((c) => c.id === active) ?? d.cast[0];
 
@@ -31,14 +37,28 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
     <StepFrame
       step={0}
       title="장면과 출연진을 정하세요"
-      intro="출연진이 함께 있는 장면 기준 그림 한 장을 올리고, AI 분석으로 인물마다 설명 초안을 받은 뒤 직접 다듬어 승인합니다. 모든 인물의 모습·크기·그림체가 이 한 장에서 나옵니다."
+      intro={
+        story
+          ? "장면 기준 그림(주요 인물·분위기·세계)을 올리고, 이름이 있는 주요 인물과 군중을 정합니다. 2단계에서 콘티처럼 컷 단위로 장면을 만듭니다."
+          : "출연진이 함께 있는 장면 기준 그림 한 장을 올리고, AI 분석으로 인물마다 설명 초안을 받은 뒤 직접 다듬어 승인합니다. 모든 인물의 모습·크기·그림체가 이 한 장에서 나옵니다."
+      }
       onNavigate={onNavigate}
     >
       <div className="space-y-6">
+        <div>
+          <Seg
+            label="통제 방식"
+            value={d.mode}
+            options={SCENE_MODES}
+            labels={SCENE_MODE_LABEL}
+            onChange={(v) => doc.edit(0, (x) => ({ ...x, mode: v, expressionSetup: { ...x.expressionSetup, framing: v === "storyboard" || x.cast.length > 1 ? "medium" : x.expressionSetup.framing } }))}
+          />
+          <p className="field-help">{SCENE_MODE_HELP[d.mode]} 바꿔도 지금까지 쓴 내용은 남습니다.</p>
+        </div>
         <div className="grid sm:grid-cols-2 gap-4">
           <Field label="장면 이름" value={d.title} onChange={(v) => doc.edit(0, (x) => ({ ...x, title: v }))} />
           <div>
-            <div className="field-label">출연진</div>
+            <div className="field-label">{story ? "주요 인물 (이름이 있는 인물)" : "출연진"}</div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="pill">{d.cast.length}명</span>
               {canEdit && d.cast.length < MAX_CAST && (
@@ -56,7 +76,9 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
               )}
             </div>
             <p className="field-help">
-              한 명이면 인물 연기 쇼트, 2명 이상이면 모든 인물이 한 화면에 나오는 장면이 됩니다(최대 {MAX_CAST}명).
+              {story
+                ? `대사를 하거나 이름으로 부를 인물만 등록합니다(최대 ${MAX_CAST}명). 군중·배경 인물은 아래에 글로 적습니다.`
+                : `한 명이면 인물 연기 쇼트, 2명 이상이면 모든 인물이 한 화면에 나오는 장면이 됩니다(최대 ${MAX_CAST}명).`}
             </p>
           </div>
         </div>
@@ -64,7 +86,7 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
         <div className="grid lg:grid-cols-[minmax(0,420px)_1fr] gap-6">
           <div className="space-y-3">
             <ImageSlot
-              label={multi ? "장면 기준 그림 (출연진 전원이 함께)" : "기본 그림"}
+              label={story ? "장면 기준 그림 (주요 인물·분위기·세계)" : multi ? "장면 기준 그림 (출연진 전원이 함께)" : "기본 그림"}
               kind="base"
               assetId={d.baseAssetId}
               tall={!multi}
@@ -108,7 +130,7 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
             <AiAction
               kind="analyze_character"
               step={0}
-              label={multi ? "AI로 장면 기준 그림 분석" : "AI로 기본 그림 분석"}
+              label={group || story ? "AI로 장면 기준 그림 분석" : "AI로 기본 그림 분석"}
               disabled={!d.baseAssetId}
               disabledReason={multi ? "먼저 장면 기준 그림을 올리세요." : "먼저 기본 그림을 올리세요."}
               description={multi ? `그림 속 ${d.cast.length}명을 이름·위치로 찾아 인물마다 설명 초안과 확인 질문을 제안합니다. 먼저 아래에 이름과 위치를 적어 두세요.` : "네 가지 설명 초안과 확인 질문을 제안합니다."}
@@ -157,10 +179,12 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
           key={current.id}
           member={current}
           index={d.cast.findIndex((c) => c.id === current.id)}
-          multi={multi}
+          multi={group}
+          positions={group}
+          story={story}
           onChange={(patch) => setMember(current.id, patch)}
           onRemove={
-            canEdit && multi
+            canEdit && group
               ? () => {
                   const rest = d.cast.filter((c) => c.id !== current.id);
                   if (!window.confirm(`${castLabel(d, current.id)}을(를) 출연진에서 뺄까요? 이 인물이 맡은 표정은 ${castLabel(d, rest[0].id)}에게 넘어갑니다.`)) return;
@@ -171,6 +195,17 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
           }
         />
 
+        {story && (
+          <Field
+            label="군중·배경 인물 (선택)"
+            multiline
+            rows={3}
+            value={d.extras}
+            onChange={(v) => doc.edit(0, (x) => ({ ...x, extras: v }))}
+            placeholder="예: 시장 광장을 가득 메운 상인과 구경꾼 수십 명. 갈색·베이지 계열의 소박한 옷, 몇몇은 횃불을 든다."
+            help="이름 없는 인물들을 한 번만 적어 두면 모든 컷과 영상에 같은 모습으로 들어갑니다."
+          />
+        )}
         <Field
           label="그림체와 색감 (장면 공통)"
           multiline
@@ -187,6 +222,9 @@ function CastCard(props: {
   member: CastMember;
   index: number;
   multi: boolean;
+  /** fixed screen positions (character-by-character mode with several characters) */
+  positions: boolean;
+  story: boolean;
   onChange: (patch: Partial<CastMember>) => void;
   onRemove?: () => void;
 }) {
@@ -207,8 +245,8 @@ function CastCard(props: {
       </div>
       <div className="space-y-6">
           <Field label="이름" value={c.name} onChange={(v) => set({ name: v })} help={props.multi ? "프롬프트에서 인물을 구분하는 이름입니다. 다른 인물과 겹치지 않게 쓰세요." : undefined} />
-          {props.multi && (
-            <Seg label="화면 위치" value={c.position} options={POSITIONS} labels={POSITION_LABEL} onChange={(v) => set({ position: v })} />
+          {props.positions && (
+            <Seg label={props.story ? "장면 기준 그림 속 위치 (누가 누구인지 찾는 데 씀)" : "화면 위치"} value={c.position} options={POSITIONS} labels={POSITION_LABEL} onChange={(v) => set({ position: v })} />
           )}
           <Field
             label="꼭 유지할 특징"

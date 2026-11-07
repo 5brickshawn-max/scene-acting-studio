@@ -8,6 +8,7 @@ import {
   CharacterOut,
   DialogueOut,
   ExpressionsOut,
+  StoryboardOut,
   EnglishOut,
   PromptCheckOut,
   SheetCheckOut,
@@ -183,6 +184,34 @@ async function buildRequest(job: JobRow, data: ProjectData) {
       };
     }
     case "design_expressions": {
+      if (data.mode === "storyboard") {
+        // storyboard: the scene as successive panels, each described as a whole (sketches the team drew are followed)
+        const [base, sketches] = await Promise.all([
+          baseImage(),
+          imageBlocks(data.expressions.map((e, i) => ({ assetId: e.sketchAssetId, label: `[${i + 1}번 컷 러프 스케치 — 구도·자세·카메라]` }))),
+        ]);
+        const n = data.expressionSetup.count;
+        return {
+          schema: StoryboardOut,
+          content: [
+            ...base,
+            ...sketches,
+            {
+              type: "text",
+              text:
+                `이 장면을 콘티처럼 컷 ${n}개로 나눠 설계하세요. panels 배열 길이는 정확히 ${n}개이고, 컷 1이 장면의 처음, 컷 ${n}이 끝입니다. 모든 컷은 컷 없이 이어지는 한 쇼트의 순간들입니다(카메라가 컷 사이를 이어서 움직임).\n` +
+                `- action: 그 순간 화면 전체에서 일어나는 일을 2~4문장으로. 주요 인물은 이름으로, 군중·배경 인물은 무리로(예: "뒤쪽 군중이 놀라 물러선다"). 표정과 자세는 핵심만.\n` +
+                `- camera: 샷 크기·앵글·다음 컷까지의 움직임을 한 문장으로. 이웃한 컷끼리 카메라가 자연스럽게 이어지게.\n` +
+                `- speaker: 이 컷에서 대사를 말하는 주요 인물 번호(1~${data.cast.length}), 대사가 없으면 0.\n` +
+                (sketches.length ? `팀이 올린 러프 스케치가 있는 컷은 그 구도·자세·카메라를 따르고 action에 그대로 풀어 쓰세요.\n` : "") +
+                (data.expressionSetup.scene.trim()
+                  ? `'상황 설정·기초 대사'의 흐름을 따르고, 기초 대사마다 그 대사를 말하는 컷을 배정하세요.\n\n상황 설정·기초 대사:\n${data.expressionSetup.scene.trim()}\n`
+                  : "") +
+                `\n현재 입력값:\n${ctx}${extra}`,
+            },
+          ] as Content,
+        };
+      }
       const [base, ref] = await Promise.all([
         baseImage(),
         imageBlock(data.expressionSetup.refAssetId, "[표정 참고 시트 — 연기(표정·방향)만 참고, 그림체는 참고하지 않음]"),
@@ -218,6 +247,21 @@ async function buildRequest(job: JobRow, data: ProjectData) {
     case "check_sheet": {
       const [base, sheet] = await Promise.all([baseImage(), expressionImages(data)]);
       if (!sheet.length) throw new Error("검사할 표정 그림이 없습니다. 먼저 표정 그림을 생성하거나 올려주세요.");
+      if (data.mode === "storyboard")
+        return {
+          schema: SheetCheckOut,
+          content: [
+            ...base,
+            ...sheet,
+            {
+              type: "text",
+              text:
+                `컷 그림들(컷마다 한 장)을 장면 기준 그림과 컷 설계(장면 묘사·카메라)에 비교해 검사하세요. panel은 컷 번호입니다. 그림이 없는 컷은 검사하지 말고 panelCountMatches는 true로 두세요. ` +
+                `각 그림이 장면 묘사대로인지, 주요 인물의 정체성(얼굴·머리·의상)이 기준 그림과 같고 서로 섞이지 않았는지, 그림체·조명·세계가 컷끼리 이어지는지, 비율이 ${imageAspectFor(data)}인지 확인하세요. ` +
+                `컷 순서대로 카메라와 인물 위치가 한 쇼트처럼 자연스럽게 이어질 수 있는지, 글자·말풍선·칸 테두리가 들어가지 않았는지, 손과 얼굴이 무너지지 않았는지도 확인하세요. 문제가 없으면 issues를 비워두세요.\n\n${ctx}`,
+            },
+          ] as Content,
+        };
       const perImage = data.expressions.some((e) => e.imageAssetId);
       return {
         schema: SheetCheckOut,
@@ -321,10 +365,21 @@ async function buildRequest(job: JobRow, data: ProjectData) {
     case "write_english": {
       const fx = (t: "notes" | "gesture" | "transition" | "delivery" | "voice", id: string | null, s: string) => effectiveText(data, t, id, s);
       const framing = data.expressionSetup.framing;
+      const storyboard = data.mode === "storyboard";
       const beats = data.expressions
         .map((e, i) => {
           const seg = data.acting.segments.find((s) => s.expressionId === e.id);
           const line = data.dialogue.lines.find((l) => l.expressionId === e.id);
+          if (storyboard)
+            return [
+              `컷 ${i + 1}: ${e.emotion || "(제목 없음)"}`,
+              `  장면 묘사: ${e.action}`,
+              `  카메라: ${e.camera}`,
+              `  다음 컷으로: ${seg ? fx("transition", e.id, seg.transition) : ""}`,
+              line?.line
+                ? `  대사(${castLabel(data, e.characterId)}): "${line.line}" (뜻: ${line.meaning}) · 말투: ${fx("delivery", e.id, line.delivery)}`
+                : "  대사: 없음",
+            ].join("\n");
           return [
             `표정 ${i + 1}: ${multi ? `${castLabel(data, e.characterId)} · ` : ""}${e.emotion || "(감정 미정)"} · 강도 ${INTENSITY_LABEL[e.intensity]}`,
             `  눈썹: ${e.brows}`,
@@ -368,12 +423,14 @@ async function buildRequest(job: JobRow, data: ProjectData) {
               `- cast: 인물마다 하나씩(character = 인물 번호). look은 '유지할 특징'과 '외형'에서 그림에 보이는 식별 요소를 색·모양·위치까지 구체적인 영어 명사구로, 중요한 순서로 최대 8개${
                 multi ? " (다른 인물과 구별되는 요소를 앞에)" : ""
               }. outfit, voice는 각각 영어 한 문장\n` +
-              `- beats: 표정마다 하나씩(panel = 표정 번호). face는 중심 인물의 얼굴 연기, body는 팔·손·몸 연기, delivery는 대사 말투${
-                multi ? ". others에는 '같은 순간' 나머지 인물마다 하나씩(character = 인물 번호) emotion·face·body" : ""
-              }\n` +
+              (storyboard
+                ? `- beats: 컷마다 하나씩(panel = 컷 번호). 이 장면은 스토리보드 방식이라 필드를 이렇게 씁니다: emotion = 컷 제목(영어 2~6단어), face = 장면 묘사(누가 무엇을 하는지, 군중 포함, 영어 1~2문장), body = 카메라(영어 한 문장), delivery = 대사 말투, others = 빈 배열\n`
+                : `- beats: 표정마다 하나씩(panel = 표정 번호). face는 중심 인물의 얼굴 연기, body는 팔·손·몸 연기, delivery는 대사 말투${
+                    multi ? ". others에는 '같은 순간' 나머지 인물마다 하나씩(character = 인물 번호) emotion·face·body" : ""
+                  }\n`) +
               `- transition은 얼굴이 녹듯 바뀌는 모핑을 막는 핵심입니다. 다음 표정으로 넘어가는 변화를 실어 나르는 몸의 동작 하나로 쓰세요(눈을 깜빡이는 사이, 숨을 들이쉬며, 고개를 돌리며, 손이 얼굴 앞을 지나가며 등). 설계의 '다음 표정으로'가 있으면 그 동작을 살리세요. 마지막 표정은 빈 문자열\n` +
               `- 초 단위 시간, 발음 설명, 얼굴·몸·시선 방향(정면·3/4·화면 왼쪽 등)은 쓰지 마세요. 방향은 앱이 확인된 값으로 따로 넣습니다. 대사 원문은 옮기지 마세요.\n\n` +
-              `출연진\n${cast}\n\n그림체(장면 공통): ${data.style}\n\n` +
+              `출연진\n${cast}\n\n${storyboard && data.extras.trim() ? `군중·배경 인물: ${data.extras}\n\n` : ""}그림체(장면 공통): ${data.style}\n\n` +
               `대사 언어: ${data.dialogue.language}\n표정 그림 구도: ${FRAMING_LABEL[framing]} (${FRAMING_CUT[framing]})\n\n${beats}`,
           },
         ] as Content,
@@ -445,7 +502,7 @@ export async function runJob(jobId: string) {
     let result: Awaited<ReturnType<typeof callClaude>>;
     if (job.kind === "consult") {
       const messages = await consultMessages(job, data);
-      result = await callClaude(consultSchemaFor(job.step), BASE_SYSTEM, messages, "medium");
+      result = await callClaude(consultSchemaFor(job.step, data.mode === "storyboard"), BASE_SYSTEM, messages, "medium");
     } else {
       const req = await buildRequest(job, data);
       if (!req) throw new Error("알 수 없는 작업입니다.");
