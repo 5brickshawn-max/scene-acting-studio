@@ -130,7 +130,7 @@ async function plan(projectId: string, spec: GenSpec, data: ProjectData): Promis
     const medias: Media[] = start
       ? [{ assetId: start, role: vm.startRole }, ...(end && vm.endRole ? [{ assetId: end, role: vm.endRole }] : [])]
       : h.references.map((r) => ({ assetId: r.assetId, role: "image_references" }));
-    const duration = videoDuration(vm, data.acting.duration);
+    const duration = videoDuration(vm, data.acting.duration, { start: Boolean(start), end: Boolean(end) });
     return {
       kind: "hf_video",
       step: 4,

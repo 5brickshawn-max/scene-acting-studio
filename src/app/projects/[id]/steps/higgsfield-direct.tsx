@@ -6,6 +6,8 @@ import {
   IMAGE_MODELS,
   VIDEO_MODELS,
   videoDuration,
+  videoMaxDuration,
+  defaultResolution,
   type ImageModelKey,
   type VideoModelKey,
 } from "@/lib/higgsfield/models";
@@ -177,7 +179,7 @@ const jobAssetId = (j: JobView) => (j.output as { assetId?: string } | null)?.as
 export function SceneImageGenerator({ onUse }: { onUse: (assetId: string) => void }) {
   const { doc, canEdit, assets } = useEditor();
   const h = useHfJobs("hf_scene");
-  const [model, setModel] = useState<ImageModelKey>("gpt_image_2_5");
+  const [model, setModel] = useState<ImageModelKey>("gpt_image_2_6");
   const d = doc.data;
   const ready = canEdit && !h.busy && !h.quote && Boolean(d.expressionSetup.scene.trim() || d.opening.trim());
   const current = d.baseAssetId ? assets.get(d.baseAssetId) : undefined;
@@ -594,10 +596,11 @@ export function HiggsfieldVideo({
   }, [h.pending, results, canEdit, onAdd, markApplied, doc.version]);
   const [model, setModel] = useState<VideoModelKey>("kling4_0");
   const vm = VIDEO_MODELS[model];
-  const [resolution, setResolution] = useState(vm.resolutions[vm.resolutions.length - 1].key);
-  const res = vm.resolutions.find((r) => r.key === resolution) ? resolution : vm.resolutions[vm.resolutions.length - 1].key;
+  const [resolution, setResolution] = useState(defaultResolution(vm));
+  const res = vm.resolutions.find((r) => r.key === resolution) ? resolution : defaultResolution(vm);
   const acting = doc.data.acting.duration;
-  const duration = videoDuration(vm, acting);
+  const input = { start: Boolean(doc.data.video.startFrameAssetId), end: Boolean(doc.data.video.startFrameAssetId && doc.data.video.endFrameAssetId) };
+  const duration = videoDuration(vm, acting, input);
 
   return (
     <section className="rounded-xl border-2 border-[#c6dfbf] bg-[#f7fbf5] p-5 space-y-4" aria-labelledby="hf-video">
@@ -618,8 +621,7 @@ export function HiggsfieldVideo({
               disabled={!canEdit || !!h.quote}
               onClick={() => {
                 setModel(k);
-                const rs = VIDEO_MODELS[k].resolutions;
-                setResolution(rs[rs.length - 1].key);
+                setResolution(defaultResolution(VIDEO_MODELS[k]));
               }}
             >
               {VIDEO_MODELS[k].label}
@@ -643,7 +645,7 @@ export function HiggsfieldVideo({
       <p className="text-[14px]">
         길이 <strong>{duration}초</strong>
         {duration !== Math.ceil(acting) && (
-          <span className="text-warn"> — 액팅 타임라인은 {acting}초지만 이 모델은 {vm.minDuration}~{vm.maxDuration}초만 지원해 {duration}초로 맞춥니다.</span>
+          <span className="text-warn"> — 액팅 타임라인은 {acting}초지만 이 모델은 지금 방식으로 {vm.minDuration}~{videoMaxDuration(vm, input)}초만 지원해 {duration}초로 맞춥니다.</span>
         )}
         {" · "}비율 {doc.data.video.aspectRatio} ·{" "}
         {doc.data.video.startFrameAssetId

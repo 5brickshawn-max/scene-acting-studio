@@ -12,7 +12,7 @@ import { uploadAsset } from "@/lib/upload";
 import { HiggsfieldVideoPack } from "../packs";
 import { EnglishBar, PromptApplyBar, TextDiff, useVideoPrompt, type VideoPrompt } from "../prompt-tools";
 import { englishStale } from "@/lib/domain/english";
-import { VIDEO_MODELS, videoDuration, type VideoModelKey } from "@/lib/higgsfield/models";
+import { VIDEO_MODELS, videoDuration, videoMaxDuration, type VideoModelKey } from "@/lib/higgsfield/models";
 import type { PromptCheckResult } from "@/lib/ai/schemas";
 
 const short = (t: string, n = 90) => (t.length > n ? t.slice(0, n) + "…" : t);
@@ -60,12 +60,13 @@ function RenderCheck({ vp, model, onNavigate }: { vp: VideoPrompt; model: VideoM
   const [error, setError] = useState<string | null>(null);
   const vm = VIDEO_MODELS[model];
   const items: CheckItem[] = [...(h?.checks ?? [])];
-  const dur = videoDuration(vm, doc.data.acting.duration);
+  const input = { start: Boolean(doc.data.video.startFrameAssetId), end: Boolean(doc.data.video.startFrameAssetId && doc.data.video.endFrameAssetId) };
+  const dur = videoDuration(vm, doc.data.acting.duration, input);
   if (h && dur !== Math.ceil(doc.data.acting.duration))
     items.unshift({
       level: "warn",
       area: "영상 길이",
-      text: `${vm.label}은(는) ${vm.minDuration}~${vm.maxDuration}초만 지원해 ${dur}초로 만듭니다 (설계 ${doc.data.acting.duration}초).`,
+      text: `${vm.label}은(는) 지금 방식으로 ${vm.minDuration}~${videoMaxDuration(vm, input)}초만 지원해 ${dur}초로 만듭니다 (설계 ${doc.data.acting.duration}초).`,
     });
   const count = (level: CheckItem["level"]) => items.filter((i) => i.level === level).length;
   const ai = jobs.jobs.find((j) => j.kind === "check_prompt" && j.step === 4);

@@ -583,7 +583,7 @@ function DurationField() {
       </div>
       <p className="field-help">
         {doc.data.mode === "storyboard" ? "컷" : "표정"} {doc.data.expressions.length}개 · 하나당 평균 {per}초. 대사(3단계)는 이 시간 안에서 쓰고, 액팅(4단계)에서는 이 시간을 어떻게 나눌지만 정합니다.
-        영상 모델 한도: Kling 4.0·Seedance 2.5 최대 30초, MiniMax H3 최대 15초.
+        영상 모델 한도: Kling 4.0·Seedance 2.5 최대 30초, Gemini Omni Flash 1.2 최대 15초(참고 그림·끝 프레임 사용 시 10초), MiniMax H3 최대 15초.
       </p>
     </div>
   );

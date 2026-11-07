@@ -224,9 +224,18 @@ describe("Higgsfield models", async () => {
     expect(videoDuration(VIDEO_MODELS.kling4_0, 2)).toBe(3);
     expect(videoDuration(VIDEO_MODELS.seedance_2_5, 8.2)).toBe(9);
   });
+  it("caps Gemini Omni at 15 s with one start frame and 10 s with references or a last frame", () => {
+    const omni = VIDEO_MODELS.gemini_omni_flash_1_2;
+    expect(videoDuration(omni, 14, { start: true, end: false })).toBe(14);
+    expect(videoDuration(omni, 14, { start: true, end: true })).toBe(10);
+    expect(videoDuration(omni, 14, { start: false, end: false })).toBe(10);
+    expect(videoDuration(VIDEO_MODELS.kling4_0, 20, { start: false, end: false })).toBe(20);
+  });
   it("offers the requested models and resolutions", () => {
-    expect(Object.keys(IMAGE_MODELS)).toEqual(["nano_banana_2_1", "gpt_image_2_5"]);
-    expect(IMAGE_MODELS.gpt_image_2_5.params.resolution).toBe("1k");
+    expect(Object.keys(IMAGE_MODELS)).toEqual(["nano_banana_2_1", "gpt_image_2_6", "gpt_image_2_6_flare", "seedream_v5_pro"]);
+    expect(IMAGE_MODELS.gpt_image_2_6.params).toMatchObject({ model: "gpt_image_2_6", resolution: "1k" });
+    expect(IMAGE_MODELS.gpt_image_2_6_flare.params.model).toBe("gpt_image_2_6_flare");
+    expect(IMAGE_MODELS.seedream_v5_pro.params).toMatchObject({ model: "seedream_v5_pro", resolution: "2k" });
     expect(VIDEO_MODELS.kling4_0.resolutions.map((r) => r.key)).toEqual(["720p", "1080p"]);
     expect(VIDEO_MODELS.seedance_2_5.resolutions[0].params).toMatchObject({ draft: true, resolution: "480p" });
   });
