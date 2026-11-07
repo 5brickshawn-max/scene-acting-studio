@@ -29,8 +29,11 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
   const multi = d.cast.length > 1 && !story;
   const group = d.cast.length > 1;
   const [active, setActive] = useState(d.cast[0].id);
-  // the scene picture: drawn from the scenario (default when there is none yet) or uploaded
-  const [source, setSource] = useState<"generate" | "upload">(d.baseAssetId ? "upload" : "generate");
+  // the scene picture: drawn from the scenario (default when there is none yet) or uploaded.
+  // A generated picture keeps the "generate" tab open when the step is opened again.
+  const { assets } = useEditor();
+  const baseIsGenerated = Boolean(d.baseAssetId && assets.get(d.baseAssetId)?.name.startsWith("첫 장면"));
+  const [source, setSource] = useState<"generate" | "upload">(!d.baseAssetId || baseIsGenerated ? "generate" : "upload");
   const current = d.cast.find((c) => c.id === active) ?? d.cast[0];
 
   const max = maxCastFor(d.mode);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { canApprove, createProjectData, shotsOf, stepIssues, updatePerformance } from "@/lib/domain/project";
 import { applyComposition, composeStructure } from "@/lib/domain/apply";
-import { buildSceneImageHandoff } from "@/lib/domain/handoff";
+import { buildExpressionHandoffs, buildSceneImageHandoff, buildVideoHandoff } from "@/lib/domain/handoff";
 import { SceneComposeOut, JOB_STEP } from "@/lib/ai/schemas";
 
 const OUT = SceneComposeOut.parse({
@@ -82,7 +82,7 @@ describe("첫 장면 (opening scene picture drawn from the scenario)", () => {
     expect(h.references.map((r) => r.assetId)).toEqual(["ref-bram"]);
     expect(h.prompt).toContain("Opening frame of an animated scene, 16:9");
     expect(h.prompt).toContain("draw every named character clearly");
-    expect(h.prompt).toContain("- 브람: 1. 은발 단발 창백한 피부. Outfit: 검은 갑옷 Match image reference 1 exactly for this character.");
+    expect(h.prompt).toContain("- 브람: 1. 은발 단발 창백한 피부. Outfit: 검은 갑옷 Match image reference 1 (their design sheet) for this character's face");
     expect(h.prompt).toContain("Crowd and background people (unnamed): 횃불을 든 군중 수십 명.");
     expect(h.prompt).toContain("The moment: 해 질 녘 광장");
   });
@@ -128,5 +128,35 @@ describe("쇼트 구성 (shots and panels proposed by the scene composition)", (
     expect(st.panels).toHaveLength(12);
     const before = createProjectData("x", 1, "storyboard");
     expect(applyComposition(before, OUT, ["style"]).expressionSetup.count).toBe(before.expressionSetup.count);
+  });
+});
+
+describe("references are always explained", () => {
+  it("tells the panel and scene prompts what a character's design sheet and the extra references are", () => {
+    let d = createProjectData("사막", 1, "storyboard");
+    d = applyComposition(d, { ...OUT, characters: OUT.characters.slice(0, 1) }, ["cast", "style", "opening", "structure"]);
+    d.baseAssetId = "scene-1";
+    d.cast[0] = { ...d.cast[0], refAssetId: "sheet-1" };
+    // the same sheet uploaded as an extra reference too: attached once
+    d.designRefAssetIds = ["sheet-1", "prop-1"];
+    const panel = buildExpressionHandoffs(d)[0];
+    expect(panel.references.map((r) => r.assetId)).toEqual(["scene-1", "sheet-1", "prop-1"]);
+    expect(panel.prompt).toContain("Image reference 2 is the design sheet of 칼리엘라: match their face, hairstyle, costume and proportions from it; where this scene's description says otherwise");
+    expect(panel.prompt).toContain("Image reference 3 is extra design reference for this scene");
+    const scene = buildSceneImageHandoff(d);
+    expect(scene.references.map((r) => r.assetId)).toEqual(["sheet-1", "prop-1"]);
+    expect(scene.prompt).toContain("Image reference 2 is extra design reference for this scene");
+    // video references: the scene picture labelled as such in storyboard mode
+    expect(buildVideoHandoff(d).references[0].label).toContain("scene reference");
+  });
+
+  it("uses a character's design sheet in character-by-character mode too", () => {
+    let d = createProjectData("둘", 2, "cast");
+    d = applyComposition(d, { ...OUT, characters: OUT.characters.slice(0, 2) }, ["cast", "style"]);
+    d.baseAssetId = "scene-1";
+    d.cast[1] = { ...d.cast[1], refAssetId: "sheet-b" };
+    const p = buildExpressionHandoffs(d)[0];
+    expect(p.references.map((r) => r.assetId).slice(0, 2)).toEqual(["scene-1", "sheet-b"]);
+    expect(p.prompt).toContain("Image reference 2 is the design sheet of 브람");
   });
 });

@@ -9,13 +9,14 @@ import { ActingStep } from "@/app/projects/[id]/steps/acting";
 import { createProjectData, type ProjectData } from "@/lib/domain/project";
 import type { ProjectDoc } from "@/app/projects/[id]/use-project-doc";
 import type { Jobs } from "@/app/projects/[id]/use-jobs";
+import type { AssetView } from "@/lib/types";
 
 /** Render a step screen with an in-memory document (no Supabase). */
-function render(data: ProjectData, step: ReactNode): string {
+function render(data: ProjectData, step: ReactNode, initialAssets: AssetView[] = []): string {
   const doc = { data, version: 1, status: "saved", edit: () => {}, flush: async () => true, commit: async () => 2 } as unknown as ProjectDoc;
   const jobs = { jobs: [], request: async () => null, refresh: async () => {}, markApplied: async () => {}, requestError: null, clearError: () => {} } as unknown as Jobs;
   return renderToStaticMarkup(
-    <EditorProvider projectId="p" workspaceId="w" userId="u" canEdit doc={doc} jobs={jobs} initialAssets={[]}>
+    <EditorProvider projectId="p" workspaceId="w" userId="u" canEdit doc={doc} jobs={jobs} initialAssets={initialAssets}>
       {step}
     </EditorProvider>,
   );
@@ -109,5 +110,17 @@ describe("step screens render for one and for several characters", () => {
     const solo = render(createProjectData("혼자"), createElement(CharacterStep, nav));
     expect(solo).not.toMatch(/aria-label="A [^"]* 빼기"/);
     expect(solo).toContain("+ 인물 추가");
+  });
+
+  it("step 1 reopens on the tab the scene picture came from; step 2 offers a fresh redesign for the cut count", () => {
+    const asset = (id: string, name: string) =>
+      ({ id, kind: "base", name, mime: "image/png", sizeBytes: 1, width: 16, height: 9, projectId: "p", createdAt: "", url: "u", previewUrl: "u" }) as AssetView;
+    const d = { ...createProjectData("사막", 1, "storyboard"), baseAssetId: "gen-1" };
+    const generated = render(d, createElement(CharacterStep, nav), [asset("gen-1", "첫 장면 · GPT Image 2.5 · 1K")]);
+    expect(generated).toMatch(/aria-pressed="true"[^>]*>시나리오로 첫 장면 생성/);
+    const uploaded = render(d, createElement(CharacterStep, nav), [asset("gen-1", "my-drawing.png")]);
+    expect(uploaded).toMatch(/aria-pressed="true"[^>]*>그림 올리기/);
+    const s2 = render(d, createElement(ExpressionStep, nav));
+    expect(s2).toContain("컷 6개·8초로 처음부터 다시 설계");
   });
 });

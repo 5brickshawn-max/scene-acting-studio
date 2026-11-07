@@ -658,8 +658,22 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
           label={s.scene.trim() ? "시나리오에 맞춰 AI로 콘티 설계" : "AI로 콘티 설계"}
           disabled={!d.baseAssetId}
           disabledReason="1단계에서 장면 기준 그림을 먼저 올리세요."
-          description={`컷 ${s.count}개의 제목·장면 묘사·카메라·말하는 인물을 제안합니다. 러프 스케치를 올린 컷은 그 구도를 따릅니다.`}
+          description={`시나리오 전체를 컷 ${s.count}개·${d.acting.duration}초에 담아 제목·장면 묘사·카메라·연결·말하는 인물을 제안합니다. 러프 스케치를 올린 컷은 그 구도를 따릅니다.`}
         />
+        <div className="rounded-lg border border-line bg-[#f7f8fa] p-3 space-y-2">
+          <p className="text-[14px]">
+            컷 수나 영상 길이를 바꾸면 지금 컷 내용은 그대로 남습니다(컷 수를 줄이면 <strong>뒤쪽 컷이 빠집니다</strong>). 시나리오 전체를 지금 컷 수·길이로 새로 나누려면
+            처음부터 다시 설계하세요. 그 뒤 대사(3단계)·타임라인(4단계)도 다시 맞추는 것이 좋습니다.
+          </p>
+          <AiAction
+            kind="design_expressions"
+            step={1}
+            label={`컷 ${s.count}개·${d.acting.duration}초로 처음부터 다시 설계`}
+            instruction={`[처음부터 다시] 지금 컷 수 ${s.count}개와 영상 길이 ${d.acting.duration}초에 맞춰 시나리오 전체를 다시 나눠 주세요.`}
+            disabled={!d.baseAssetId}
+            disabledReason="1단계에서 장면 기준 그림을 먼저 올리세요."
+          />
+        </div>
         <PendingProposal step={1} except={["check_sheet"]} />
       </section>
 

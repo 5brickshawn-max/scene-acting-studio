@@ -196,13 +196,11 @@ function spotEn(data: ProjectData, c: CastMember, en: ReturnType<typeof freshEng
 function castIdentityEn(data: ProjectData, refs: ReferenceSlot[], en: ReturnType<typeof freshEnglish>): string[] {
   if (!refs.length || refs[0].assetId !== data.baseAssetId) return [];
   if (!isMultiCast(data))
-    return [`The character must match image reference 1 exactly: same identity, face proportions, hairstyle, colors, costume, accessories and art style.`];
-  const extra = refs.filter((r) => r.why.startsWith("추가 참고")).length;
+    return [`The character must match image reference 1 exactly: same identity, face proportions, hairstyle, colors, costume, accessories and art style.`, ...extraRefsEn(data, refs)];
   return [
     `Image reference 1 is the scene reference drawing of the whole cast together: ${data.cast.map((c) => spotEn(data, c, en)).join("; ")}.`,
-    `Every character must match their own look in image reference 1 exactly: same identity, face proportions, hairstyle, colors, costume, accessories, and the same relative heights and body sizes between the characters. Never mix features between characters.${
-      extra ? ` Image reference${extra > 1 ? "s" : ""} ${refs.map((r, i) => (r.why.startsWith("추가 참고") ? i + 1 : 0)).filter(Boolean).join(", ")} ${extra > 1 ? "are" : "is"} extra design reference for the same cast.` : ""
-    }`,
+    `Every character must match their own look in image reference 1 exactly: same identity, face proportions, hairstyle, colors, costume, accessories, and the same relative heights and body sizes between the characters. Never mix features between characters.`,
+    ...extraRefsEn(data, refs),
   ];
 }
 
@@ -227,6 +225,35 @@ function castLookEn(data: ProjectData, en: ReturnType<typeof freshEnglish>, opts
       opts.outfit && (f?.outfit || c.outfit.trim()) ? `Outfit visible in frame${who}: ${f?.outfit ?? clean(c.outfit)}` : "",
     ].filter(Boolean);
   });
+}
+
+/**
+ * What the references after the scene picture are: each character's own material (a design sheet) and the
+ * scene's extra references. Without these lines a model gets images it is never told how to use.
+ */
+function extraRefsEn(data: ProjectData, refs: ReferenceSlot[]): string[] {
+  const lines: string[] = [];
+  refs.forEach((r, i) => {
+    if (r.why.startsWith("인물 자료") && r.characterId)
+      lines.push(
+        `Image reference ${i + 1} is the design sheet of ${castName(data, r.characterId)}: match their face, hairstyle, costume and proportions from it; where this scene's description says otherwise (e.g. hair bleached by the sun), the description wins.`,
+      );
+  });
+  const extra = refs.flatMap((r, i) => (r.why.startsWith("추가 참고") ? [i + 1] : []));
+  if (extra.length)
+    lines.push(
+      `Image reference${extra.length > 1 ? "s" : ""} ${extra.join(", ")} ${extra.length > 1 ? "are" : "is"} extra design reference for this scene (characters, props, places): use ${extra.length > 1 ? "them" : "it"} for design details only, never for composition.`,
+    );
+  return lines;
+}
+
+/** Each character's own material, in cast order (after the scene picture). */
+function castMaterialRefs(data: ProjectData, start: number): ReferenceSlot[] {
+  return data.cast.flatMap((c, k) =>
+    c.refAssetId && c.refAssetId !== data.baseAssetId
+      ? [{ role: `image reference ${start + k + 1}`, assetId: c.refAssetId, why: `인물 자료: ${castLabel(data, c.id)}`, characterId: c.id }]
+      : [],
+  );
 }
 
 /** Scene-frame sizes: every character at this shot size. */
@@ -269,7 +296,9 @@ function identityRefs(data: ProjectData): ReferenceSlot[] {
   const multi = isMultiCast(data);
   if (data.baseAssetId)
     refs.push({ role: "image reference 1", assetId: data.baseAssetId, why: multi ? "장면 기준 그림 — 출연진 전원의 정체성·크기·그림체" : "캐릭터 정체성·그림체의 기준" });
-  for (const id of data.designRefAssetIds) refs.push({ role: `image reference ${refs.length + 1}`, assetId: id, why: "추가 참고 그림" });
+  for (const r of castMaterialRefs(data, refs.length)) refs.push({ ...r, role: `image reference ${refs.length + 1}` });
+  for (const id of data.designRefAssetIds.filter((x) => !refs.some((r) => r.assetId === x)))
+    refs.push({ role: `image reference ${refs.length + 1}`, assetId: id, why: "추가 참고 그림" });
   return refs;
 }
 
@@ -486,7 +515,7 @@ export function videoReferences(data: ProjectData, maxExpressions = MAX_VIDEO_RE
   if (data.baseAssetId)
     refs.push({
       assetId: data.baseAssetId,
-      label: multi ? "장면 기준 그림 — the whole cast together (identity)" : "캐릭터 기본 그림 — original character identity",
+      label: isStoryboard(data) ? "장면 기준 그림 — scene reference" : multi ? "장면 기준 그림 — the whole cast together (identity)" : "캐릭터 기본 그림 — original character identity",
       role: "identity",
     });
   const seen = new Set<string>();
@@ -502,7 +531,12 @@ export function videoReferences(data: ProjectData, maxExpressions = MAX_VIDEO_RE
     if (keep && !keep.has(seg.expressionId)) continue;
     if (!e?.imageAssetId || seen.has(e.imageAssetId) || seen.size >= maxExpressions) continue;
     seen.add(e.imageAssetId);
-    refs.push({ assetId: e.imageAssetId, label: `${i + 1}번 ${e.emotion || "표정"} — approved expression target`, role: "expression", expressionId: e.id });
+    refs.push({
+      assetId: e.imageAssetId,
+      label: isStoryboard(data) ? `${i + 1}번 컷 ${e.emotion || ""} — storyboard frame target` : `${i + 1}번 ${e.emotion || "표정"} — approved expression target`,
+      role: "expression",
+      expressionId: e.id,
+    });
   }
   if (!seen.size && data.expressionSetup.sheetAssetId)
     refs.push({ assetId: data.expressionSetup.sheetAssetId, label: "표정 시트 (이전 방식) — expression targets, panels left to right", role: "expression" });
@@ -1031,7 +1065,9 @@ function panelTexts(data: ProjectData, e: Expression, en: ReturnType<typeof fres
 function storyboardRefs(data: ProjectData): ReferenceSlot[] {
   const refs: ReferenceSlot[] = [];
   if (data.baseAssetId) refs.push({ role: "image reference 1", assetId: data.baseAssetId, why: "장면 기준 그림 — 주요 인물·그림체·세계" });
-  for (const id of data.designRefAssetIds) refs.push({ role: `image reference ${refs.length + 1}`, assetId: id, why: "추가 참고 그림" });
+  for (const r of castMaterialRefs(data, refs.length)) refs.push({ ...r, role: `image reference ${refs.length + 1}` });
+  for (const id of data.designRefAssetIds.filter((x) => !refs.some((r) => r.assetId === x)))
+    refs.push({ role: `image reference ${refs.length + 1}`, assetId: id, why: "추가 참고 그림" });
   return refs;
 }
 
@@ -1064,6 +1100,7 @@ function buildStoryboardHandoffs(data: ProjectData): ExpressionHandoff[] {
       data.baseAssetId &&
         `Image reference 1 is the scene reference drawing: it sets the look of the named characters, their relative sizes, the art style, the colors and the world of this scene.`,
       ...storyboardCastEn(data, en),
+      ...extraRefsEn(data, references),
       style && `Art style: ${style.replace(/[.。]+$/, "")}. Keep this style for everyone in the frame; never photorealistic or 3D.`,
       usesAnchor &&
         `Image reference ${references.length} is panel ${anchorNo} of this same ${multiShot ? "scene" : "shot"}: keep its world, lighting, line quality and character designs exactly; follow this panel's own composition and camera below.`,
@@ -1277,7 +1314,8 @@ export function buildSceneImageHandoff(data: ProjectData): SceneImageHandoff {
   for (const c of data.cast)
     if (c.refAssetId)
       references.push({ role: `image reference ${references.length + 1}`, assetId: c.refAssetId, why: `${castLabel(data, c.id)} 참고 자료`, characterId: c.id });
-  for (const id of data.designRefAssetIds) references.push({ role: `image reference ${references.length + 1}`, assetId: id, why: "추가 참고 그림" });
+  for (const id of data.designRefAssetIds.filter((x) => !references.some((r) => r.assetId === x)))
+    references.push({ role: `image reference ${references.length + 1}`, assetId: id, why: "추가 참고 그림" });
   const refOf = (id: string) => references.findIndex((r) => r.characterId === id) + 1;
   const style = en.style ?? clean(data.style);
   const scene = clean(data.opening) || clip(data.expressionSetup.scene, 600) || clean(data.expressionSetup.scene).slice(0, 600);
@@ -1287,7 +1325,7 @@ export function buildSceneImageHandoff(data: ProjectData): SceneImageHandoff {
     const look = f?.look ? f.look.join("; ") : [clean(c.locks), clean(c.appearance)].filter(Boolean).join(" ");
     const outfit = f?.outfit ?? clean(c.outfit);
     return `- ${castName(data, c.id)}${multi && !story ? ` (${POSITION_EN[c.position]})` : ""}: ${[look, outfit && `Outfit: ${outfit}`].filter(Boolean).join(". ")}${
-      n ? ` Match image reference ${n} exactly for this character.` : ""
+      n ? ` Match image reference ${n} (their design sheet) for this character's face, hairstyle, costume and proportions; where the scene description says otherwise, the description wins.` : ""
     }`;
   });
   const prompt = [
@@ -1297,7 +1335,8 @@ export function buildSceneImageHandoff(data: ProjectData): SceneImageHandoff {
     `This picture becomes the reference for every later frame: draw ${multi ? "every named character" : "the character"} clearly — whole head and upper body visible, face readable, nobody hidden, cut off or covering another's face.`,
     multi ? `Named characters (exactly these, each one distinct; never mix features between them):` : `The character:`,
     ...people,
-    story && data.extras.trim() && `Crowd and background people (unnamed): ${clean(data.extras)}.`,
+    ...extraRefsEn(data, references).filter((l) => !l.includes("design sheet")),
+    story && data.extras.trim() && `Crowd and background people (unnamed): ${noEndDot(clean(data.extras))}.`,
     style && `Art style: ${style.replace(/[.。]+$/, "")}. 2D animation style; never photorealistic or 3D.`,
     scene && (story || multi) && `The moment: ${sentence(scene)}`,
     !story && multi && `Background: plain and light so every character reads clearly.`,
