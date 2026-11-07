@@ -944,9 +944,17 @@ function upgradeLegacy(raw: unknown): unknown {
 
 /** Parse stored JSON defensively (old/partial versions fall back to defaults). */
 export function parseProjectData(raw: unknown): ProjectData {
+  return readProjectData(raw).data;
+}
+
+/**
+ * Like parseProjectData, and says when the stored data could not be read at all (`recovered`: the result is
+ * a blank scene). Callers must not save such a result over the real data.
+ */
+export function readProjectData(raw: unknown): { data: ProjectData; recovered: boolean } {
   const up = upgradeLegacy(raw);
   const r = ProjectDataSchema.safeParse(up);
-  if (r.success) return withActors(r.data);
+  if (r.success) return { data: withActors(r.data), recovered: false };
   const base = createProjectData();
   const obj = (up ?? {}) as Partial<ProjectData>;
   const merged = {
@@ -959,7 +967,7 @@ export function parseProjectData(raw: unknown): ProjectData {
     video: { ...base.video, ...(obj.video ?? {}) },
   };
   const r2 = ProjectDataSchema.safeParse(merged);
-  return r2.success ? withActors(r2.data) : base;
+  return r2.success ? { data: withActors(r2.data), recovered: false } : { data: base, recovered: true };
 }
 
 /** Every beat names a lead that exists (unknown or empty → the first) and has one reaction per other member. */

@@ -110,23 +110,30 @@ export function freshEnglish(d: ProjectData): FreshEnglish {
   };
 }
 
-/** What is missing or out of date, in the team's words ("2번 표정", "A 목소리"). Empty when all is fresh. */
+/**
+ * What is missing or out of date, in the team's words ("2번 표정", "A 목소리"). Empty when all is fresh.
+ * Only a key that no longer matches the Korean (or a piece the AI never wrote) counts: a piece the AI left
+ * empty for the current Korean is "no English" (the prompt uses the Korean) — not stale, so asking again
+ * cannot loop on it.
+ */
 export function englishStale(d: ProjectData): string[] {
   const src = englishSources(d);
-  const fresh = freshEnglish(d);
+  const en = d.english;
   const out: string[] = [];
   const multi = d.cast.length > 1;
+  const current = (key: string | undefined, source: string) => !source || key === textKey(source);
   src.cast.forEach((c, i) => {
-    const f = fresh.cast.get(c.characterId) ?? NO_CAST;
+    const ec = en?.cast.find((x) => x.characterId === c.characterId);
     const who = multi ? `${String.fromCharCode(65 + i)} ` : "";
-    if (c.look && !f.look) out.push(`${who}유지할 특징`);
-    if (c.outfit && !f.outfit) out.push(`${who}의상`);
-    if (c.voice && !f.voice) out.push(`${who}목소리`);
+    if (!current(ec?.look.key, c.look)) out.push(`${who}유지할 특징`);
+    if (!current(ec?.outfit.key, c.outfit)) out.push(`${who}의상`);
+    if (!current(ec?.voice.key, c.voice)) out.push(`${who}목소리`);
   });
-  if (src.style && !fresh.style) out.push("그림체");
-  if (src.language && !fresh.language) out.push("대사 언어");
-  d.expressions.forEach((e, i) => {
-    if (!fresh.beats.has(e.id)) out.push(d.mode === "storyboard" ? `${i + 1}번 컷` : `${i + 1}번 표정`);
+  if (!current(en?.style.key, src.style)) out.push("그림체");
+  if (!current(en?.language.key, src.language)) out.push("대사 언어");
+  src.beats.forEach((b, i) => {
+    const eb = en?.beats.find((x) => x.expressionId === b.expressionId);
+    if (!eb || eb.key !== textKey(b.source)) out.push(d.mode === "storyboard" ? `${i + 1}번 컷` : `${i + 1}번 표정`);
   });
   return out;
 }

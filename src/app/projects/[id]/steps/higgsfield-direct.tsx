@@ -300,10 +300,11 @@ export function HiggsfieldDirect({
     lastCheck?.status !== "running" &&
     (!lastCheck || Date.parse(lastCheck.created_at) < newestImage);
   const autoChecked = useRef(new Set<string>());
+  const [autoRefused, setAutoRefused] = useState(false);
   useEffect(() => {
     if (!checkDue || autoChecked.current.has(setKey)) return;
     autoChecked.current.add(setKey);
-    void askAi("check_sheet", 1);
+    void askAi("check_sheet", 1).then((id) => setAutoRefused(!id));
   }, [checkDue, setKey, askAi]);
 
   return (
@@ -403,7 +404,12 @@ export function HiggsfieldDirect({
           <span className="field-help">표정마다 가장 최근 결과를 씁니다. 하나씩 고르려면 아래 카드에서 고르세요.</span>
         </div>
       )}
-      {checkDue && <p className="field-help">새 표정 그림이 모두 준비되어 ‘AI로 표정 그림 검사’를 자동으로 시작합니다.</p>}
+      {checkDue && !autoRefused && <p className="field-help">새 그림이 모두 준비되어 ‘AI로 그림 검사’를 자동으로 시작합니다.</p>}
+      {autoRefused && (
+        <p className="notice notice-error">
+          그림 검사를 자동으로 시작하지 못했습니다: {jobs.requestError ?? "요청이 거절되었습니다."} 아래 ‘그림 검사’ 버튼으로 다시 시도할 수 있습니다.
+        </p>
+      )}
 
       <ol className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
         {exps.map((e, i) => {

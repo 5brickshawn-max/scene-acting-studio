@@ -108,7 +108,13 @@ async function tokenRequest(params: Record<string, string>): Promise<TokenRespon
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ ...params, resource: MCP_URL }),
   });
-  return (await res.json()) as TokenResponse;
+  // a gateway error page (HTML) must surface as a login error, not as an unexplained crash
+  const raw = await res.text();
+  try {
+    return JSON.parse(raw) as TokenResponse;
+  } catch {
+    return { error: `http_${res.status}`, error_description: `Higgsfield 로그인 서버 응답을 읽지 못했습니다 (${res.status}).` };
+  }
 }
 
 function idTokenEmail(idToken: unknown): string | null {
@@ -199,11 +205,21 @@ export class McpSession {
     this.sessionId = res.headers.get("mcp-session-id") ?? this.sessionId;
     const raw = await res.text();
     if (notify || !raw.trim()) return null;
-    if (raw.trimStart().startsWith("{")) return JSON.parse(raw);
+    const parse = (t: string) => {
+      try {
+        return JSON.parse(t);
+      } catch {
+        return null;
+      }
+    };
+    if (raw.trimStart().startsWith("{")) {
+      const msg = parse(raw);
+      if (msg) return msg;
+    }
     for (const line of raw.split("\n")) {
       if (!line.startsWith("data:")) continue;
-      const msg = JSON.parse(line.slice(5));
-      if (msg.id === id) return msg;
+      const msg = parse(line.slice(5));
+      if (msg?.id === id) return msg;
     }
     throw new Error("Higgsfield 응답을 읽지 못했습니다.");
   }
@@ -268,6 +284,39 @@ export async function chooseWorkspace(workspaceId: string, hf: HfWorkspace) {
  */
 export async function withWorkspace<T>(s: McpSession, conn: Connection, fn: () => Promise<T>): Promise<T> {
   if (!conn.hf_workspace_id) throw new Error("크레딧을 쓸 Higgsfield 워크스페이스를 먼저 선택해 주세요 (팀·사용량).");
+  // one selecting call at a time: otherwise A could restore the old selection while B generates
+  // (B saw A's selection, did not switch, and would spend the wrong workspace's credits)
+  await lockWorkspace(conn.workspace_id);
+  try {
+    return await selectedRun(s, conn, fn);
+  } finally {
+    await unlockWorkspace(conn.workspace_id);
+  }
+}
+
+const LEASE_MS = 90_000;
+
+async function lockWorkspace(workspaceId: string) {
+  const sb = supabaseAdmin();
+  for (let i = 0; i < 60; i++) {
+    const now = new Date();
+    const { data } = await sb
+      .from("higgsfield_connections")
+      .update({ lock_until: new Date(now.getTime() + LEASE_MS).toISOString() })
+      .eq("workspace_id", workspaceId)
+      .or(`lock_until.is.null,lock_until.lt.${now.toISOString()}`)
+      .select("workspace_id");
+    if (data?.length) return;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error("Higgsfield 요청이 몰려 있습니다. 잠시 후 다시 시도하세요.");
+}
+
+async function unlockWorkspace(workspaceId: string) {
+  await supabaseAdmin().from("higgsfield_connections").update({ lock_until: null }).eq("workspace_id", workspaceId);
+}
+
+async function selectedRun<T>(s: McpSession, conn: Connection & { hf_workspace_id: string | null }, fn: () => Promise<T>): Promise<T> {
   const { workspaces } = await s.call<{ workspaces: HfWorkspace[] }>("list_workspaces", {});
   const prev = workspaces.find((w) => w.is_selected);
   const switching = prev?.id !== conn.hf_workspace_id;

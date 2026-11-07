@@ -30,12 +30,17 @@ export function LoginForm({ next }: { next: string }) {
 
   return (
     <div className="space-y-4">
-      <button className="btn btn-dark w-full" onClick={google}>
-        Google 계정으로 로그인
-      </button>
-      <div className="text-center text-sm text-muted">또는</div>
+      {/* shown only when Google sign-in is turned on in Supabase (otherwise the button only errors) */}
+      {process.env.NEXT_PUBLIC_ENABLE_GOOGLE_LOGIN === "1" && (
+        <>
+          <button className="btn btn-dark w-full" onClick={google}>
+            Google 계정으로 로그인
+          </button>
+          <div className="text-center text-sm text-muted">또는</div>
+        </>
+      )}
       {sent ? (
-        <p className="notice notice-ok">로그인 링크를 {email}로 보냈습니다. 메일함을 확인하세요.</p>
+        <p className="notice notice-ok">로그인 링크를 {email}로 보냈습니다. 메일함을 확인하고, 링크는 지금 이 브라우저에서 열어 주세요.</p>
       ) : (
         <form onSubmit={magic} className="space-y-2">
           <label className="field-label" htmlFor="email">이메일</label>

@@ -2,7 +2,8 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 // /review and /api/review are opened with a signed read-only review link instead of a login.
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/review", "/api/review"];
+// /api/higgsfield/callback only shows the address bar to copy (local development; see that route).
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/review", "/api/review", "/api/higgsfield/callback"];
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });

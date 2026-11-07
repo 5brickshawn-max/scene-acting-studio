@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { castLabel, distributionPlans, round3, sameTiming, timelineIssues, type ProjectData, type StepIndex } from "@/lib/domain/project";
 import { estimateSpeechSeconds } from "@/lib/domain/speech";
 import { useEditor } from "../editor-context";
@@ -150,8 +151,7 @@ export function ActingStep({ onNavigate }: { onNavigate: (s: StepIndex) => void 
                 </div>
                 <div>
                   <label className="text-[13px] font-semibold text-muted block mb-1" htmlFor={`end-${s.expressionId}`}>끝</label>
-                  <input id={`end-${s.expressionId}`} type="number" step="0.1" className="input w-24" value={s.end}
-                    disabled={!canEdit || i === segments.length - 1} onChange={(ev) => setEnd(i, Number(ev.target.value) || 0)} />
+                  <EndField id={`end-${s.expressionId}`} value={s.end} disabled={!canEdit || i === segments.length - 1} onCommit={(v) => setEnd(i, v)} />
                 </div>
                 {canEdit && (
                   <div className="flex gap-1">
@@ -166,5 +166,35 @@ export function ActingStep({ onNavigate }: { onNavigate: (s: StepIndex) => void 
       </ol>
       {issues.length > 0 && <p className="field-help">타임라인 문제는 아래 ‘승인 전 확인’에 표시됩니다.</p>}
     </StepFrame>
+  );
+}
+
+/**
+ * The end time of a segment. Typed freely and applied on blur / Enter: clamping on every key made the field
+ * jump back (clearing it to type a new number snapped it to start + 0.1).
+ */
+function EndField(props: { id: string; value: number; disabled: boolean; onCommit: (v: number) => void }) {
+  const [text, setText] = useState(String(props.value));
+  const [focused, setFocused] = useState(false);
+  return (
+    <input
+      id={props.id}
+      type="number"
+      step="0.1"
+      className="input w-24"
+      value={focused ? text : String(props.value)}
+      disabled={props.disabled}
+      onFocus={() => {
+        setText(String(props.value));
+        setFocused(true);
+      }}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        setFocused(false);
+        const v = Number(text);
+        if (text.trim() && Number.isFinite(v)) props.onCommit(v);
+      }}
+      onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+    />
   );
 }

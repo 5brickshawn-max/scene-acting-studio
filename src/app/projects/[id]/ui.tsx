@@ -237,6 +237,8 @@ export function AiAction(props: {
   );
   const running = latest && (latest.status === "queued" || latest.status === "running");
   const [sending, setSending] = useState(false);
+  // the request itself was refused (daily limit, permission …): say so here, not only in the side panel
+  const [refused, setRefused] = useState(false);
 
   return (
     <div className="space-y-2">
@@ -247,7 +249,9 @@ export function AiAction(props: {
           disabled={!canEdit || props.disabled || running || sending}
           onClick={async () => {
             setSending(true);
-            await askAi(props.kind, props.step, { instruction: props.instruction, characterId: props.characterId });
+            setRefused(false);
+            const id = await askAi(props.kind, props.step, { instruction: props.instruction, characterId: props.characterId });
+            setRefused(!id);
             setSending(false);
           }}
         >
@@ -261,7 +265,8 @@ export function AiAction(props: {
           {JOB_LABEL[props.kind]} 중입니다. 창을 닫아도 서버에서 계속되며, 결과는 바로 적용되지 않고 제안으로 도착합니다.
         </p>
       )}
-      {latest?.status === "failed" && <p className="notice notice-error">{latest.error ?? "실패했습니다."}</p>}
+      {refused && <p className="notice notice-error">{jobs.requestError ?? "AI 요청을 보내지 못했습니다. 저장 상태를 확인하고 다시 시도하세요."}</p>}
+      {!refused && latest?.status === "failed" && <p className="notice notice-error">{latest.error ?? "실패했습니다."}</p>}
     </div>
   );
 }

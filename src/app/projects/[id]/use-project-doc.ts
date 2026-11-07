@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { parseProjectData, reopenFrom, type ProjectData, type StepIndex } from "@/lib/domain/project";
 
@@ -32,7 +32,15 @@ function writeDraft(id: string, d: Draft | null) {
  * - Autosave runs 1.5s after the last edit with optimistic concurrency.
  * - On conflict nothing is duplicated: the user picks "load latest" or "save mine as newest".
  */
-export function useProjectDoc(projectId: string, initial: { data: ProjectData; version: number }, readOnly: boolean) {
+export function useProjectDoc(
+  projectId: string,
+  initial: { data: ProjectData; version: number },
+  readOnly: boolean,
+  /** the stored data could not be read: nothing is saved automatically until the team restores a version */
+  hold = false,
+) {
+  const holdRef = useRef(hold);
+  const [held, setHeld] = useState(hold);
   const [data, setData] = useState(initial.data);
   const [version, setVersion] = useState(initial.version);
   const [status, setStatus] = useState<SaveStatus>("saved");
@@ -45,8 +53,10 @@ export function useProjectDoc(projectId: string, initial: { data: ProjectData; v
   const dirtyRef = useRef(false);
   const savingRef = useRef<Promise<number | false> | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  dataRef.current = data;
+  // dataRef is set wherever the data changes (edit, save, conflict, draft), never from a render,
+  // so a render with older state cannot overwrite a newer edit
   versionRef.current = version;
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Offer to restore an unsaved local draft from a previous session.
   useEffect(() => {
@@ -59,7 +69,9 @@ export function useProjectDoc(projectId: string, initial: { data: ProjectData; v
   const save = useCallback(
     async (kind: VersionKind = "save", note: string | null = null, override?: ProjectData): Promise<number | false> => {
       if (readOnly) return false;
-      if (savingRef.current) await savingRef.current;
+      // one save at a time: wait until no save is running (another caller may start one while we wait),
+      // so each save sends the version the previous one produced
+      while (savingRef.current) await savingRef.current;
       if (timer.current) clearTimeout(timer.current);
       const payload = override ?? dataRef.current;
       const run = (async () => {
@@ -99,7 +111,7 @@ export function useProjectDoc(projectId: string, initial: { data: ProjectData; v
       })();
       savingRef.current = run;
       const ok = await run;
-      savingRef.current = null;
+      if (savingRef.current === run) savingRef.current = null;
       return ok;
     },
     [projectId, readOnly],
@@ -108,7 +120,7 @@ export function useProjectDoc(projectId: string, initial: { data: ProjectData; v
   const schedule = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
-      if (dirtyRef.current && status !== "conflict") void save();
+      if (dirtyRef.current && status !== "conflict" && !holdRef.current) void save();
     }, 1500);
   }, [save, status]);
 
@@ -116,12 +128,15 @@ export function useProjectDoc(projectId: string, initial: { data: ProjectData; v
   const edit = useCallback(
     (step: StepIndex, fn: (d: ProjectData) => ProjectData) => {
       if (readOnly) return;
-      setData((prev) => {
-        const next = reopenFrom(fn(prev), step);
-        dataRef.current = next;
-        writeDraft(projectId, { baseVersion: versionRef.current, data: next, at: new Date().toISOString() });
-        return next;
-      });
+      // computed outside the state updater: several edits in one tick (and a flush right after) see each other
+      const next = reopenFrom(fn(dataRef.current), step);
+      dataRef.current = next;
+      setData(next);
+      // the local draft (the whole document) is written at most every 400 ms, not on every key
+      if (draftTimer.current) clearTimeout(draftTimer.current);
+      draftTimer.current = setTimeout(() => {
+        if (dirtyRef.current) writeDraft(projectId, { baseVersion: versionRef.current, data: dataRef.current, at: new Date().toISOString() });
+      }, 400);
       dirtyRef.current = true;
       setStatus("dirty");
       schedule();
@@ -131,13 +146,22 @@ export function useProjectDoc(projectId: string, initial: { data: ProjectData; v
 
   /** Replace the whole document and save it immediately as a new version. */
   const commit = useCallback(
-    async (next: ProjectData, kind: VersionKind, note: string | null) => save(kind, note, next),
+    async (next: ProjectData, kind: VersionKind, note: string | null) => {
+      // an explicit save (restoring a version) ends the hold
+      const v = await save(kind, note, next);
+      if (v && holdRef.current) {
+        holdRef.current = false;
+        setHeld(false);
+      }
+      return v;
+    },
     [save],
   );
 
   /** Flush pending edits before something depends on the saved version (AI jobs, hand-off). */
   const flush = useCallback(async () => {
-    if (savingRef.current) await savingRef.current;
+    if (holdRef.current) return false;
+    while (savingRef.current) await savingRef.current;
     if (dirtyRef.current) return save();
     return status !== "conflict";
   }, [save, status]);
@@ -199,20 +223,11 @@ export function useProjectDoc(projectId: string, initial: { data: ProjectData; v
     return () => window.removeEventListener("beforeunload", h);
   }, []);
 
-  return {
-    data,
-    version,
-    status,
-    error,
-    conflict,
-    pendingDraft,
-    edit,
-    commit,
-    flush,
-    save,
-    resolveConflict,
-    restoreDraft,
-  };
+  // one object per change (not per render), so the editor context below is not rebuilt on every render
+  return useMemo(
+    () => ({ data, version, status, error, conflict, pendingDraft, held, edit, commit, flush, save, resolveConflict, restoreDraft }),
+    [data, version, status, error, conflict, pendingDraft, held, edit, commit, flush, save, resolveConflict, restoreDraft],
+  );
 }
 
 export type ProjectDoc = ReturnType<typeof useProjectDoc>;

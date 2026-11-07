@@ -15,7 +15,9 @@ create function auth.uid() returns uuid language sql stable as $$ select nullif(
 grant usage on schema public, auth to authenticated;
 alter default privileges in schema public grant all on tables to authenticated;
 alter default privileges in schema public grant all on functions to authenticated;`);
-await db.exec(fs.readFileSync(new URL("../supabase/migrations/0001_init.sql", import.meta.url), "utf8"));
+// every migration, in order (a new database runs them all)
+const dir = new URL("../supabase/migrations/", import.meta.url);
+for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".sql")).sort()) await db.exec(fs.readFileSync(new URL(f, dir), "utf8"));
 
 const A = "11111111-1111-1111-1111-111111111111", O = "22222222-2222-2222-2222-222222222222", R = "33333333-3333-3333-3333-333333333333";
 await db.exec(`insert into auth.users values ('${A}','admin@x.com');

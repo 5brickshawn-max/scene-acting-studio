@@ -158,7 +158,8 @@ function SceneField() {
         rows={5}
         value={scene}
         disabled={!canEdit}
-        onChange={(e) => doc.edit(1, (d) => ({ ...d, expressionSetup: { ...d.expressionSetup, scene: e.target.value } }))}
+        // the scenario is step 1's source text: editing it here re-opens step 1 too, as editing it there does
+        onChange={(e) => doc.edit(0, (d) => ({ ...d, expressionSetup: { ...d.expressionSetup, scene: e.target.value } }))}
         placeholder={
           doc.data.cast.length > 1
             ? "예: 무너진 신전 앞, 칼리엘라와 브람이 칼끝을 겨눈 채 마주 선다. 바람에 머리카락이 흩날린다.\n" +
@@ -820,7 +821,8 @@ function CastExpressionStep({ onNavigate }: { onNavigate: (s: StepIndex) => void
   const { doc, canEdit } = useEditor();
   const s = doc.data.expressionSetup;
   const setSetup = (patch: Partial<typeof s>) => doc.edit(1, (d) => ({ ...d, expressionSetup: { ...d.expressionSetup, ...patch } }));
-  const unconfirmed = doc.data.expressions.filter((e) => e.directionStatus === "ai").length;
+  // every character's direction counts (the approval check looks at all of them)
+  const unconfirmed = doc.data.expressions.reduce((n, e) => n + performancesOf(doc.data, e).filter((p) => p.directionStatus === "ai").length, 0);
 
   return (
     <StepFrame

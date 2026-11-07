@@ -7,7 +7,7 @@
  * Results are saved into the project's assets and offered to the user — never auto-applied.
  */
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { FRAMING_LABEL, parseProjectData, type Framing, type ProjectData } from "@/lib/domain/project";
+import { FRAMING_LABEL, readProjectData, type Framing, type ProjectData } from "@/lib/domain/project";
 import { buildExpressionHandoffs, buildFrameHandoff, buildSceneImageHandoff, buildVideoHandoff } from "@/lib/domain/handoff";
 import { findJobIds, getConnection, openSession, withWorkspace, type McpSession } from "./client";
 import sharp from "sharp";
@@ -46,7 +46,9 @@ async function latestData(projectId: string) {
     .eq("project_id", projectId)
     .eq("version", p!.current_version)
     .single();
-  return { workspaceId: p!.workspace_id as string, version: p!.current_version as number, data: parseProjectData(v?.data) };
+  const read = readProjectData(v?.data);
+  if (read.recovered) throw new Error("저장된 내용을 읽지 못했습니다. ‘기록’에서 이전 버전으로 되돌린 뒤 다시 시도하세요.");
+  return { workspaceId: p!.workspace_id as string, version: p!.current_version as number, data: read.data };
 }
 
 async function plan(projectId: string, spec: GenSpec, data: ProjectData): Promise<Plan> {
@@ -345,8 +347,19 @@ export async function poll(rowId: string, session?: Opened): Promise<"running" |
   const mainUrl = resultUrl(g.results, isVideo ? ["rawUrl", "video", "url", "minUrl"] : ["rawUrl", "url", "minUrl"]);
   if (g.status !== "completed" || !mainUrl) return "running";
 
-  const { data: again } = await sb.from("ai_jobs").select("status").eq("id", rowId).single();
-  if (again?.status !== "running") return again?.status === "done" ? "done" : "failed";
+  // claim the result atomically: only one poller (server loop or browser nudge) downloads and saves it
+  const { data: claimed } = await sb
+    .from("ai_jobs")
+    .update({ claimed_at: new Date().toISOString() })
+    .eq("id", rowId)
+    .eq("status", "running")
+    // a claim older than 5 minutes belongs to a poller that died mid-save: take it over
+    .or(`claimed_at.is.null,claimed_at.lt.${new Date(Date.now() - 5 * 60_000).toISOString()}`)
+    .select("id");
+  if (!claimed?.length) {
+    const { data: again } = await sb.from("ai_jobs").select("status").eq("id", rowId).single();
+    return again?.status === "done" ? "done" : again?.status === "failed" ? "failed" : "running";
+  }
 
   const base = `${row.workspace_id}/${row.project_id}`;
   const id = crypto.randomUUID();

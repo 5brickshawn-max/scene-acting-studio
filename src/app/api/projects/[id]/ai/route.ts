@@ -3,10 +3,12 @@ import { z } from "zod";
 import { canEdit, getCtx } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { runJob } from "@/lib/ai/run";
+import { expireStaleClaudeJobs } from "@/lib/jobs-server";
 import { JOB_KINDS, JOB_STEP } from "@/lib/ai/schemas";
 
-// AI jobs run after the response is sent; allow up to 5 minutes.
-export const maxDuration = 300;
+// AI jobs run after the response is sent. 800 s is the Vercel Pro limit (Opus + several images can pass
+// 300 s); a job cut off anyway is closed after 15 minutes (lib/jobs-server.ts).
+export const maxDuration = 800;
 
 const Body = z.object({
   kind: z.enum(JOB_KINDS),
@@ -46,6 +48,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!project || project.workspace_id !== ctx.workspaceId)
     return NextResponse.json({ error: "작업을 찾을 수 없습니다." }, { status: 404 });
 
+  await expireStaleClaudeJobs(id);
   const { data: ws } = await sb.from("workspaces").select("daily_ai_limit").eq("id", ctx.workspaceId).single();
   const { count } = await sb
     .from("ai_jobs")

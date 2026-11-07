@@ -170,6 +170,19 @@ export function CharacterProposal({ job, out }: { job: JobView; out: CharacterOu
   );
 }
 
+/** One pickable part of a composition (outside the proposal component: an inner component would remount on every render and drop focus). */
+function ComposeRow({ k, title, children, picked, toggle }: { k: ComposeField; title: string; children: React.ReactNode; picked: Set<ComposeField>; toggle: (k: ComposeField) => void }) {
+  return (
+    <label className="flex gap-3 items-start rounded-lg bg-white border border-line p-3">
+      <input type="checkbox" className="mt-1 size-5" checked={picked.has(k)} onChange={() => toggle(k)} />
+      <span className="flex-1 space-y-1">
+        <span className="font-semibold block">{title}</span>
+        {children}
+      </span>
+    </label>
+  );
+}
+
 /** 씬 구성: the named characters, style, crowd and opening the AI composed from the scenario. */
 export function ComposeProposal({ job, out }: { job: JobView; out: SceneComposeOutT }) {
   const { doc } = useEditor();
@@ -186,15 +199,6 @@ export function ComposeProposal({ job, out }: { job: JobView; out: SceneComposeO
       else n.add(k);
       return n;
     });
-  const Row = ({ k, title, children }: { k: ComposeField; title: string; children: React.ReactNode }) => (
-    <label className="flex gap-3 items-start rounded-lg bg-white border border-line p-3">
-      <input type="checkbox" className="mt-1 size-5" checked={picked.has(k)} onChange={() => toggle(k)} />
-      <span className="flex-1 space-y-1">
-        <span className="font-semibold block">{title}</span>
-        {children}
-      </span>
-    </label>
-  );
   return (
     <ProposalShell
       job={job}
@@ -204,7 +208,7 @@ export function ComposeProposal({ job, out }: { job: JobView; out: SceneComposeO
       onApply={() => apply(applyComposition(doc.data, out, [...picked]), "AI 씬 구성 적용")}
     >
       <div className="space-y-3">
-        <Row k="cast" title={`주요 인물 ${Math.min(out.characters.length, max)}명 (지금 ${d.cast.length}명을 이 목록으로 바꿈)`}>
+        <ComposeRow picked={picked} toggle={toggle} k="cast" title={`주요 인물 ${Math.min(out.characters.length, max)}명 (지금 ${d.cast.length}명을 이 목록으로 바꿈)`}>
           {out.characters.length > max && (
             <span className="block notice notice-warn">이 방식은 최대 {max}명이라 앞의 {max}명만 들어갑니다.{story ? "" : " 더 많으면 스토리보드 방식을 쓰세요."}</span>
           )}
@@ -219,17 +223,19 @@ export function ComposeProposal({ job, out }: { job: JobView; out: SceneComposeO
               </li>
             ))}
           </ol>
-        </Row>
-        <Row k="style" title="그림체 (장면 공통)">
+        </ComposeRow>
+        <ComposeRow picked={picked} toggle={toggle} k="style" title="그림체 (장면 공통)">
           <span className="block whitespace-pre-wrap">{out.style}</span>
-        </Row>
+        </ComposeRow>
         {story && out.extras.trim() && (
-          <Row k="extras" title="군중·배경 인물">
+          <ComposeRow picked={picked} toggle={toggle} k="extras" title="군중·배경 인물">
             <span className="block whitespace-pre-wrap">{out.extras}</span>
-          </Row>
+          </ComposeRow>
         )}
         {!st.tooFew && (
-          <Row
+          <ComposeRow
+            picked={picked}
+            toggle={toggle}
             k="structure"
             title={
               st.story
@@ -261,19 +267,19 @@ export function ComposeProposal({ job, out }: { job: JobView; out: SceneComposeO
             )}
             {st.clipped && <span className="block notice notice-warn">패널이 {st.total}개라 앞의 12개만 들어갑니다(한 장면 최대 12개). 장면을 둘로 나누는 것도 방법입니다.</span>}
             {st.duration > 30 && <span className="block notice notice-warn">{st.duration}초는 영상 모델 한도(Kling·Seedance 30초, MiniMax 15초)를 넘습니다. 생성할 때 모델 한도로 잘립니다.</span>}
-          </Row>
+          </ComposeRow>
         )}
-        <Row k="opening" title="첫 장면 묘사 (장면 기준 그림 생성에 씀)">
+        <ComposeRow picked={picked} toggle={toggle} k="opening" title="첫 장면 묘사 (장면 기준 그림 생성에 씀)">
           <span className="block whitespace-pre-wrap">{out.opening}</span>
-        </Row>
+        </ComposeRow>
         {out.questions.length > 0 && (
-          <Row k="questions" title={`확인 질문 ${out.questions.length}개 추가`}>
+          <ComposeRow picked={picked} toggle={toggle} k="questions" title={`확인 질문 ${out.questions.length}개 추가`}>
             <ul className="list-disc pl-5">
               {out.questions.map((q) => (
                 <li key={q}>{q}</li>
               ))}
             </ul>
-          </Row>
+          </ComposeRow>
         )}
       </div>
     </ProposalShell>

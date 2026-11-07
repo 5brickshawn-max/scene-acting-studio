@@ -320,12 +320,16 @@ export function VideoStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }
     englishJob?.status !== "failed" &&
     data.expressions.length > 0 &&
     (!data.english || englishStale(data).length > 0);
-  const autoEnglish = useRef<number | null>(null);
+  // ask once per distinct set of out-of-date pieces (not per saved version): if the AI leaves a piece
+  // out, the same set does not trigger another request
+  const staleKey = data.english ? englishStale(data).join("|") : "none";
+  const autoEnglish = useRef<string | null>(null);
+  const [englishRefused, setEnglishRefused] = useState(false);
   useEffect(() => {
-    if (!englishDue || autoEnglish.current === doc.version) return;
-    autoEnglish.current = doc.version;
-    void askAi("write_english", 4);
-  }, [englishDue, doc.version, askAi]);
+    if (!englishDue || autoEnglish.current === staleKey) return;
+    autoEnglish.current = staleKey;
+    void askAi("write_english", 4).then((id) => setEnglishRefused(!id));
+  }, [englishDue, staleKey, askAi]);
   const [error, setError] = useState<string | null>(null);
   const setVideo = (patch: Partial<typeof data.video>) => doc.edit(4, (d) => ({ ...d, video: { ...d.video, ...patch } }));
 
@@ -370,6 +374,11 @@ export function VideoStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }
         </div>
         <PromptApplyBar vp={vp} />
         <EnglishBar />
+        {englishRefused && (
+          <p className="notice notice-error">
+            영어 정리를 자동으로 요청하지 못했습니다: {jobs.requestError ?? "요청이 거절되었습니다."} 위 ‘AI로 영어 정리’ 버튼으로 다시 시도할 수 있습니다.
+          </p>
+        )}
       </div>
 
       <HiggsfieldVideo

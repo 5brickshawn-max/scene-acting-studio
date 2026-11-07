@@ -1,8 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { z } from "zod";
+import sharp from "sharp";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { castLabel, effectiveText, maxCastFor, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, parseProjectData, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
+import { readProjectData, castLabel, effectiveText, maxCastFor, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
 import {
   ActingOut,
   CharacterOut,
@@ -49,14 +50,24 @@ async function imageBlock(assetId: string | null | undefined, label: string): Pr
   if (!asset) return [];
   const meta = (asset.meta ?? {}) as { previewPath?: string; previewMime?: string };
   const path = meta.previewPath ?? asset.storage_path;
-  const mime = meta.previewPath ? meta.previewMime ?? "image/jpeg" : asset.mime;
-  if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(mime)) return [];
+  let mime = meta.previewPath ? meta.previewMime ?? "image/jpeg" : asset.mime;
+  if (!mime.startsWith("image/")) return [];
   const { data: file, error } = await sb.storage.from("assets").download(path);
   if (error || !file) return [];
-  const b64 = Buffer.from(await file.arrayBuffer()).toString("base64");
+  let bytes = Buffer.from(await file.arrayBuffer());
+  // Claude takes images up to 5 MB in jpeg/png/webp/gif; an original with no preview (a big PNG, a format the
+  // browser could not preview) is shrunk here to a 1568 px long side, which is all the model uses anyway
+  if (bytes.length > 3_500_000 || !["image/jpeg", "image/png", "image/webp", "image/gif"].includes(mime)) {
+    try {
+      bytes = await sharp(bytes).rotate().resize(1568, 1568, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
+      mime = "image/jpeg";
+    } catch {
+      return [];
+    }
+  }
   return [
     { type: "text", text: label },
-    { type: "image", source: { type: "base64", media_type: mime as "image/jpeg", data: b64 } },
+    { type: "image", source: { type: "base64", media_type: mime as "image/jpeg", data: bytes.toString("base64") } },
   ];
 }
 
@@ -117,7 +128,7 @@ async function callClaude<S extends z.ZodType>(
   const cacheWrite = res.usage.cache_creation_input_tokens ?? 0;
   return {
     output: res.parsed_output as z.infer<S>,
-    usage: { input: res.usage.input_tokens + cacheRead + cacheWrite, output: res.usage.output_tokens, cacheRead, cacheWrite },
+    usage: { input: res.usage.input_tokens + cacheRead + cacheWrite, output: res.usage.output_tokens, cacheRead, cacheWrite, model: res.model },
   };
 }
 
@@ -556,7 +567,9 @@ export async function runJob(jobId: string) {
       .eq("project_id", job.project_id)
       .eq("version", job.based_on_version)
       .maybeSingle();
-    const data = parseProjectData(ver?.data);
+    const read = readProjectData(ver?.data);
+    if (read.recovered) throw new Error("저장된 내용을 읽지 못했습니다. ‘기록’에서 이전 버전으로 되돌린 뒤 다시 시도하세요.");
+    const data = read.data;
 
     let result: Awaited<ReturnType<typeof callClaude>>;
     if (job.kind === "consult") {
@@ -572,7 +585,8 @@ export async function runJob(jobId: string) {
       result = await callClaude(req.schema, BASE_SYSTEM, [{ role: "user", content: cacheThroughLastImage(req.content) }], effort);
     }
     const u = result.usage;
-    console.info(`[ai] ${job.kind}: input ${u.input} (cache read ${u.cacheRead}, cache write ${u.cacheWrite}), output ${u.output}`);
+    // the model that answered (a server-side fallback can answer with another model than asked)
+    console.info(`[ai] ${job.kind} (${u.model}): input ${u.input} (cache read ${u.cacheRead}, cache write ${u.cacheWrite}), output ${u.output}`);
     // the English, tied to the Korean of this version (the client applies it as it arrives)
     if (job.kind === "write_english") result.output = { sheet: buildEnglishSheet(data, result.output as EnglishOutT) };
     // tie each text fix to the exact text it replaces, so the team applies it only while that text is unchanged

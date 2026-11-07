@@ -38,12 +38,14 @@ export function Editor(props: {
   userId: string;
   canEdit: boolean;
   initialData: ProjectData;
+  /** the stored data could not be read: show a warning and hold automatic saving */
+  recovered?: boolean;
   initialVersion: number;
   initialAssets: AssetView[];
   initialJobs: JobView[];
   members: [string, string][];
 }) {
-  const doc = useProjectDoc(props.projectId, { data: props.initialData, version: props.initialVersion }, !props.canEdit);
+  const doc = useProjectDoc(props.projectId, { data: props.initialData, version: props.initialVersion }, !props.canEdit, Boolean(props.recovered));
   const jobs = useJobs(props.projectId, props.initialJobs);
   const [step, setStep] = useState<StepIndex>(() => Math.min(4, Math.max(0, props.initialData.currentStep)) as StepIndex);
   const [showChat, setShowChat] = useState(false);
@@ -122,6 +124,12 @@ export function Editor(props: {
       </header>
 
       <main className="mx-auto max-w-[1500px] px-4 sm:px-6 py-6 space-y-4">
+        {doc.held && (
+          <p className="notice notice-error" role="alert">
+            저장된 내용(v{doc.version})을 읽지 못해 빈 장면으로 열었습니다. 실제 내용을 덮어쓰지 않도록 <strong>자동 저장과 AI 요청을 멈췄습니다</strong>. 위의 ‘기록’에서
+            이전 버전으로 되돌리면 다시 정상으로 돌아갑니다. 계속되면 관리자에게 알려 주세요.
+          </p>
+        )}
         {doc.pendingDraft && (
           <div className="notice notice-warn flex flex-wrap items-center gap-3" role="alert">
             <span className="flex-1">
