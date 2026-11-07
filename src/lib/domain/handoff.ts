@@ -14,6 +14,8 @@ import { constraintsFor, directorAngle, directorBackground, directorRig, hasCame
 import { freshEnglish } from "./english";
 import {
   beatActor,
+  performancesOf,
+  type Performance,
   castLabel,
   castName,
   imageAspectFor,
@@ -92,7 +94,7 @@ const ONE_SHOT_IMAGE_EN =
   "This image is one moment of ONE continuous shot with no cuts: every expression image of this character shares the same camera, shot size, character size and position, lighting and white background; only the acting changes.";
 
 /** Arm/hand acting line for the image prompt (bust and medium shots only); `text` = English gesture when there is one. */
-function bodyLanguageEn(e: Expression, framing: Framing, text = e.gesture): string {
+function bodyLanguageEn(e: Pick<Performance, "emotion" | "gesture">, framing: Framing, text = e.gesture): string {
   if (!showsHands(framing)) return "";
   const where = framing === "bust" ? "near the face, hair or chest so the hands are inside the frame" : "readable across the whole upper body";
   const gesture = text.trim()
@@ -106,8 +108,23 @@ function bodyLanguageEn(e: Expression, framing: Framing, text = e.gesture): stri
 
 const clean = (s: string) => s.replace(/\s+/g, " ").trim();
 
+/** One character's acting in English from the team's fields (used where there is no fresh English). */
+function performanceLineEn(p: Omit<Performance, "characterId">): string {
+  return clean(
+    [`${INTENSITY_EN[p.intensity]} ${p.emotion || "neutral listening"}.`, p.brows && `Brows: ${p.brows}.`, p.eyes && `Eyes: ${p.eyes}.`, p.mouth && `Mouth: ${p.mouth}.`]
+      .filter(Boolean)
+      .join(" "),
+  );
+}
+
+/** Short body-language clause for a group frame (bust and medium shots only). */
+function bodyLanguageShortEn(p: Pick<Performance, "emotion">, framing: Framing, text: string): string {
+  if (!showsHands(framing)) return "";
+  return text.trim() ? `Body: ${clean(text).replace(/[.。]+$/, "")}.` : `Body: a natural arm and hand pose that fits "${p.emotion || "the moment"}".`;
+}
+
 /** Head, gaze and body direction in English (from the checked direction values, never from free text). */
-function directionEn(e: Expression): string {
+function directionEn(e: Pick<Performance, "direction">): string {
   const d = e.direction;
   return `Head ${FACING_EN[d.facing]}, ${PITCH_EN[d.pitch]}${TILT_EN[d.tilt] ? `, ${TILT_EN[d.tilt]}` : ""}; ${GAZE_EN[d.gaze]}; body ${FACING_EN[d.body]}.`;
 }
@@ -131,7 +148,7 @@ const GAZE_SHORT: Record<Gaze, string> = {
   down_right: "down and screen-right",
 };
 /** The same direction in a few words, for the video beats (the reference image shows the pose). */
-function poseShort(e: Expression): string {
+function poseShort(e: Pick<Performance, "direction">): string {
   const d = e.direction;
   const head = [FACING_SHORT[d.facing], d.pitch === "up" ? "chin up" : d.pitch === "down" ? "chin down" : "", d.tilt === "none" ? "" : `tilted screen-${d.tilt}`];
   return `Pose: head ${head.filter(Boolean).join(", ")}; eyes ${GAZE_SHORT[d.gaze]}; body ${FACING_SHORT[d.body]}.`;
@@ -162,22 +179,28 @@ function blockingEn(data: ProjectData): string {
     .join(", ");
 }
 
-/** Which image references show each character (numbers as the prompt counts them). */
-function refNumbers(refs: ReferenceSlot[], characterId: string): string {
-  const nums = refs.flatMap((r, i) => (r.characterId === characterId ? [String(i + 1)] : []));
-  return nums.length > 1 ? `${nums.slice(0, -1).join(", ")} and ${nums[nums.length - 1]}` : nums[0] ?? "";
+/** How to find a character in the scene drawing: screen position and the first must-keep feature. */
+function spotEn(data: ProjectData, c: CastMember, en: ReturnType<typeof freshEnglish>): string {
+  const mark = en.cast.get(c.id)?.look?.[0] ?? shortLocks(c.locks, 1)[0];
+  return `${castName(data, c.id)} is the one ${c.position === "center" ? "in the center" : `on the ${POSITION_EN[c.position]} side`}${mark ? ` (${mark})` : ""}`;
 }
 
-/** Identity lines: every character must match their own design references. */
-function castIdentityEn(data: ProjectData, refs: ReferenceSlot[]): string[] {
+/**
+ * Identity lines. One character: image reference 1 is that character. Several: image reference 1 is the
+ * scene drawing with the whole cast together — every character, their relative sizes and the style come
+ * from that one image.
+ */
+function castIdentityEn(data: ProjectData, refs: ReferenceSlot[], en: ReturnType<typeof freshEnglish>): string[] {
+  if (!refs.length || refs[0].assetId !== data.baseAssetId) return [];
   if (!isMultiCast(data))
     return [`The character must match image reference 1 exactly: same identity, face proportions, hairstyle, colors, costume, accessories and art style.`];
-  return data.cast.map((c) => {
-    const nums = refNumbers(refs, c.id);
-    return nums
-      ? `${castName(data, c.id)} (${POSITION_EN[c.position]}) must match image reference ${nums} exactly: same identity, face proportions, hairstyle, colors, costume and accessories. Never mix features between characters.`
-      : `${castName(data, c.id)} (${POSITION_EN[c.position]}): drawn from the description below.`;
-  });
+  const extra = refs.filter((r) => r.why.startsWith("추가 참고")).length;
+  return [
+    `Image reference 1 is the scene reference drawing of the whole cast together: ${data.cast.map((c) => spotEn(data, c, en)).join("; ")}.`,
+    `Every character must match their own look in image reference 1 exactly: same identity, face proportions, hairstyle, colors, costume, accessories, and the same relative heights and body sizes between the characters. Never mix features between characters.${
+      extra ? ` Image reference${extra > 1 ? "s" : ""} ${refs.map((r, i) => (r.why.startsWith("추가 참고") ? i + 1 : 0)).filter(Boolean).join(", ")} ${extra > 1 ? "are" : "is"} extra design reference for the same cast.` : ""
+    }`,
+  ];
 }
 
 /** Must-keep features (and outfit) per character; short English where fresh. */
@@ -237,16 +260,13 @@ export function expressionLine(e: Expression, i: number, lang: "en" | "ko"): str
   return clean(parts.filter(Boolean).join(" "));
 }
 
-/** References shared by every beat image, in prompt order: each cast member's base drawing, then their extra designs. */
+/** References shared by every beat image, in prompt order: the scene drawing, then the extra references. */
 function identityRefs(data: ProjectData): ReferenceSlot[] {
   const refs: ReferenceSlot[] = [];
   const multi = isMultiCast(data);
-  for (const c of data.cast) {
-    const who = multi ? castLabel(data, c.id) : "캐릭터";
-    if (c.baseAssetId) refs.push({ role: `image reference ${refs.length + 1}`, assetId: c.baseAssetId, why: `${who} 정체성·그림체의 기준`, characterId: c.id });
-    for (const id of c.designRefAssetIds)
-      refs.push({ role: `image reference ${refs.length + 1}`, assetId: id, why: `${who} 추가 디자인 참고`, characterId: c.id });
-  }
+  if (data.baseAssetId)
+    refs.push({ role: "image reference 1", assetId: data.baseAssetId, why: multi ? "장면 기준 그림 — 출연진 전원의 정체성·크기·그림체" : "캐릭터 정체성·그림체의 기준" });
+  for (const id of data.designRefAssetIds) refs.push({ role: `image reference ${refs.length + 1}`, assetId: id, why: "추가 참고 그림" });
   return refs;
 }
 
@@ -320,7 +340,7 @@ export function buildExpressionHandoffs(data: ProjectData): ExpressionHandoff[] 
           `Image reference ${references.length} is another moment of this SAME shot (expression ${anchorNo}): match its camera distance, framing, head size and position, body placement and stance, lighting and line quality exactly; change only the facial acting, head direction${
             hands ? ", arms and hands" : ""
           } as described below. Do not copy its expression${hands ? " or gesture" : ""}.`,
-        ...castIdentityEn(data, references),
+        ...castIdentityEn(data, references, en),
         ...castLookEn(data, en, { appearance: true, outfit: true }),
         styleLine,
         refSheet,
@@ -338,10 +358,18 @@ export function buildExpressionHandoffs(data: ProjectData): ExpressionHandoff[] 
     }
 
     const n = data.cast.length;
-    const others = data.cast.filter((c) => c.id !== actor.id).map((c) => castName(data, c.id));
-    const othersText = clean(e.others)
-      ? `The others: ${sentence(clean(e.others))}`
-      : `The others (${others.join(", ")}): listening to ${actorName} with subtle, natural reactions and closed mouths, staying in their positions and looking toward ${actorName}.`;
+    // every character's acting in this moment, in screen order (the lead first)
+    const others = new Map((eb?.others ?? []).map((o) => [o.characterId, o]));
+    const lines = performancesOf(data, e)
+      .sort((x, y) => Number(y.lead) - Number(x.lead))
+      .map((p) => {
+        const name = castName(data, p.characterId);
+        const role = p.lead ? (data.dialogue.lines.find((l) => l.expressionId === e.id)?.line.trim() ? " — speaking" : " — the focus of the moment") : "";
+        const o = p.lead ? (eb ? { emotion: eb.emotion, face: eb.face, body: eb.body } : null) : others.get(p.characterId) ?? null;
+        const face = o ? `${INTENSITY_EN[p.intensity]} ${o.emotion}. ${o.face ? sentence(o.face) : ""}` : performanceLineEn(p);
+        const body = bodyLanguageShortEn(p, framing, o ? o.body : p.gesture);
+        return `- ${name}${role}: ${clean(`${face} ${directionEn(p)} ${body}`)}`;
+      });
     const prompt = [
       `Scene frame of ${n} characters together in ONE ${aspect} image, ${FRAMING_SCENE_EN[framing]}. Eye-level camera, plain white background. Not a sheet, not multiple panels or split screens; exactly these ${n} characters and nobody else.`,
       `Blocking (screen positions, identical in every frame of this scene): ${blockingEn(data)}.`,
@@ -349,13 +377,13 @@ export function buildExpressionHandoffs(data: ProjectData): ExpressionHandoff[] 
       `Composition: every character fully readable at this shot size with their whole head and any headwear inside the frame and a clear white margin above; characters do not overlap each other's faces; nobody is cut in half by the side edges.`,
       usesAnchor &&
         `Image reference ${references.length} is another moment of this SAME shot (frame ${anchorNo}): match its camera distance, framing, every character's size, position and stance, lighting and line quality exactly; change only the acting described below. Do not copy its expressions or gestures.`,
-      ...castIdentityEn(data, references),
+      ...castIdentityEn(data, references, en),
       ...castLookEn(data, en, { appearance: true, outfit: true }),
       styleLine,
       refSheet,
-      `${actorName} acts this moment (the focus of the frame). Expression: ${expression}`,
-      bodyLanguageEn(e, framing, eb ? eb.body : e.gesture),
-      othersText,
+      `Acting in this moment — every character at once (the listeners keep their mouths closed unless their line says otherwise):`,
+      ...lines,
+      hands && `Arms, hands and shoulders act together with each face; hands drawn clearly with natural anatomy (five fingers, no fused or extra fingers).`,
       s.instruction && `Additional direction: ${clean(s.instruction)}`,
       `Keep exactly the same camera, character positions and sizes, and white background as the other frames of this scene so they work as a matching set; only the faces, head directions${
         hands ? ", arms and hands" : ""
@@ -400,7 +428,7 @@ export function buildFrameHandoff(data: ProjectData, expressionId: string, shot:
       ? `One frame of a ${data.video.aspectRatio} ${vertical ? "vertical" : "horizontal"} video: ${data.cast.length} characters together, ${FRAMING_SCENE_EN[shot]}. Eye-level camera. Not a sheet, no panels or split screens, nobody else, no text.`
       : `One frame of a ${data.video.aspectRatio} ${vertical ? "vertical" : "horizontal"} video: ONE character, ${FRAMING_FRAME_EN[shot]}. Eye-level camera. Not a sheet, no panels, no other characters, no text.`,
     multi && `Blocking (screen positions): ${blockingEn(data)}.`,
-    ...castIdentityEn(data, references),
+    ...castIdentityEn(data, references, en),
     momentRef
       ? `Image reference ${momentRef} is the exact moment to draw: the same facial expressions, head directions, arms and hands${multi ? " of every character" : ""}. Only the camera framing changes to this shot size; never change the acting.`
       : `${multi ? `${actorName} acts this moment. ` : ""}Expression: ${INTENSITY_EN[e.intensity]} ${eb?.emotion ?? e.emotion}. ${eb ? sentence(eb.face) : ""} ${directionEn(e)}`,
@@ -444,20 +472,18 @@ export type VideoHandoff = {
 
 /**
  * Reference images for the video, in upload order:
- * each cast member's base drawing (identity), then one image per beat in timeline order.
- * Capped (models accept a limited number of references): the cast always comes first.
+ * the scene drawing (identity of the whole cast), then one image per beat in timeline order.
+ * Capped (models accept a limited number of references).
  */
-export function videoReferences(data: ProjectData, maxExpressions = MAX_VIDEO_REFERENCES - data.cast.length): VideoReference[] {
+export function videoReferences(data: ProjectData, maxExpressions = MAX_VIDEO_REFERENCES - 1): VideoReference[] {
   const refs: VideoReference[] = [];
   const multi = isMultiCast(data);
-  for (const c of data.cast)
-    if (c.baseAssetId)
-      refs.push({
-        assetId: c.baseAssetId,
-        label: multi ? `${castLabel(data, c.id)} 기본 그림 — character identity` : "캐릭터 기본 그림 — original character identity",
-        role: "identity",
-        characterId: c.id,
-      });
+  if (data.baseAssetId)
+    refs.push({
+      assetId: data.baseAssetId,
+      label: multi ? "장면 기준 그림 — the whole cast together (identity)" : "캐릭터 기본 그림 — original character identity",
+      role: "identity",
+    });
   const seen = new Set<string>();
   for (const seg of data.acting.segments) {
     const i = data.expressions.findIndex((e) => e.id === seg.expressionId);
@@ -492,6 +518,8 @@ const BUDGETS: Budget[] = [
 export const VIDEO_PROMPT_TARGET = 3500;
 /** With 영어 정리 the beats carry real acting in short English, worth a little more room. */
 export const VIDEO_PROMPT_TARGET_EN = 5000;
+/** Extra room for each character after the first (cast line, voice, their acting in every beat). */
+export const VIDEO_PROMPT_EXTRA_PER_CHARACTER = 900;
 
 /**
  * Shorten to at most `max` characters at a sentence end, else at a clause end, never inside brackets.
@@ -526,11 +554,11 @@ const noEndDot = (t: string) => t.replace(/[.。]+$/, "");
 const sentence = (t: string) => (/[.!?。…]$/.test(t) ? t : `${t}.`);
 
 /** Acting text for one beat, skipping empty fields. */
-function actingKo(e: Expression, framing: Framing, L: Limits = FULL): string {
+function actingKo(e: Omit<Performance, "characterId"> & { notes?: string }, framing: Framing, L: Limits = FULL): string {
   const d = e.direction;
   const face = (t: string) => (L.face ? noEndDot(clip(L.face === Infinity ? t : firstSentence(t), L.face)) : "");
   const gesture = showsHands(framing) && L.gesture ? noEndDot(clip(e.gesture, L.gesture)) : "";
-  const note = L.note ? noEndDot(clip(e.notes, L.note)) : "";
+  const note = L.note ? noEndDot(clip(e.notes ?? "", L.note)) : "";
   const parts = [
     face(e.brows) && `눈썹: ${face(e.brows)}`,
     face(e.eyes) && `눈: ${face(e.eyes)}`,
@@ -691,6 +719,40 @@ export function buildVideoHandoff(
         },
       ]),
   );
+  // group scenes: every other character's acting per beat (English where fresh), reconciled once
+  const reactionsOf = new Map(
+    multi
+      ? data.expressions.map((e, i) => {
+          const b = en.beats.get(e.id);
+          return [
+            e.id,
+            performancesOf(data, e)
+              .filter((p) => !p.lead)
+              .map((p) => {
+                const who = `${i + 1}번 표정 ${castLabel(data, p.characterId)}`;
+                const o = b?.others.find((x) => x.characterId === p.characterId);
+                return {
+                  p,
+                  en: o
+                    ? {
+                        emotion: o.emotion,
+                        face: reconcile(o.face, "face", `${who} 얼굴 연기 (영어)`, adjustments),
+                        body: hands ? reconcile(o.body, "motion", `${who} 팔·손 동작 (영어)`, adjustments) : "",
+                      }
+                    : null,
+                  ko: {
+                    ...p,
+                    brows: reconcile(p.brows, "face", `${who} 눈썹`, adjustments),
+                    eyes: reconcile(p.eyes, "face", `${who} 눈`, adjustments),
+                    mouth: reconcile(p.mouth, "face", `${who} 입`, adjustments),
+                    gesture: hands ? reconcile(p.gesture, "motion", `${who} 팔·손 동작`, adjustments) : p.gesture,
+                  },
+                };
+              }),
+          ] as const;
+        })
+      : [],
+  );
   const fixedTransition = new Map(
     data.acting.segments
       .map((x, k) => [x, k] as const)
@@ -749,7 +811,18 @@ export function buildVideoHandoff(
       const target = n ? `${multi ? "Frame" : "Expression"} target: reference image ${n}.` : "";
       const eb = fixed ? enBeats.get(seg.expressionId) : undefined;
       const who = multi ? nameOf(seg.expressionId) : "";
-      const others = multi && original ? clean(original.others) : "";
+      // the other characters at the same moment: English where fresh, else the team's Korean (`fixed` = for the model)
+      const reactionLines = (L2: Budget | Limits) =>
+        (reactionsOf.get(seg.expressionId) ?? []).map(({ p, en: o, ko }) => {
+          const name = castName(data, p.characterId);
+          const B = "enPose" in L2 ? L2 : BUDGETS[0];
+          if (fixed && o)
+            return `${name} (${INTENSITY_EN[p.intensity]} ${o.emotion}): ${[o.face && sentence(o.face), B.enBody && o.body && sentence(o.body), B.enPose && poseShort(p)]
+              .filter(Boolean)
+              .join(" ")}`;
+          const src = fixed ? ko : p;
+          return `${name} (${p.emotion || "듣는 반응"}): ${actingKo(src, framing, L2)}`;
+        });
       const says = (text: string) => (multi ? `${who} says exactly (${lang}): "${text}"` : `Say exactly (${lang}): "${text}"`);
       if (eb && original) {
         // short English: face, hands, the checked direction, then the move into the next expression
@@ -764,7 +837,7 @@ export function buildVideoHandoff(
           `${time}: ${who ? `${who} — ` : ""}${eb.emotion || original.emotion || "expression"}`,
           target,
           `${who ? `${who} acts` : "Acting"} (${INTENSITY_EN[original.intensity]}): ${acting.join(" ")}`,
-          // the English body line already carries the others' reactions; with no English the Korean is used
+          ...reactionLines(L),
           l?.line ? `${says(l.line)}${eb.delivery ? ` — ${eb.delivery}` : ""}` : "No dialogue in this beat.",
         ]
           .filter(Boolean)
@@ -776,16 +849,11 @@ export function buildVideoHandoff(
       const acting = e ? actingKo(e, framing, L) : "";
       const move = L.transition && !last ? noEndDot(clip(transition, L.transition)) : "";
       const how = L.delivery ? clip(delivery, L.delivery) : "";
-      const othersLine = multi
-        ? others
-          ? `다른 인물: ${noEndDot(clip(others, L === FULL ? Infinity : 160))}.`
-          : "The others listen and react with closed mouths."
-        : "";
       return [
         `${time}: ${who ? `${who} — ` : ""}${e?.emotion || "expression"}`,
         target,
         `${who ? `${who} acts` : "Acting"}: ${acting}${move ? ` 다음 표정으로: ${move}.` : ""}`,
-        othersLine,
+        ...reactionLines(L),
         l?.line ? `${says(l.line)}${how ? ` — ${how}` : ""}` : "No dialogue in this beat.",
       ]
         .filter(Boolean)
@@ -847,8 +915,8 @@ export function buildVideoHandoff(
             `Reference images (upload in this order):`,
             ...refs.map((r, i) => {
               if (r.role === "identity")
-                return multi && r.characterId
-                  ? `${i + 1}. character design of ${castName(data, r.characterId)} (${POSITION_EN[data.cast.find((c) => c.id === r.characterId)?.position ?? "center"]}) — identity only`
+                return multi
+                  ? `${i + 1}. scene reference drawing of the whole cast — ${data.cast.map((c) => spotEn(data, c, en)).join("; ")}; use it for identity and relative sizes only`
                   : `${i + 1}. character design — may show several views of the same character; use it for identity only`;
               const eb = r.expressionId ? enBeats.get(r.expressionId) : undefined;
               const label = multi ? "approved scene frame" : "approved expression target";
@@ -882,7 +950,8 @@ export function buildVideoHandoff(
     : "";
   const constraints = constraintsFor(rig);
   const assemble = (B: Budget) => [headerWith(B), beatsWith(B).join("\n\n"), directorBlock, constraints].filter(Boolean).join("\n\n");
-  const lengthTarget = enBeats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET;
+  // a group scene needs room for the cast, the voices and every character's acting per beat
+  const lengthTarget = (enBeats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) + (multi ? VIDEO_PROMPT_EXTRA_PER_CHARACTER * (data.cast.length - 1) : 0);
   let prompt = "";
   for (const B of BUDGETS) {
     prompt = assemble(B);

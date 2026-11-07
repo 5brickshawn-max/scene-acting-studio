@@ -63,14 +63,14 @@ async function imageBlocks(items: { assetId: string | null | undefined; label: s
   return (await Promise.all(items.map((x) => imageBlock(x.assetId, x.label)))).flat();
 }
 
-/** Every cast member's base drawing, labelled with number and name. */
+/** The scene drawing (the whole cast together), labelled with who stands where. */
 async function castImages(data: ProjectData): Promise<Content> {
   const multi = data.cast.length > 1;
-  return imageBlocks(
-    data.cast.map((c, i) => ({
-      assetId: c.baseAssetId,
-      label: multi ? `[인물 ${i + 1} 기본 그림 — ${castLabel(data, c.id)}, 화면 ${POSITION_LABEL[c.position]}]` : "[기본 그림 — 캐릭터의 기준]",
-    })),
+  return imageBlock(
+    data.baseAssetId,
+    multi
+      ? `[장면 기준 그림 — 출연진 ${data.cast.length}명이 함께 있음: ${data.cast.map((c, i) => `인물 ${i + 1} ${castLabel(data, c.id)}(화면 ${POSITION_LABEL[c.position]})`).join(", ")}]`
+      : "[기본 그림 — 캐릭터의 기준]",
   );
 }
 
@@ -158,12 +158,10 @@ async function buildRequest(job: JobRow, data: ProjectData) {
 
   switch (job.kind) {
     case "analyze_character": {
-      // one cast member per analysis (the one whose card asked); the style is the scene's shared style
-      const member = data.cast.find((c) => c.id === job.input.characterId) ?? data.cast[0];
-      const who = castLabel(data, member.id);
+      // one analysis of the scene drawing describes every cast member and the shared style
       const [base, refs] = await Promise.all([
-        imageBlock(member.baseAssetId, multi ? `[기본 그림 — ${who}]` : "[기본 그림 — 캐릭터의 기준]"),
-        imageBlocks(member.designRefAssetIds.map((id) => ({ assetId: id, label: "[추가 디자인 참고]" }))),
+        castImages(data),
+        imageBlocks(data.designRefAssetIds.map((id) => ({ assetId: id, label: "[추가 참고 그림]" }))),
       ]);
       return {
         schema: CharacterOut,
@@ -174,10 +172,11 @@ async function buildRequest(job: JobRow, data: ProjectData) {
             type: "text",
             text:
               (multi
-                ? `이 장면의 출연진 ${data.cast.length}명 중 ${who}의 기본 그림입니다. 이 인물만 보고 설명을 작성하세요. 다른 인물과 헷갈리지 않게 이 인물을 구별해 주는 요소를 locks 앞쪽에 두세요. style은 장면 전체가 함께 쓰는 그림체이므로, 이미 적힌 그림체가 있으면 이 그림과 맞는지 보고 다르면 questions에 알려 주세요.\n`
-                : `기본 그림만 보고 캐릭터 설명을 작성하세요.\n`) +
+                ? `장면 기준 그림에 출연진 ${data.cast.length}명이 함께 있습니다. 위 그림 설명의 이름과 화면 위치로 각 인물을 찾아, characters에 인물 번호(1~${data.cast.length})마다 하나씩 설명을 작성하세요. ` +
+                  `인물마다 다른 인물과 구별해 주는 요소를 locks 앞쪽에 두고, 인물끼리의 키·체격 차이도 appearance에 적으세요. 위치나 이름으로 누가 누구인지 확신할 수 없으면 questions에 남기세요.\n`
+                : `기본 그림만 보고 캐릭터 설명을 작성하세요. characters에는 인물 1 하나만 씁니다.\n`) +
               `- locks: 표정이 바뀌어도 절대 변하면 안 되는 식별 요소를 번호 목록으로\n` +
-              `- appearance: 얼굴 비율, 눈·코·입, 피부, 머리\n- outfit: 화면에 보이는 의상·장신구만\n- style: 선, 채색, 명암, 색감\n` +
+              `- appearance: 얼굴 비율, 눈·코·입, 피부, 머리\n- outfit: 화면에 보이는 의상·장신구만\n- style: 장면 전체의 선, 채색, 명암, 색감\n` +
               `보이지 않거나 확신할 수 없는 것은 지어내지 말고 questions에 확인 질문으로 남기세요.\n\n현재 입력값:\n${ctx}${extra}`,
           },
         ] as Content,
@@ -198,8 +197,9 @@ async function buildRequest(job: JobRow, data: ProjectData) {
             text:
               (multi
                 ? `이 장면(출연진 ${data.cast.length}명)의 표정(비트) ${data.expressionSetup.count}개를 장면 순서대로 설계하세요. expressions 배열 길이는 정확히 ${data.expressionSetup.count}개여야 합니다. ` +
-                  `표정마다 character에 연기하는 인물 번호(1~${data.cast.length})를 적고, others에 그 순간 나머지 인물의 반응을 이름으로 적으세요. 모든 인물이 적어도 한 번은 연기하게 하세요.\n`
-                : `이 캐릭터의 표정 ${data.expressionSetup.count}개를 설계하세요. expressions 배열 길이는 정확히 ${data.expressionSetup.count}개여야 합니다. character는 1, others는 빈 문자열로 두세요.\n`) +
+                  `표정마다 character에 중심 인물(대사가 있으면 말하는 인물) 번호(1~${data.cast.length})를 적고, 중심 인물의 연기는 표정 필드에, 같은 순간 나머지 인물 각각의 연기는 reactions에 인물마다 하나씩 적으세요(감정·강도·눈썹·눈·입·팔손·방향). ` +
+                  `말하지 않는 인물은 입을 다물고 시선·눈썹·숨·고개·손으로 반응합니다. 인물들의 시선과 몸 방향은 화면 위치를 기준으로 서로를 향하게 정하세요.\n`
+                : `이 캐릭터의 표정 ${data.expressionSetup.count}개를 설계하세요. expressions 배열 길이는 정확히 ${data.expressionSetup.count}개여야 합니다. character는 1, reactions는 빈 배열로 두세요.\n`) +
               (ref.length
                 ? `${refGridNote(data)}\n참고 시트의 각 칸을 하나씩 따로 관찰해 감정, 얼굴 근육, 머리 방향, 시선, 몸 방향을 기록하세요. ` +
                   `칸마다 방향이 반대로 바뀔 수 있으니 이전 칸의 값을 복사하지 마세요. directionEvidence에 판단 근거를 쓰세요.\n` +
@@ -332,7 +332,12 @@ async function buildRequest(job: JobRow, data: ProjectData) {
             `  입: ${e.mouth}`,
             `  메모: ${fx("notes", e.id, e.notes)}`,
             showsHands(framing) ? `  팔·손: ${fx("gesture", e.id, e.gesture)}` : "  팔·손: (손이 화면에 안 보이는 구도)",
-            multi ? `  나머지 인물: ${e.others || "(듣고 반응)"}` : "",
+            ...(multi
+              ? e.reactions.map(
+                  (r) =>
+                    `  같은 순간 인물 ${data.cast.findIndex((c) => c.id === r.characterId) + 1} ${castLabel(data, r.characterId)}: ${r.emotion || "(감정 미정)"} · 강도 ${INTENSITY_LABEL[r.intensity]} · 눈썹 ${r.brows} · 눈 ${r.eyes} · 입 ${r.mouth}${showsHands(framing) ? ` · 팔·손 ${r.gesture}` : ""}`,
+                )
+              : []),
             `  다음 표정으로: ${seg ? fx("transition", e.id, seg.transition) : ""}`,
             line?.line ? `  대사: "${line.line}" (뜻: ${line.meaning}) · 말투: ${fx("delivery", e.id, line.delivery)}` : "  대사: 없음",
           ]
@@ -363,7 +368,9 @@ async function buildRequest(job: JobRow, data: ProjectData) {
               `- cast: 인물마다 하나씩(character = 인물 번호). look은 '유지할 특징'과 '외형'에서 그림에 보이는 식별 요소를 색·모양·위치까지 구체적인 영어 명사구로, 중요한 순서로 최대 8개${
                 multi ? " (다른 인물과 구별되는 요소를 앞에)" : ""
               }. outfit, voice는 각각 영어 한 문장\n` +
-              `- beats: 표정마다 하나씩(panel = 표정 번호). face는 연기하는 인물의 얼굴 연기, body는 팔·손·몸 연기${multi ? "와 이어서 나머지 인물의 반응(이름으로)" : ""}, delivery는 대사 말투\n` +
+              `- beats: 표정마다 하나씩(panel = 표정 번호). face는 중심 인물의 얼굴 연기, body는 팔·손·몸 연기, delivery는 대사 말투${
+                multi ? ". others에는 '같은 순간' 나머지 인물마다 하나씩(character = 인물 번호) emotion·face·body" : ""
+              }\n` +
               `- transition은 얼굴이 녹듯 바뀌는 모핑을 막는 핵심입니다. 다음 표정으로 넘어가는 변화를 실어 나르는 몸의 동작 하나로 쓰세요(눈을 깜빡이는 사이, 숨을 들이쉬며, 고개를 돌리며, 손이 얼굴 앞을 지나가며 등). 설계의 '다음 표정으로'가 있으면 그 동작을 살리세요. 마지막 표정은 빈 문자열\n` +
               `- 초 단위 시간, 발음 설명, 얼굴·몸·시선 방향(정면·3/4·화면 왼쪽 등)은 쓰지 마세요. 방향은 앱이 확인된 값으로 따로 넣습니다. 대사 원문은 옮기지 마세요.\n\n` +
               `출연진\n${cast}\n\n그림체(장면 공통): ${data.style}\n\n` +

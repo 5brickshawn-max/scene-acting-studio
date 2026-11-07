@@ -59,7 +59,7 @@ describe("directions", () => {
       summary: "",
       styleWarning: null,
       expressions: d.expressions.map((_, i) => ({
-        character: 1, others: "", panel: i + 1, emotion: `감정${i}`, intensity: "medium", brows: "", eyes: "", mouth: "", notes: "", gesture: i === 0 ? "손을 가슴에" : "",
+        character: 1, reactions: [], panel: i + 1, emotion: `감정${i}`, intensity: "medium", brows: "", eyes: "", mouth: "", notes: "", gesture: i === 0 ? "손을 가슴에" : "",
         facing: i < 2 ? "left_3q" : "right_3q", pitch: "level", tilt: "none", gaze: "camera", body: i < 2 ? "left_3q" : "right_3q",
         directionEvidence: "",
       })),
@@ -153,11 +153,12 @@ describe("applying AI proposals", () => {
     const d = readyCharacter();
     const out = applyCharacter(
       d,
-      { summary: "", locks: "NEW", appearance: "NEW", outfit: "NEW", style: "NEW", questions: ["왕관 탈착?"] },
+      { summary: "", characters: [{ character: 1, locks: "NEW", appearance: "NEW", outfit: "NEW" }], style: "NEW", questions: ["왕관 탈착?"] },
       ["outfit", "questions"],
     );
     expect(out.cast[0].locks).toBe("1) 비대칭 헤어");
     expect(out.cast[0].outfit).toBe("NEW");
+    expect(out.style).toBe("고대비 2D");
     expect(out.cast[0].questions).toEqual([{ question: "왕관 탈착?", answer: "" }]);
   });
 });
@@ -342,7 +343,7 @@ describe("framing and gestures", () => {
       summary: "",
       styleWarning: null,
       expressions: d.expressions.map((_, i) => ({
-        character: 1, others: "", panel: null, emotion: `감정${i}`, intensity: "medium" as const, brows: "", eyes: "", mouth: "", notes: "",
+        character: 1, reactions: [], panel: null, emotion: `감정${i}`, intensity: "medium" as const, brows: "", eyes: "", mouth: "", notes: "",
         gesture: "손을 허리에", facing: "front" as const, pitch: "level" as const, tilt: "none" as const, gaze: "camera" as const,
         body: "front" as const, directionEvidence: "",
       })),

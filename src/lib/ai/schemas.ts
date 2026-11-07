@@ -6,20 +6,44 @@ import { AI_FIX_TARGETS, type CheckTextFix } from "@/lib/domain/fixes";
  * the model never has to invent ids; the app maps numbers back to expressions
  * when a person applies the proposal. */
 
+/** One analysis of the scene drawing: every cast member (by cast number) and the shared style. */
 export const CharacterOut = z.object({
   summary: z.string().describe("한두 문장 요약"),
-  locks: z.string(),
-  appearance: z.string(),
-  outfit: z.string(),
-  style: z.string(),
+  characters: z
+    .array(
+      z.object({
+        character: z.number().int().describe("인물 번호 (출연진 순서, 1부터)"),
+        locks: z.string().describe("표정이 바뀌어도 절대 변하면 안 되는 식별 요소, 번호 목록"),
+        appearance: z.string().describe("얼굴 비율, 눈·코·입, 피부, 머리"),
+        outfit: z.string().describe("화면에 보이는 의상·장신구만"),
+      }),
+    )
+    .describe("출연진 한 명마다 하나"),
+  style: z.string().describe("장면 전체의 선, 채색, 명암, 색감"),
   questions: z.array(z.string()).describe("그림만으로 확신할 수 없는 점에 대한 확인 질문"),
 });
 
+/** Another character's acting at the same moment (group scenes). */
+const ReactionOutItem = z.object({
+  character: z.number().int().describe("인물 번호 (1부터)"),
+  emotion: z.string(),
+  intensity: z.enum(INTENSITY),
+  brows: z.string(),
+  eyes: z.string(),
+  mouth: z.string().describe("말하지 않는 인물은 입을 다문 상태로"),
+  gesture: z.string().describe("팔·손·어깨 동작 (클로즈업 구도면 빈 문자열)"),
+  facing: z.enum(FACING),
+  pitch: z.enum(PITCH),
+  tilt: z.enum(TILT),
+  gaze: z.enum(GAZE),
+  body: z.enum(FACING),
+});
+
 export const ExpressionOutItem = z.object({
-  character: z.number().int().describe("이 표정을 연기하는(대사가 있으면 말하는) 인물 번호 (출연진 순서, 1부터). 한 명이면 1"),
-  others: z
-    .string()
-    .describe("이 순간 나머지 인물들이 하는 연기 (이름으로: 듣는 반응·시선·자세). 출연진이 한 명이면 빈 문자열"),
+  character: z.number().int().describe("이 표정의 중심 인물(대사가 있으면 말하는 인물) 번호 (출연진 순서, 1부터). 한 명이면 1"),
+  reactions: z
+    .array(ReactionOutItem)
+    .describe("여러 인물 장면: 같은 순간 나머지 인물 각각의 연기 (중심 인물 제외, 한 명마다 하나). 한 명 장면이면 빈 배열"),
   panel: z.number().int().nullable().describe("표정 참고 시트의 칸 번호(1부터). 참고 시트가 없으면 null"),
   emotion: z.string(),
   intensity: z.enum(INTENSITY),
@@ -129,11 +153,17 @@ export const EnglishOut = z.object({
       panel: z.number().int().describe("표정 번호 (1부터)"),
       emotion: z.string().describe("감정, 영어 2~5단어"),
       face: z.string().describe("연기하는 인물의 눈썹·눈·입 연기, 영어 한 문장 (160자 이내)"),
-      body: z
-        .string()
-        .describe(
-          "연기하는 인물의 팔·손·어깨·몸 연기, 영어 한 문장 (120자 이내). 여러 인물이면 이어서 나머지 인물의 반응을 이름으로 한 문장 더 (전체 190자 이내). 손이 화면에 안 보이는 한 명 장면이면 빈 문자열",
-        ),
+      body: z.string().describe("중심 인물의 팔·손·어깨·몸 연기, 영어 한 문장 (120자 이내). 손이 화면에 안 보이는 구도면 빈 문자열"),
+      others: z
+        .array(
+          z.object({
+            character: z.number().int().describe("인물 번호 (1부터)"),
+            emotion: z.string().describe("감정, 영어 2~5단어"),
+            face: z.string().describe("눈썹·눈·입 연기, 영어 한 문장 (120자 이내)"),
+            body: z.string().describe("팔·손·몸 연기, 영어 한 문장 (100자 이내). 손이 안 보이는 구도면 빈 문자열"),
+          }),
+        )
+        .describe("여러 인물 장면: 중심 인물을 뺀 나머지 인물마다 하나. 한 명 장면이면 빈 배열"),
       transition: z
         .string()
         .describe("다음 표정으로 넘어가게 하는 몸의 동작(깜빡임·숨·고개 돌림·얼굴 앞을 지나는 손 등), 영어 한 문장 (100자 이내). 마지막 표정이면 빈 문자열"),

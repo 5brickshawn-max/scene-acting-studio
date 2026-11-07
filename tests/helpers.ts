@@ -5,7 +5,8 @@ export function setCharacter(
   d: ProjectData,
   patch: { name?: string; baseAssetId?: string | null; locks?: string; appearance?: string; outfit?: string; style?: string; voice?: string },
 ): void {
-  const { style, ...rest } = patch;
+  const { style, baseAssetId, ...rest } = patch;
   if (style !== undefined) d.style = style;
+  if (baseAssetId !== undefined) d.baseAssetId = baseAssetId;
   d.cast[0] = { ...d.cast[0], name: d.cast[0].name || d.title, ...rest };
 }

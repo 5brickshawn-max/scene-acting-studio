@@ -59,7 +59,7 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
 
   // ── the cast: who is in the shot, who speaks with which voice ──
   if (data.cast.length > 1) {
-    add("ok", "출연진", `${data.cast.length}명이 한 화면에 나옵니다: ${data.cast.map((c) => castLabel(data, c.id)).join(", ")}. 대사마다 말하는 인물을 지정해 입 모양이 섞이지 않게 지시합니다.`);
+    add("ok", "출연진", `${data.cast.length}명이 한 화면에 나옵니다: ${data.cast.map((c) => castLabel(data, c.id)).join(", ")}. 구간마다 모든 인물의 연기를 함께 지시하고, 대사마다 말하는 인물을 지정해 입 모양이 섞이지 않게 합니다.`);
     const speakers = new Set(
       data.dialogue.lines.filter((l) => l.line.trim()).map((l) => data.expressions.find((e) => e.id === l.expressionId)?.characterId),
     );
@@ -72,7 +72,7 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
       add(
         "warn",
         "참고 그림 수",
-        `영상 모델이 받는 참고 그림 수에 한도가 있어 표정 그림 ${left.length}장(${left.map((e) => `${data.expressions.indexOf(e) + 1}번`).join(", ")})은 첨부하지 않습니다. 인물 기본 그림 ${data.cast.length}장이 먼저 들어갑니다.`,
+        `영상 모델이 받는 참고 그림 수에 한도가 있어 표정 그림 ${left.length}장(${left.map((e) => `${data.expressions.indexOf(e) + 1}번`).join(", ")})은 첨부하지 않습니다. 장면 기준 그림이 먼저 들어가고, 그다음 타임라인 순서로 들어갑니다.`,
       );
   }
 

@@ -157,23 +157,24 @@ export function ReviewView({ b, dataUrl }: { b: ReviewBundle; dataUrl: string })
       </header>
 
       <Step n={1} title={multi ? `출연진 ${d.cast.length}명` : "캐릭터"} approved={approved(0)}>
+        <div className="space-y-2 max-w-xl">
+          <div className="field-label">{multi ? "장면 기준 그림 (출연진 전원)" : "기본 그림"}</div>
+          <Media a={A(d.baseAssetId)} label={multi ? "장면 기준 그림" : "기본 그림"} />
+          {d.designRefAssetIds.length > 0 && (
+            <>
+              <div className="field-label">추가 참고 그림</div>
+              <div className="grid grid-cols-3 gap-2">
+                {d.designRefAssetIds.map((id) => (
+                  <Media key={id} a={A(id)} label="추가 참고" />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
         {d.cast.map((c) => (
-          <div key={c.id} className="grid sm:grid-cols-[minmax(0,300px)_1fr] gap-5 rounded-xl border border-line p-3">
-            <div className="space-y-2">
-              <div className="field-label">{multi ? `${castLabel(d, c.id)} · ${POSITION_LABEL[c.position]}` : "기본 그림"}</div>
-              <Media a={A(c.baseAssetId)} label="기본 그림" />
-              {c.designRefAssetIds.length > 0 && (
-                <>
-                  <div className="field-label">추가 디자인 참고</div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {c.designRefAssetIds.map((id) => (
-                      <Media key={id} a={A(id)} label="디자인 참고" />
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+          <div key={c.id} className="rounded-xl border border-line p-3">
             <div className="space-y-3 min-w-0">
+              {multi && <div className="font-semibold">{`${castLabel(d, c.id)} · ${POSITION_LABEL[c.position]}`}</div>}
               <Field label="꼭 유지할 특징" value={c.locks} />
               <Field label="외형" value={c.appearance} />
               <Field label="의상" value={c.outfit} />
@@ -242,7 +243,16 @@ export function ReviewView({ b, dataUrl }: { b: ReviewBundle; dataUrl: string })
                 <Field label="눈" value={e.eyes} />
                 <Field label="입" value={e.mouth} />
                 <Field label="메모" value={e.notes} />
-                {multi && <Field label="나머지 인물의 반응" value={e.others || "(비어 있음 — 듣고 반응)"} />}
+                {multi &&
+                  e.reactions.map((r) => (
+                    <Field
+                      key={r.characterId}
+                      label={`같은 순간 ${castLabel(d, r.characterId)}`}
+                      value={`${r.emotion || "(감정 미정)"} · ${INTENSITY_LABEL[r.intensity]} · 얼굴 ${FACING_LABEL[r.direction.facing]} · 몸 ${FACING_LABEL[r.direction.body]} · 시선 ${GAZE_LABEL[r.direction.gaze]}${
+                        r.gesture ? ` · 팔·손 ${r.gesture}` : ""
+                      }${[r.brows, r.eyes, r.mouth].some(Boolean) ? ` · ${[r.brows, r.eyes, r.mouth].filter(Boolean).join(" / ")}` : ""}`}
+                    />
+                  ))}
                 {p && <Prompt title="그림 프롬프트" text={p.prompt} />}
               </li>
             );

@@ -192,7 +192,7 @@ export function HiggsfieldDirect({
   // To (re)make next to the anchor: no image yet, or made at another shot size / aspect ratio.
   const redo = exps.filter((e) => e.id !== anchor?.id && (!e.imageAssetId || imageIsStale(e, framing, aspect))).map((e) => e.id);
   const others = exps.filter((e) => e.id !== anchor?.id).map((e) => e.id);
-  const ready = canEdit && !h.busy && !h.quote && doc.data.cast.every((c) => Boolean(c.baseAssetId));
+  const ready = canEdit && !h.busy && !h.quote && Boolean(doc.data.baseAssetId);
   const ask = (ids?: string[]) => h.askQuote({ target: "expressions", model, expressionIds: ids });
   const pendingFor = (id: string) => h.pending.filter((j) => (j.input as { expressionId?: string }).expressionId === id);
   const runningFor = (id: string) => h.running.some((j) => (j.input as { expressionId?: string }).expressionId === id);
@@ -416,7 +416,7 @@ export function FrameMaker({ onUse }: { onUse: (slot: "start" | "end", assetId: 
     start: { id: order[0]?.id ?? "", shot: "close_up" },
     end: { id: order[order.length - 1]?.id ?? "", shot: "bust" },
   });
-  const ready = canEdit && !h.busy && !h.quote && data.cast.every((c) => Boolean(c.baseAssetId));
+  const ready = canEdit && !h.busy && !h.quote && Boolean(data.baseAssetId);
 
   return (
     <div className="rounded-lg border border-line p-4 space-y-3">
@@ -588,7 +588,7 @@ export function HiggsfieldVideo({
       {!h.quote && (
         <button
           className="btn btn-dark"
-          disabled={!canEdit || h.busy || englishBusy || doc.data.cast.some((c) => !c.baseAssetId)}
+          disabled={!canEdit || h.busy || englishBusy || !doc.data.baseAssetId}
           onClick={() => h.askQuote({ target: "video", model, resolution: res })}
         >
           {h.busy ? "비용 확인 중…" : englishBusy ? "영어 정리 중… (끝나면 생성할 수 있습니다)" : "비용 확인 후 생성"}

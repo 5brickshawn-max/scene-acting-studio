@@ -3,6 +3,8 @@
 import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT } from "@/lib/ai/schemas";
 import {
   blankExpression,
+  withReactionsFor,
+  type Performance,
   reopenFrom,
   weightedSegments,
   type Expression,
@@ -12,28 +14,23 @@ import {
 export type CharacterField = "locks" | "appearance" | "outfit" | "style" | "questions";
 
 /**
- * Apply an analysis of one cast member's drawing. "style" is the scene's shared art style
- * (every character is drawn in it), the rest belongs to that character.
+ * Apply an analysis of the scene drawing. Picked fields apply to every character the AI described
+ * (by cast number); "style" is the scene's shared style; questions go to the first character's list
+ * (they are about the scene as a whole).
  */
-export function applyCharacter(data: ProjectData, out: CharacterOutT, fields: CharacterField[], characterId?: string): ProjectData {
-  const id = characterId && data.cast.some((c) => c.id === characterId) ? characterId : data.cast[0].id;
-  let style = data.style;
-  const cast = data.cast.map((member) => {
-    if (member.id !== id) return member;
+export function applyCharacter(data: ProjectData, out: CharacterOutT, fields: CharacterField[]): ProjectData {
+  const pick = new Set(fields);
+  const cast = data.cast.map((member, i) => {
+    const o = out.characters.find((x) => x.character === i + 1);
     const c = { ...member };
-    for (const f of fields) {
-      if (f === "questions") {
-        const existing = new Set(c.questions.map((q) => q.question));
-        c.questions = [...c.questions, ...out.questions.filter((q) => !existing.has(q)).map((q) => ({ question: q, answer: "" }))];
-      } else if (f === "style") {
-        style = out.style;
-      } else {
-        c[f] = out[f];
-      }
+    if (o) for (const f of ["locks", "appearance", "outfit"] as const) if (pick.has(f)) c[f] = o[f];
+    if (i === 0 && pick.has("questions")) {
+      const existing = new Set(c.questions.map((q) => q.question));
+      c.questions = [...c.questions, ...out.questions.filter((q) => !existing.has(q)).map((q) => ({ question: q, answer: "" }))];
     }
     return c;
   });
-  return reopenFrom({ ...data, cast, style }, 0);
+  return reopenFrom({ ...data, cast, style: pick.has("style") ? out.style : data.style }, 0);
 }
 
 /** AI directions are marked "ai" so the step cannot be approved until a person confirms them. */
@@ -44,12 +41,33 @@ export function applyExpressions(data: ProjectData, out: ExpressionsOutT, indexe
     const prev = data.expressions[i] ?? blankExpression(i + 1, data.cast[i % data.cast.length].id);
     const o = out.expressions[i];
     if (!o || !pick.has(i)) return prev;
-    // the AI names the actor by cast number (1-based); keep the current actor if it names none
+    // the AI names the lead by cast number (1-based); keep the current lead if it names none
     const actor = data.cast[(o.character ?? 0) - 1]?.id ?? prev.characterId;
-    return {
+    // every other character's acting at that moment (AI directions wait for a person's check, like the lead's)
+    const reactions: Performance[] =
+      data.cast.length > 1
+        ? (o.reactions ?? []).flatMap((r) => {
+            const id = data.cast[r.character - 1]?.id;
+            if (!id || id === actor) return [];
+            return [
+              {
+                characterId: id,
+                emotion: r.emotion,
+                intensity: r.intensity,
+                brows: r.brows,
+                eyes: r.eyes,
+                mouth: r.mouth,
+                gesture: r.gesture ?? "",
+                direction: { facing: r.facing, pitch: r.pitch, tilt: r.tilt, gaze: r.gaze, body: r.body },
+                directionStatus: "ai" as const,
+              },
+            ];
+          })
+        : [];
+    return withReactionsFor(data.cast, {
       ...prev,
       characterId: actor,
-      others: data.cast.length > 1 ? o.others ?? prev.others : "",
+      reactions: reactions.length ? reactions : prev.characterId === actor ? prev.reactions : [],
       panel: o.panel,
       emotion: o.emotion,
       intensity: o.intensity,
@@ -61,7 +79,7 @@ export function applyExpressions(data: ProjectData, out: ExpressionsOutT, indexe
       gesture: o.gesture ?? prev.gesture,
       direction: { facing: o.facing, pitch: o.pitch, tilt: o.tilt, gaze: o.gaze, body: o.body },
       directionStatus: "ai",
-    };
+    });
   });
   return reopenFrom(
     {

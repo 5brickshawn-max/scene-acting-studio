@@ -103,12 +103,7 @@ export function CharacterProposal({ job, out }: { job: JobView; out: CharacterOu
   const { doc } = useEditor();
   const apply = useApply(job);
   const d = doc.data;
-  // analysis jobs name their cast member; a consult proposal has none, so the team picks one
-  const [target, setTarget] = useState(
-    d.cast.some((c) => c.id === job.input?.characterId) ? job.input.characterId! : d.cast[0].id,
-  );
-  const member = d.cast.find((c) => c.id === target) ?? d.cast[0];
-  const now = (k: Exclude<CharacterField, "questions">) => (k === "style" ? d.style : member[k]);
+  const multi = d.cast.length > 1;
   const [picked, setPicked] = useState<Set<CharacterField>>(
     new Set<CharacterField>(["locks", "appearance", "outfit", "style", "questions"]),
   );
@@ -119,35 +114,46 @@ export function CharacterProposal({ job, out }: { job: JobView; out: CharacterOu
       else n.add(k);
       return n;
     });
+  const perCharacter = CHAR_FIELDS.filter((f) => f.key !== "style") as { key: "locks" | "appearance" | "outfit"; label: string }[];
   return (
     <ProposalShell
       job={job}
-      title={d.cast.length > 1 ? `캐릭터 설명 · ${castLabel(d, member.id)}` : "캐릭터 설명"}
+      title={multi ? `출연진 ${d.cast.length}명 설명` : "캐릭터 설명"}
       summary={out.summary}
       applyDisabled={picked.size === 0}
-      onApply={() => apply(applyCharacter(doc.data, out, [...picked], member.id), `AI 캐릭터 설명 적용 (${castLabel(d, member.id)})`)}
+      onApply={() => apply(applyCharacter(doc.data, out, [...picked]), "AI 캐릭터 설명 적용")}
     >
       <div className="space-y-3">
-        {d.cast.length > 1 && !job.input?.characterId && (
-          <label className="block">
-            <span className="field-label">적용할 인물</span>
-            <select className="input" value={target} onChange={(e) => setTarget(e.target.value)}>
-              {d.cast.map((c) => (
-                <option key={c.id} value={c.id}>{castLabel(d, c.id)}</option>
-              ))}
-            </select>
-          </label>
-        )}
-        {CHAR_FIELDS.map((f) => (
+        {perCharacter.map((f) => (
           <label key={f.key} className="flex gap-3 items-start rounded-lg bg-white border border-line p-3">
             <input type="checkbox" className="mt-1 size-5" checked={picked.has(f.key)} onChange={() => toggle(f.key)} />
-            <span className="flex-1">
+            <span className="flex-1 space-y-2">
               <span className="font-semibold">{f.label}</span>
-              <span className="block whitespace-pre-wrap">{out[f.key]}</span>
-              {now(f.key) && now(f.key) !== out[f.key] && <span className="block text-[13px] text-muted mt-1">현재: {now(f.key)}</span>}
+              {d.cast.map((c, i) => {
+                const o = out.characters.find((x) => x.character === i + 1);
+                if (!o) return null;
+                return (
+                  <span key={c.id} className="block">
+                    {multi && <span className="block text-[13px] font-semibold">{castLabel(d, c.id)}</span>}
+                    <span className="block whitespace-pre-wrap">{o[f.key]}</span>
+                    {c[f.key] && c[f.key] !== o[f.key] && <span className="block text-[13px] text-muted mt-1">현재: {c[f.key]}</span>}
+                  </span>
+                );
+              })}
             </span>
           </label>
         ))}
+        <label className="flex gap-3 items-start rounded-lg bg-white border border-line p-3">
+          <input type="checkbox" className="mt-1 size-5" checked={picked.has("style")} onChange={() => toggle("style")} />
+          <span className="flex-1">
+            <span className="font-semibold">그림체와 색감 (장면 공통)</span>
+            <span className="block whitespace-pre-wrap">{out.style}</span>
+            {d.style && d.style !== out.style && <span className="block text-[13px] text-muted mt-1">현재: {d.style}</span>}
+          </span>
+        </label>
+        {out.characters.length < d.cast.length && (
+          <p className="notice notice-warn">AI가 출연진 {d.cast.length}명 중 {out.characters.length}명만 찾았습니다. 이름·화면 위치가 그림과 맞는지 확인하세요.</p>
+        )}
         {out.questions.length > 0 && (
           <label className="flex gap-3 items-start rounded-lg bg-white border border-line p-3">
             <input type="checkbox" className="mt-1 size-5" checked={picked.has("questions")} onChange={() => toggle("questions")} />
@@ -210,7 +216,16 @@ export function ExpressionsProposal({ job, out }: { job: JobView; out: Expressio
                 <span className="block">눈썹 {e.brows} / 눈 {e.eyes} / 입 {e.mouth}</span>
                 {e.gesture && <span className="block">팔·손 {e.gesture}</span>}
                 <span className="block">얼굴 <strong>{FACING_LABEL[e.facing]}</strong> · 시선 {GAZE_LABEL[e.gaze]} · 몸 {FACING_LABEL[e.body]}</span>
-                {doc.data.cast.length > 1 && e.others && <span className="block">나머지 인물: {e.others}</span>}
+                {doc.data.cast.length > 1 &&
+                  (e.reactions ?? []).map((r) => {
+                    const c = doc.data.cast[r.character - 1];
+                    return (
+                      <span key={r.character} className="block">
+                        같은 순간 {c ? castLabel(doc.data, c.id) : `인물 ${r.character}`}: {r.emotion} · {INTENSITY_LABEL[r.intensity]} · 얼굴 {FACING_LABEL[r.facing]} · 시선 {GAZE_LABEL[r.gaze]}
+                        {r.gesture ? ` · ${r.gesture}` : ""}
+                      </span>
+                    );
+                  })}
                 <span className="block text-[13px] text-muted">근거: {e.directionEvidence}</span>
               </span>
             </label>

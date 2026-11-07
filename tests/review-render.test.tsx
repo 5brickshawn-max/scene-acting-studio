@@ -11,7 +11,7 @@ describe("review page", () => {
     const d = createProjectData("결투 직전", 2);
     d.cast[0] = { ...d.cast[0], name: "칼리엘라", voice: "낮은 알토" };
     d.cast[1] = { ...d.cast[1], name: "브람", voice: "맑은 테너" };
-    d.expressions[0].others = "브람이 노려본다";
+    d.expressions[0].reactions[0].emotion = "노려보는 경계";
     const b = {
       project: { id: "p", name: "결투 직전", version: 3, updatedAt: new Date().toISOString() },
       link: { expiresAt: Date.now() + 3600_000 },
@@ -26,7 +26,8 @@ describe("review page", () => {
     expect(html).toContain("출연진 2명");
     expect(html).toContain("A 칼리엘라");
     expect(html).toContain("B 브람");
-    expect(html).toContain("브람이 노려본다");
+    expect(html).toContain("같은 순간 B 브람");
+    expect(html).toContain("노려보는 경계");
     expect(html).toContain("목소리 (B 브람)");
   });
 });

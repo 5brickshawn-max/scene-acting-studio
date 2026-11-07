@@ -17,12 +17,13 @@ export const BASE_SYSTEM = `당신은 2D 애니메이션 스튜디오의 장면 
 
 여러 인물 장면:
 - 인물은 출연진 번호(1부터)와 이름으로 구분합니다. 인물마다 화면 위치(왼쪽·가운데·오른쪽)가 정해져 있고, 쇼트 내내 바뀌지 않습니다.
-- 표정(비트)마다 연기하는 인물이 한 명 있고, 대사가 있으면 그 인물이 말합니다. 나머지 인물은 그 순간 듣고 반응합니다(입은 다물고 시선·눈썹·숨·작은 고개 움직임).
+- 인물들은 장면 기준 그림 한 장에 함께 그려져 있고, 그림 속 위치·특징으로 구별합니다.
+- 표정(비트)마다 모든 인물의 연기를 함께 정합니다. 중심 인물이 한 명 있고, 대사가 있으면 그 인물이 말합니다. 나머지 인물도 그 순간 각자의 감정·얼굴·자세·방향으로 연기합니다(말하지 않을 때는 입을 다묾).
 - 상대를 바라보는 방향은 화면 위치로 정해집니다. 예: 화면 왼쪽 인물이 오른쪽 인물을 보면 얼굴은 right_3q 쪽, 시선은 right.`;
 
 export const STEP_CONTEXT: Record<number, string> = {
-  0: "1단계 출연진 — 인물마다 기본 그림을 기준으로 유지할 특징, 외형, 의상을 정리하고, 장면의 그림체와 인물 위치를 정함",
-  1: "2단계 표정 — 표정(비트)별 연기하는 인물, 감정, 얼굴 근육, 머리·시선·몸 방향, 나머지 인물의 반응을 설계",
+  0: "1단계 출연진 — 장면 기준 그림(출연진 전원이 함께 있는 그림) 한 장을 기준으로 인물마다 유지할 특징, 외형, 의상을 정리하고, 장면의 그림체와 인물 위치를 정함",
+  1: "2단계 표정 — 표정(비트)마다 중심 인물과 모든 인물의 감정, 얼굴 근육, 팔·손, 머리·시선·몸 방향을 함께 설계",
   2: "3단계 대사 — 표정별 대사(말하는 인물), 의미, 말투, 인물별 목소리",
   3: "4단계 액팅 — 표정 순서와 시간 배분, 전환 연기",
   4: "5단계 영상 프롬프트 — 영상 생성용 지시문 정리",
@@ -60,10 +61,14 @@ export function projectContext(d: ProjectData, step: number): string {
       const dir = e.direction;
       lines.push(
         `표정 ${i + 1}: ${actor(e.characterId)}${e.emotion || "(미정)"} · ${INTENSITY_LABEL[e.intensity]} · 눈썹 ${e.brows} · 눈 ${e.eyes} · 입 ${e.mouth} · ` +
-          `얼굴 ${FACING_LABEL[dir.facing]} · 시선 ${GAZE_LABEL[dir.gaze]} · 몸 ${FACING_LABEL[dir.body]}${e.gesture ? ` · 팔·손 ${e.gesture}` : ""}${e.notes ? ` · ${e.notes}` : ""}${
-            multi && e.others.trim() ? ` · 나머지 인물: ${e.others}` : ""
-          }`,
+          `얼굴 ${FACING_LABEL[dir.facing]} · 시선 ${GAZE_LABEL[dir.gaze]} · 몸 ${FACING_LABEL[dir.body]}${e.gesture ? ` · 팔·손 ${e.gesture}` : ""}${e.notes ? ` · ${e.notes}` : ""}`,
       );
+      if (multi)
+        for (const r of e.reactions)
+          lines.push(
+            `  같은 순간 ${castLabel(d, r.characterId)}: ${r.emotion || "(미정)"} · ${INTENSITY_LABEL[r.intensity]} · 눈썹 ${r.brows} · 눈 ${r.eyes} · 입 ${r.mouth} · ` +
+              `얼굴 ${FACING_LABEL[r.direction.facing]} · 시선 ${GAZE_LABEL[r.direction.gaze]} · 몸 ${FACING_LABEL[r.direction.body]}${r.gesture ? ` · 팔·손 ${r.gesture}` : ""}`,
+          );
     });
   }
   if (step >= 2) {
@@ -98,7 +103,7 @@ export function sceneDesignNote(d: ProjectData, hasReferenceSheet: boolean): str
     `- 기초 대사가 있으면 대사마다 그 대사를 말하는 표정을 하나씩 배정하세요. 남는 표정은 첫 대사 전, 대사 사이, 마지막 대사 뒤의 반응(숨, 시선, 감정이 바뀌는 순간)으로 쓰고, 대사가 표정보다 많으면 감정이 이어지는 대사끼리 한 표정에 묶으세요.`,
     `- 대사의 겉뜻보다 속마음(서브텍스트)을 연기하도록 감정과 강도를 정하고, 표정끼리 감정이 장면의 흐름대로 이어지게 하세요.`,
     d.cast.length > 1
-      ? `- 여러 인물 장면입니다. 표정마다 character에 연기하는(대사가 있으면 말하는) 인물 번호를 적고, others에 그 순간 나머지 인물의 반응을 이름으로 적으세요. 대사를 말하는 인물이 바뀌는 흐름(주고받기)을 살리세요.`
+      ? `- 여러 인물 장면입니다. 표정마다 character에 중심 인물(대사가 있으면 말하는 인물) 번호를 적고, reactions에 같은 순간 나머지 인물 각각의 연기(감정·얼굴·팔손·방향)를 적으세요. 대사를 주고받는 흐름과 듣는 인물의 반응이 이어지게 하세요.`
       : "",
     `- notes는 이 표정이 맡는 장면 속 순간으로 시작하세요 (예: "대사 1 ‘…’을 말하는 순간", "대사 1과 2 사이의 반응"). 장면의 소품·환경(베일, 장신구, 빛, 바람 등)이 얼굴 연기에 주는 영향도 notes에 짧게 적으세요.`,
     hasReferenceSheet

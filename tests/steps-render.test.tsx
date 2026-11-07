@@ -30,8 +30,10 @@ function trio(): ProjectData {
 const nav = { onNavigate: () => {} };
 
 describe("step screens render for one and for several characters", () => {
-  it("step 1: cast tabs, blocking preview and the shared style", () => {
+  it("step 1: one scene picture, cast tabs, blocking preview and the shared style", () => {
     const html = render(trio(), createElement(CharacterStep, nav));
+    expect(html).toContain("장면 기준 그림 (출연진 전원이 함께)");
+    expect(html).toContain("AI로 장면 기준 그림 분석");
     expect(html).toContain("장면과 출연진을 정하세요");
     expect(html).toContain("화면 배치");
     expect(html).toContain("A · 칼리엘라");
@@ -42,13 +44,14 @@ describe("step screens render for one and for several characters", () => {
     expect(solo).not.toContain("화면 배치");
   });
 
-  it("step 2: actor picker, others' reaction and the scene aspect", () => {
+  it("step 2: the lead picker and an acting panel for every character", () => {
     const html = render(trio(), createElement(ExpressionStep, nav));
-    expect(html).toContain("연기하는 인물");
-    expect(html).toContain("나머지 인물의 반응");
+    expect(html).toContain("중심 인물 (대사가 있으면 이 인물이 말함)");
+    expect(html).toContain("A 칼리엘라 · 중심");
+    expect(html).toContain('aria-label="C 세라"');
     expect(html).toContain("장면 그림 16:9");
     const solo = render(createProjectData("혼자"), createElement(ExpressionStep, nav));
-    expect(solo).not.toContain("연기하는 인물");
+    expect(solo).not.toContain("중심 인물");
     expect(solo).toContain("세로 3:4");
   });
 

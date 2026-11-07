@@ -107,14 +107,34 @@ export const DirectionSchema = z.object({
 });
 export type Direction = z.infer<typeof DirectionSchema>;
 
+const DEFAULT_DIRECTION_VALUE: Direction = { facing: "front", pitch: "level", tilt: "none", gaze: "camera", body: "front" };
+
+/**
+ * One character's acting in a beat. In a group scene every cast member has one per beat:
+ * the beat's lead (who speaks, if anyone) in the beat's own fields, everyone else in `reactions`.
+ */
+export const PerformanceSchema = z.object({
+  characterId: z.string(),
+  emotion: z.string().default(""),
+  intensity: z.enum(INTENSITY).default("medium"),
+  brows: z.string().default(""),
+  eyes: z.string().default(""),
+  mouth: z.string().default(""),
+  gesture: z.string().default(""),
+  direction: DirectionSchema.default(DEFAULT_DIRECTION_VALUE),
+  directionStatus: z.enum(["ai", "confirmed", "manual"]).default("manual"),
+});
+export type Performance = z.infer<typeof PerformanceSchema>;
+
 export const ExpressionSchema = z.object({
   id: z.string(),
-  /** the cast member who acts (and speaks) in this beat ("" = the first cast member) */
+  /** the beat's lead: the cast member who speaks in this beat (or carries it) ("" = the first cast member) */
   characterId: z.string().default(""),
-  /** what the other cast members do during this beat (multi-character scenes; empty = listen and react) */
-  others: z.string().default(""),
+  /** group scenes: the acting of every other cast member in this same moment (one per member, cast order) */
+  reactions: z.array(PerformanceSchema).default([]),
   /** 1-based panel number in the expression reference sheet, or null */
   panel: z.number().int().nullable(),
+  /* the lead's acting (same fields as a Performance) */
   emotion: z.string(),
   intensity: z.enum(INTENSITY),
   brows: z.string(),
@@ -140,8 +160,6 @@ export const QuestionSchema = z.object({ question: z.string(), answer: z.string(
 export const CastMemberSchema = z.object({
   id: z.string(),
   name: z.string(),
-  baseAssetId: z.string().nullable(),
-  designRefAssetIds: z.array(z.string()),
   locks: z.string(),
   appearance: z.string(),
   outfit: z.string(),
@@ -197,6 +215,8 @@ export const EnglishSheetSchema = z.object({
       body: z.string(),
       transition: z.string(),
       delivery: z.string(),
+      /** group scenes: every other character's acting in this beat */
+      others: z.array(z.object({ characterId: z.string(), emotion: z.string(), face: z.string(), body: z.string() })).default([]),
     }),
   ),
 });
@@ -225,7 +245,14 @@ export const ProjectDataSchema = z.object({
   title: z.string(),
   /** one art style for the whole scene (every character is drawn in it) */
   style: z.string(),
-  /** 출연진: 1–4 characters in one shot */
+  /**
+   * 장면 기준 그림: ONE drawing with the whole cast together (for one character, that character's drawing).
+   * Identity, relative sizes and art style of every character come from it.
+   */
+  baseAssetId: z.string().nullable().default(null),
+  /** extra references for the whole scene (other views, close-ups of a character, props) */
+  designRefAssetIds: z.array(z.string()).default([]),
+  /** 출연진: 1–4 characters in one shot; each is found in the scene drawing by name, position and features */
   cast: z.array(CastMemberSchema).min(MIN_CAST).max(MAX_CAST),
   expressionSetup: z.object({
     count: z.number().int(),
@@ -292,14 +319,18 @@ export const DEFAULT_DIRECTION: Direction = {
 };
 
 export function blankCastMember(position: Position = "center", name = ""): CastMember {
-  return { id: uid(), name, baseAssetId: null, designRefAssetIds: [], locks: "", appearance: "", outfit: "", voice: "", position, questions: [] };
+  return { id: uid(), name, locks: "", appearance: "", outfit: "", voice: "", position, questions: [] };
+}
+
+export function blankPerformance(characterId: string): Performance {
+  return { characterId, emotion: "", intensity: "medium", brows: "", eyes: "", mouth: "", gesture: "", direction: { ...DEFAULT_DIRECTION_VALUE }, directionStatus: "manual" };
 }
 
 export function blankExpression(panel: number | null = null, characterId = ""): Expression {
   return {
     id: uid(),
     characterId,
-    others: "",
+    reactions: [],
     panel,
     emotion: "",
     intensity: "medium",
@@ -321,13 +352,15 @@ export function createProjectData(title = "새 장면", castCount = 1): ProjectD
   const positions = defaultPositions(n);
   const cast = positions.map((p) => blankCastMember(p));
   const count = n === 1 ? 4 : Math.min(MAX_EXPRESSIONS, n * 2);
-  const expressions = Array.from({ length: count }, (_, i) => blankExpression(i + 1, cast[i % n].id));
+  const expressions = Array.from({ length: count }, (_, i) => withReactionsFor(cast, blankExpression(i + 1, cast[i % n].id)));
   return {
     schemaVersion: 1,
     currentStep: 0,
     approvedThrough: -1,
     title,
     style: "",
+    baseAssetId: null,
+    designRefAssetIds: [],
     cast,
     expressionSetup: {
       count,
@@ -446,7 +479,7 @@ export function setExpressionCount(data: ProjectData, count: number): ProjectDat
   const c = Math.min(MAX_EXPRESSIONS, Math.max(MIN_EXPRESSIONS, Math.round(count)));
   const expressions = Array.from(
     { length: c },
-    (_, i) => data.expressions[i] ?? blankExpression(i + 1, data.cast[i % data.cast.length]?.id ?? ""),
+    (_, i) => data.expressions[i] ?? withReactionsFor(data.cast, blankExpression(i + 1, data.cast[i % data.cast.length]?.id ?? "")),
   );
   const ids = expressions.map((e) => e.id);
   return {
@@ -474,24 +507,33 @@ export function facesOppositeSides(a: Facing, b: Facing): boolean {
 
 export type Issue = { level: "block" | "warn"; message: string; expressionId?: string };
 
-export function directionIssues(e: Expression, index: number): Issue[] {
+/** Direction checks for every performance in a beat (the lead, then each reaction, named in a group scene). */
+export function directionIssues(e: Expression, index: number, data?: Pick<ProjectData, "cast">): Issue[] {
+  const multi = Boolean(data && data.cast.length > 1);
+  const who = (id: string) => (multi && data ? ` ${castLabel(data, id)}` : "");
+  return [
+    ...performanceDirectionIssues(e, `${index + 1}번 표정${who(e.characterId)}`, e.id),
+    ...(multi ? e.reactions.flatMap((r) => performanceDirectionIssues(r, `${index + 1}번 표정${who(r.characterId)}`, e.id)) : []),
+  ];
+}
+
+function performanceDirectionIssues(e: Pick<Performance, "direction" | "directionStatus">, label: string, expressionId: string): Issue[] {
   const out: Issue[] = [];
-  const label = `${index + 1}번 표정`;
   if (e.directionStatus === "ai") {
-    out.push({ level: "block", message: `${label}: AI가 추정한 방향을 아직 확인하지 않았습니다.`, expressionId: e.id });
+    out.push({ level: "block", message: `${label}: AI가 추정한 방향을 아직 확인하지 않았습니다.`, expressionId });
   }
   const d = e.direction;
   if (facesOppositeSides(d.facing, d.body)) {
     out.push({
       level: "warn",
       message: `${label}: 얼굴(${FACING_LABEL[d.facing]})과 몸(${FACING_LABEL[d.body]})이 서로 반대쪽을 향합니다. 의도한 연기인지 확인하세요.`,
-      expressionId: e.id,
+      expressionId,
     });
   } else if (facingDistance(d.facing, d.body) >= 3) {
     out.push({
       level: "warn",
       message: `${label}: 얼굴과 몸 방향 차이가 큽니다.`,
-      expressionId: e.id,
+      expressionId,
     });
   }
   return out;
@@ -541,6 +583,7 @@ export function addCastMember(data: ProjectData): ProjectData {
     {
       ...data,
       cast,
+      expressions: data.expressions.map((e) => withReactionsFor(cast, e)),
       // close-ups cannot hold two people
       expressionSetup: data.expressionSetup.framing === "close_up" ? { ...data.expressionSetup, framing: "medium" } : data.expressionSetup,
     },
@@ -554,8 +597,56 @@ export function removeCastMember(data: ProjectData, id: string): ProjectData {
   const rest = data.cast.filter((c) => c.id !== id);
   const positions = defaultPositions(rest.length);
   const cast = rest.map((c, i) => ({ ...c, position: positions[i] }));
-  const expressions = data.expressions.map((e) => (e.characterId === id ? { ...e, characterId: cast[0].id } : e));
+  // a beat the removed member led goes to the first member, who keeps their own acting from that beat
+  const expressions = data.expressions.map((e) => withReactionsFor(cast, e.characterId === id ? setLead(e, cast[0].id) : e));
   return reopenFrom({ ...data, cast, expressions, english: data.english ? { ...data.english, cast: data.english.cast.filter((x) => x.characterId !== id) } : null }, 0);
+}
+
+/* ───────────── Every character's acting in a beat ───────────── */
+
+const PERFORMANCE_KEYS = ["emotion", "intensity", "brows", "eyes", "mouth", "gesture", "direction", "directionStatus"] as const;
+
+/** The lead's acting, as a Performance. */
+export function leadPerformance(e: Expression): Performance {
+  const p = { characterId: e.characterId } as Performance;
+  for (const k of PERFORMANCE_KEYS) (p as Record<string, unknown>)[k] = e[k];
+  return p;
+}
+
+/** Every cast member's acting in a beat, in cast order (a missing one is blank). */
+export function performancesOf(data: Pick<ProjectData, "cast">, e: Expression): (Performance & { lead: boolean })[] {
+  return data.cast.map((c) =>
+    c.id === e.characterId
+      ? { ...leadPerformance(e), lead: true }
+      : { ...(e.reactions.find((r) => r.characterId === c.id) ?? blankPerformance(c.id)), lead: false },
+  );
+}
+
+/** Keep exactly one reaction per non-lead cast member, in cast order. */
+export function withReactionsFor(cast: CastMember[], e: Expression): Expression {
+  const reactions = cast.filter((c) => c.id !== e.characterId).map((c) => e.reactions.find((r) => r.characterId === c.id) ?? blankPerformance(c.id));
+  const same = reactions.length === e.reactions.length && reactions.every((r, i) => r === e.reactions[i]);
+  return same ? e : { ...e, reactions };
+}
+
+/** Change who leads a beat; each character keeps their own acting (the old lead's moves into the reactions). */
+export function setLead(e: Expression, characterId: string): Expression {
+  if (e.characterId === characterId) return e;
+  const old = leadPerformance(e);
+  const next = e.reactions.find((r) => r.characterId === characterId) ?? blankPerformance(characterId);
+  const lead: Partial<Expression> = {};
+  for (const k of PERFORMANCE_KEYS) (lead as Record<string, unknown>)[k] = next[k];
+  return { ...e, ...lead, characterId, reactions: [...e.reactions.filter((r) => r.characterId !== characterId), old] };
+}
+
+/** Update one character's acting in a beat (the lead's fields or their reaction). */
+export function updatePerformance(e: Expression, characterId: string, patch: Partial<Omit<Performance, "characterId">>): Expression {
+  if (characterId === e.characterId) return { ...e, ...patch };
+  const has = e.reactions.some((r) => r.characterId === characterId);
+  const reactions = has
+    ? e.reactions.map((r) => (r.characterId === characterId ? { ...r, ...patch } : r))
+    : [...e.reactions, { ...blankPerformance(characterId), ...patch }];
+  return { ...e, reactions };
 }
 
 /* ───────────── Step validation ───────────── */
@@ -573,12 +664,12 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
     data.cast.forEach((c, i) => {
       const who = castLabel(data, c.id);
       if (!filled(c.name)) block(`${castLetter(i)} 캐릭터의 이름을 입력하세요.`);
-      if (!c.baseAssetId) block(`${who}: 기본 그림을 올리세요.`);
       if (!filled(c.locks)) block(`${who}: 꼭 유지할 특징을 작성하세요.`);
       if (!filled(c.appearance)) block(`${who}: 외형과 얼굴 특징을 작성하세요.`);
       const open = c.questions.filter((q) => !filled(q.answer)).length;
       if (open) warn(`${who}: AI 확인 질문 ${open}개에 아직 답하지 않았습니다.`);
     });
+    if (!data.baseAssetId) block(data.cast.length > 1 ? "출연진이 함께 있는 장면 기준 그림을 올리세요." : "기본 그림을 올리세요.");
     if (!filled(data.style)) block("장면의 그림체와 색감을 작성하세요.");
     const names = data.cast.map((c) => c.name.trim()).filter(Boolean);
     if (new Set(names).size !== names.length) block("출연진 이름이 겹칩니다. 프롬프트에서 인물을 구분할 수 있게 서로 다른 이름을 쓰세요.");
@@ -589,15 +680,17 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
   if (step === 1) {
     if (data.expressions.length !== data.expressionSetup.count) block("표정 개수가 설정과 다릅니다.");
     data.expressions.forEach((e, i) => {
-      if (!filled(e.emotion)) block(`${i + 1}번 표정의 감정을 입력하세요.`);
-      if (!data.cast.some((c) => c.id === e.characterId)) block(`${i + 1}번 표정을 연기할 인물을 고르세요.`);
-      issues.push(...directionIssues(e, i));
+      if (!data.cast.some((c) => c.id === e.characterId)) block(`${i + 1}번 표정의 중심 인물을 고르세요.`);
+      if (data.cast.length > 1) {
+        for (const p of performancesOf(data, e)) if (!filled(p.emotion)) block(`${i + 1}번 표정: ${castLabel(data, p.characterId)}의 감정을 입력하세요.`);
+      } else if (!filled(e.emotion)) block(`${i + 1}번 표정의 감정을 입력하세요.`);
+      issues.push(...directionIssues(e, i, data));
     });
     if (data.cast.length > 1) {
       if (data.expressionSetup.framing === "close_up")
         block("여러 인물이 한 화면에 나오는 장면은 클로즈업으로 담을 수 없습니다. 바스트 샷이나 미디엄 샷을 고르세요.");
       const idle = data.cast.filter((c) => !data.expressions.some((e) => e.characterId === c.id));
-      if (idle.length) warn(`${idle.map((c) => castLabel(data, c.id)).join(", ")}에게 맡긴 표정이 없습니다. 반응만 하는 인물이 아니라면 표정을 배정하세요.`);
+      if (idle.length) warn(`${idle.map((c) => castLabel(data, c.id)).join(", ")}이(가) 중심 인물인 표정이 없습니다. 대사가 없는 인물이라면 괜찮습니다.`);
     }
     if (!(data.acting.duration > 0 && data.acting.duration <= MAX_VIDEO_SECONDS))
       block(`영상 전체 길이는 0초 초과 ${MAX_VIDEO_SECONDS}초 이하로 정하세요.`);
@@ -715,14 +808,17 @@ export function isUnlocked(data: ProjectData, step: StepIndex) {
 function upgradeLegacy(raw: unknown): unknown {
   if (!raw || typeof raw !== "object") return raw;
   const o = raw as Record<string, unknown> & { character?: Record<string, unknown>; dialogue?: Record<string, unknown>; expressions?: unknown[]; english?: Record<string, unknown> | null };
+  // the first Scene Acting Studio version kept a drawing per character: the first one becomes the scene drawing
+  if (Array.isArray(o.cast) && o.baseAssetId === undefined) {
+    const first = (o.cast as { baseAssetId?: string | null; designRefAssetIds?: string[] }[]).find((c) => c.baseAssetId);
+    if (first) return { ...o, baseAssetId: first.baseAssetId, designRefAssetIds: (o.cast as { designRefAssetIds?: string[] }[]).flatMap((c) => c.designRefAssetIds ?? []).slice(0, 3) };
+  }
   if (Array.isArray(o.cast) || !o.character) return raw;
   const c = o.character;
   const id = uid();
   const member: CastMember = {
     id,
     name: String(c.name ?? ""),
-    baseAssetId: (c.baseAssetId as string | null) ?? null,
-    designRefAssetIds: (c.designRefAssetIds as string[]) ?? [],
     locks: String(c.locks ?? ""),
     appearance: String(c.appearance ?? ""),
     outfit: String(c.outfit ?? ""),
@@ -738,6 +834,8 @@ function upgradeLegacy(raw: unknown): unknown {
     ...rest,
     title: String(c.name ?? ""),
     style: String(c.style ?? ""),
+    baseAssetId: (c.baseAssetId as string | null) ?? null,
+    designRefAssetIds: (c.designRefAssetIds as string[]) ?? [],
     cast: [member],
     dialogue,
     ...(Array.isArray(o.expressions) ? { expressions: o.expressions.map((e) => ({ ...(e as object), characterId: id })) } : {}),
@@ -766,9 +864,14 @@ export function parseProjectData(raw: unknown): ProjectData {
   return r2.success ? withActors(r2.data) : base;
 }
 
-/** Every beat names a cast member that exists (unknown or empty → the first). */
+/** Every beat names a lead that exists (unknown or empty → the first) and has one reaction per other member. */
 function withActors(d: ProjectData): ProjectData {
   const ids = new Set(d.cast.map((c) => c.id));
-  if (d.expressions.every((e) => ids.has(e.characterId))) return d;
-  return { ...d, expressions: d.expressions.map((e) => (ids.has(e.characterId) ? e : { ...e, characterId: d.cast[0].id })) };
+  let changed = false;
+  const expressions = d.expressions.map((e) => {
+    const next = withReactionsFor(d.cast, ids.has(e.characterId) ? e : { ...e, characterId: d.cast[0].id });
+    if (next !== e) changed = true;
+    return next;
+  });
+  return changed ? { ...d, expressions } : d;
 }

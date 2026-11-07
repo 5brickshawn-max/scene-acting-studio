@@ -31,7 +31,7 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
     <StepFrame
       step={0}
       title="장면과 출연진을 정하세요"
-      intro="장면에 나오는 인물(1~4명)마다 기본 그림을 올리고 AI 분석으로 초안을 받은 뒤, 직접 다듬어 승인합니다. 그림체는 장면 전체가 함께 씁니다."
+      intro="출연진이 함께 있는 장면 기준 그림 한 장을 올리고, AI 분석으로 인물마다 설명 초안을 받은 뒤 직접 다듬어 승인합니다. 모든 인물의 모습·크기·그림체가 이 한 장에서 나옵니다."
       onNavigate={onNavigate}
     >
       <div className="space-y-6">
@@ -61,9 +61,65 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
           </div>
         </div>
 
+        <div className="grid lg:grid-cols-[minmax(0,420px)_1fr] gap-6">
+          <div className="space-y-3">
+            <ImageSlot
+              label={multi ? "장면 기준 그림 (출연진 전원이 함께)" : "기본 그림"}
+              kind="base"
+              assetId={d.baseAssetId}
+              tall={!multi}
+              emptyText={
+                multi
+                  ? "출연진이 모두 함께 그려진 그림 한 장을 올리세요. 인물의 모습·키 차이·그림체가 모두 이 그림에서 나옵니다. 아래 화면 위치를 이 그림 속 위치와 맞추세요."
+                  : "캐릭터의 기준이 되는 그림을 올리세요. 이후 모든 단계가 이 그림을 기준으로 합니다."
+              }
+              onChange={(id) => doc.edit(0, (x) => ({ ...x, baseAssetId: id }))}
+            />
+            <div className="space-y-2">
+              <div className="field-label">추가 참고 그림 (선택)</div>
+              {d.designRefAssetIds.map((id, i) => (
+                <ImageSlot
+                  key={id}
+                  label={`추가 참고 ${i + 1}`}
+                  kind="design_ref"
+                  assetId={id}
+                  removable
+                  emptyText=""
+                  onChange={(nid) =>
+                    doc.edit(0, (x) => ({
+                      ...x,
+                      designRefAssetIds: nid ? x.designRefAssetIds.map((y) => (y === id ? nid : y)) : x.designRefAssetIds.filter((y) => y !== id),
+                    }))
+                  }
+                />
+              ))}
+              {d.designRefAssetIds.length < 2 && (
+                <ImageSlot
+                  label={d.designRefAssetIds.length ? "참고 그림 더 추가" : "참고 그림"}
+                  kind="design_ref"
+                  assetId={null}
+                  emptyText={multi ? "인물 클로즈업, 옆모습처럼 장면 기준 그림에서 잘 안 보이는 부분이 있으면 올리세요." : "옆모습, 뒷모습, 소품 같은 추가 디자인을 올리면 분석이 더 정확해집니다."}
+                  onChange={(id) => id && doc.edit(0, (x) => ({ ...x, designRefAssetIds: [...x.designRefAssetIds, id] }))}
+                />
+              )}
+            </div>
+          </div>
+          <div className="space-y-4">
+            <AiAction
+              kind="analyze_character"
+              step={0}
+              label={multi ? "AI로 장면 기준 그림 분석" : "AI로 기본 그림 분석"}
+              disabled={!d.baseAssetId}
+              disabledReason={multi ? "먼저 장면 기준 그림을 올리세요." : "먼저 기본 그림을 올리세요."}
+              description={multi ? `그림 속 ${d.cast.length}명을 이름·위치로 찾아 인물마다 설명 초안과 확인 질문을 제안합니다. 먼저 아래에 이름과 위치를 적어 두세요.` : "네 가지 설명 초안과 확인 질문을 제안합니다."}
+            />
+            <PendingProposal step={0} />
+          </div>
+        </div>
+
         {multi && (
           <div className="space-y-2">
-            <div className="field-label">화면 배치 (보는 사람 기준, 쇼트 내내 유지)</div>
+            <div className="field-label">화면 배치 (보는 사람 기준, 장면 기준 그림 속 위치와 같게, 쇼트 내내 유지)</div>
             <div className="flex rounded-lg border border-line bg-white p-3 gap-2" aria-label="화면 배치 미리보기">
               {POSITIONS.map((p) => {
                 const here = d.cast.filter((c) => c.position === p);
@@ -96,8 +152,6 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
             </button>
           ))}
         </div>
-
-        <PendingProposal step={0} />
 
         <CastCard
           key={current.id}
@@ -151,60 +205,7 @@ function CastCard(props: {
           </button>
         )}
       </div>
-      <div className="grid lg:grid-cols-[minmax(0,360px)_1fr] gap-8">
-        <div className="space-y-6">
-          <ImageSlot
-            label="기본 그림"
-            kind="base"
-            assetId={c.baseAssetId}
-            tall
-            emptyText="이 인물의 기준이 되는 그림을 올리세요. 이후 모든 단계가 이 그림을 기준으로 합니다."
-            onChange={(id) => set({ baseAssetId: id })}
-          />
-          <div className="space-y-2">
-            <div className="field-label">추가 디자인 참고 (선택)</div>
-            {c.designRefAssetIds.map((id, i) => (
-              <ImageSlot
-                key={id}
-                label={`디자인 참고 ${i + 1}`}
-                kind="design_ref"
-                assetId={id}
-                removable
-                emptyText=""
-                onChange={(nid) =>
-                  set({
-                    designRefAssetIds: nid ? c.designRefAssetIds.map((x) => (x === id ? nid : x)) : c.designRefAssetIds.filter((x) => x !== id),
-                  })
-                }
-              />
-            ))}
-            {c.designRefAssetIds.length < (props.multi ? 1 : 3) && (
-              <ImageSlot
-                label={c.designRefAssetIds.length ? "참고 그림 더 추가" : "참고 그림"}
-                kind="design_ref"
-                assetId={null}
-                emptyText={
-                  props.multi
-                    ? "여러 인물 장면은 생성 모델이 받는 그림 수에 한도가 있어 인물당 한 장까지 받습니다."
-                    : "옆모습, 뒷모습, 소품 같은 추가 디자인을 올리면 분석이 더 정확해집니다."
-                }
-                onChange={(id) => id && set({ designRefAssetIds: [...c.designRefAssetIds, id] })}
-              />
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          <AiAction
-            kind="analyze_character"
-            step={0}
-            characterId={c.id}
-            label="AI로 기본 그림 분석"
-            disabled={!c.baseAssetId}
-            disabledReason="먼저 기본 그림을 올리세요."
-            description={props.multi ? "이 인물의 설명 초안과 확인 질문을 제안합니다." : "네 가지 설명 초안과 확인 질문을 제안합니다."}
-          />
-
+      <div className="space-y-6">
           <Field label="이름" value={c.name} onChange={(v) => set({ name: v })} help={props.multi ? "프롬프트에서 인물을 구분하는 이름입니다. 다른 인물과 겹치지 않게 쓰세요." : undefined} />
           {props.multi && (
             <Seg label="화면 위치" value={c.position} options={POSITIONS} labels={POSITION_LABEL} onChange={(v) => set({ position: v })} />
@@ -250,7 +251,6 @@ function CastCard(props: {
               ))}
             </div>
           )}
-        </div>
       </div>
     </section>
   );

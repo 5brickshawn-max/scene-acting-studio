@@ -53,7 +53,8 @@ export type ReviewResult = { ok: true; bundle: ReviewBundle } | { ok: false; rea
 
 function referencedAssetIds(d: ProjectData): string[] {
   return [
-    ...d.cast.flatMap((c) => [c.baseAssetId, ...c.designRefAssetIds]),
+    d.baseAssetId,
+    ...d.designRefAssetIds,
     d.expressionSetup.refAssetId,
     d.expressionSetup.sheetAssetId,
     ...d.expressions.map((e) => e.imageAssetId),

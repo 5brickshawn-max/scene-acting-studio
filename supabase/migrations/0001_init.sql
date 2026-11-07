@@ -131,7 +131,7 @@ begin
     name = coalesce(nullif(p_data->>'title', ''), name),
     current_step = coalesce((p_data->>'currentStep')::int, current_step),
     approved_through = coalesce((p_data->>'approvedThrough')::int, approved_through),
-    thumbnail_asset_id = coalesce(nullif(p_data->'cast'->0->>'baseAssetId','')::uuid, thumbnail_asset_id),
+    thumbnail_asset_id = coalesce(nullif(p_data->>'baseAssetId','')::uuid, thumbnail_asset_id),
     updated_by = auth.uid(),
     updated_at = now()
   where id = p_project_id;

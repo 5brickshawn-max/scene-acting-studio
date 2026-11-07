@@ -39,7 +39,7 @@ export function englishSources(d: ProjectData) {
         source: JSON.stringify([
           d.expressionSetup.framing,
           e.characterId,
-          e.others,
+          e.reactions.map((r) => [r.characterId, r.emotion, r.intensity, r.brows, r.eyes, r.mouth, r.gesture]),
           e.emotion,
           e.intensity,
           e.brows,
@@ -139,7 +139,15 @@ type EnglishOut = {
   language: string;
   style: string;
   cast: { character: number; look: string[]; outfit: string; voice: string }[];
-  beats: { panel: number; emotion: string; face: string; body: string; transition: string; delivery: string }[];
+  beats: {
+    panel: number;
+    emotion: string;
+    face: string;
+    body: string;
+    transition: string;
+    delivery: string;
+    others?: { character: number; emotion: string; face: string; body: string }[];
+  }[];
 };
 
 /** The AI's English, tied to the Korean it was made from (built on the server from the checked version). */
@@ -174,6 +182,12 @@ export function buildEnglishSheet(d: ProjectData, out: EnglishOut): EnglishSheet
           body: fitText(b.body, 200),
           transition: fitText(b.transition, 140),
           delivery: fitText(b.delivery, 80),
+          others: (b.others ?? []).flatMap((o) => {
+            const id = d.cast[o.character - 1]?.id;
+            return id && id !== e.characterId
+              ? [{ characterId: id, emotion: fitText(o.emotion, 60), face: fitText(o.face, 160), body: fitText(o.body, 120) }]
+              : [];
+          }),
         },
       ];
     }),

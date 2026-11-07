@@ -27,6 +27,10 @@ import {
   ratioLabel,
   castLabel,
   imageAspectFor,
+  performancesOf,
+  setLead,
+  updatePerformance,
+  type Performance,
   type Direction,
   type Expression,
   type Facing,
@@ -70,11 +74,20 @@ function TopDown({ d }: { d: Direction }) {
   );
 }
 
-function DirectionEditor({ e, index, onChange }: { e: Expression; index: number; onChange: (d: Direction, confirm: boolean) => void }) {
+function DirectionEditor({
+  e,
+  warnings,
+  onChange,
+}: {
+  /** `id` makes the form ids unique (beat id + character id) */
+  e: { id: string; direction: Direction; directionStatus: Expression["directionStatus"] };
+  warnings: string[];
+  onChange: (d: Direction, confirm: boolean) => void;
+}) {
   const { canEdit } = useEditor();
   const d = e.direction;
   const set = (patch: Partial<Direction>) => onChange({ ...d, ...patch }, false);
-  const warn = directionIssues(e, index).filter((i) => i.level === "warn");
+  const warn = warnings.map((message) => ({ message }));
   return (
     <div className={`rounded-lg border p-3 space-y-3 ${e.directionStatus === "ai" ? "border-[#ecd6a6] bg-[#fffbf1]" : "border-line"}`}>
       <div className="flex flex-wrap items-center gap-2">
@@ -231,34 +244,33 @@ function ExpressionCard({ e, index }: { e: Expression; index: number }) {
   const s = doc.data.expressionSetup;
   const update = (patch: Partial<Expression>) =>
     doc.edit(1, (d) => ({ ...d, expressions: d.expressions.map((x) => (x.id === e.id ? { ...x, ...patch } : x)) }));
+  const change = (fn: (x: Expression) => Expression) =>
+    doc.edit(1, (d) => ({ ...d, expressions: d.expressions.map((x) => (x.id === e.id ? fn(x) : x)) }));
   const ref = s.refAssetId ? assets.get(s.refAssetId) : undefined;
   const sheet = s.sheetAssetId ? assets.get(s.sheetAssetId) : undefined;
   const own = e.imageAssetId ? assets.get(e.imageAssetId) : undefined;
   const d = doc.data;
   const multi = d.cast.length > 1;
   const aspect = imageAspectFor(d).replace(":", "/");
+  const warningsFor = (label: string) =>
+    directionIssues(e, index, d)
+      .filter((i) => i.level === "warn" && i.message.startsWith(label))
+      .map((i) => i.message);
 
   return (
-    <article className="rounded-xl border border-line p-4 space-y-3" aria-label={`${index + 1}번 표정`}>
+    <article className={`rounded-xl border border-line p-4 space-y-3 ${multi ? "xl:col-span-2" : ""}`} aria-label={`${index + 1}번 표정`}>
       <div className="flex items-center gap-2">
         <span className="grid place-items-center size-8 rounded-full bg-[#26301f] text-white font-bold">{index + 1}</span>
         <span className="font-semibold truncate">
-          {multi ? `${castLabel(d, e.characterId)} · ` : ""}
-          {e.emotion || "감정 미정"}
+          {multi
+            ? performancesOf(d, e)
+                .map((p) => `${d.cast.find((c) => c.id === p.characterId)?.name || "인물"} ${p.emotion || "?"}`)
+                .join(" · ")
+            : e.emotion || "감정 미정"}
         </span>
       </div>
-      {multi && (
-        <div>
-          <label className="field-label" htmlFor={`actor-${e.id}`}>연기하는 인물 (대사가 있으면 이 인물이 말함)</label>
-          <select id={`actor-${e.id}`} className="select" value={e.characterId} onChange={(ev) => update({ characterId: ev.target.value })}>
-            {d.cast.map((c) => (
-              <option key={c.id} value={c.id}>{castLabel(d, c.id)}</option>
-            ))}
-          </select>
-        </div>
-      )}
       {(ref || sheet || own) && (
-        <div className="grid grid-cols-2 gap-2">
+        <div className={`grid gap-2 ${multi ? "grid-cols-[1fr_2fr]" : "grid-cols-2"}`}>
           <figure>
             <PanelCrop asset={ref} cols={s.refColumns} rows={s.refRows} index={(e.panel ?? 0) - 1} label={`참고 시트 ${e.panel ?? "-"}번 칸`} />
             <figcaption className="text-[13px] text-muted mt-1">참고 {e.panel ? `${e.panel}번 칸` : "없음"}</figcaption>
@@ -269,76 +281,130 @@ function ExpressionCard({ e, index }: { e: Expression; index: number }) {
             ) : (
               <PanelCrop asset={sheet} cols={doc.data.expressions.length} rows={1} index={index} label={`생성 시트 ${index + 1}번 칸`} />
             )}
-            <figcaption className="text-[13px] text-muted mt-1">{own ? "표정 그림" : sheet ? "이전 방식 시트의 칸" : "표정 그림 없음"}</figcaption>
+            <figcaption className="text-[13px] text-muted mt-1">{own ? (multi ? "장면 그림" : "표정 그림") : sheet ? "이전 방식 시트의 칸" : "표정 그림 없음"}</figcaption>
           </figure>
         </div>
       )}
-      <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
-        <Field label="감정" value={e.emotion} onChange={(v) => update({ emotion: v })} placeholder="예: 능청스러운 비웃음" />
-        {ref && (
-          <div>
-            <label className="field-label" htmlFor={`panel-${e.id}`}>참고 칸</label>
-            <select
-              id={`panel-${e.id}`}
-              className="select"
-              value={e.panel ?? ""}
-              onChange={(ev) => update({ panel: ev.target.value ? Number(ev.target.value) : null })}
-            >
-              <option value="">없음</option>
-              {Array.from({ length: s.refColumns * s.refRows }, (_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
-            </select>
+      {multi ? (
+        <>
+          <div className="grid sm:grid-cols-[1fr_auto] gap-2 items-end">
+            <div>
+              <label className="field-label" htmlFor={`actor-${e.id}`}>중심 인물 (대사가 있으면 이 인물이 말함)</label>
+              <select id={`actor-${e.id}`} className="select" value={e.characterId} onChange={(ev) => change((x) => setLead(x, ev.target.value))}>
+                {d.cast.map((c) => (
+                  <option key={c.id} value={c.id}>{castLabel(d, c.id)}</option>
+                ))}
+              </select>
+            </div>
+            {ref && <PanelSelect e={e} cells={s.refColumns * s.refRows} onChange={(panel) => update({ panel })} />}
           </div>
-        )}
-      </div>
-      <Seg label="강도" value={e.intensity} options={INTENSITY} labels={INTENSITY_LABEL} onChange={(v) => update({ intensity: v })} />
-      {showsHands(s.framing) && (
-        <Field
-          label="팔·손 동작"
-          multiline
-          rows={2}
-          value={e.gesture}
-          onChange={(v) => update({ gesture: v })}
-          placeholder={
-            s.framing === "bust"
-              ? "예: 왼손 손끝으로 입가를 가리고, 오른손은 땋은 머리를 만지작거림"
-              : "예: 팔짱을 끼고 한쪽 어깨를 으쓱 올림"
-          }
-          help="비워두면 그림 모델이 감정에 맞는 동작을 고릅니다."
-        />
-      )}
-      {multi && (
-        <Field
-          label="나머지 인물의 반응"
-          multiline
-          rows={2}
-          value={e.others}
-          onChange={(v) => update({ others: v })}
-          placeholder={`예: ${d.cast.filter((c) => c.id !== e.characterId).map((c) => c.name || "상대").join(", ")}는 팔짱을 낀 채 눈썹을 치켜올리고 말하는 쪽을 본다`}
-          help="비워두면 나머지 인물은 입을 다문 채 말하는 인물을 보며 자연스럽게 반응합니다."
-        />
-      )}
-      <details className="rounded-lg border border-line">
-        <summary className="cursor-pointer p-3 text-[14px]">
-          <span className="font-semibold">세부 연기 (눈썹·눈·입·메모)</span>
-          {(e.brows || e.eyes || e.mouth) && (
-            <span className="block text-muted truncate">{[e.brows, e.eyes, e.mouth].filter(Boolean).join(" / ")}</span>
+          <Field label="이 순간 (메모)" multiline rows={2} value={e.notes} onChange={(v) => update({ notes: v })} placeholder="예: 대사 1 ‘Come closer’를 말하는 순간, 브람은 한발 물러선다" />
+          <div className={`grid lg:grid-cols-2 gap-3 ${d.cast.length >= 3 ? "2xl:grid-cols-3" : ""}`}>
+            {performancesOf(d, e).map((p) => (
+              <PerformanceEditor
+                key={p.characterId}
+                id={`${e.id}-${p.characterId}`}
+                title={`${castLabel(d, p.characterId)}${p.lead ? " · 중심" : ""}`}
+                p={p}
+                framing={s.framing}
+                warnings={warningsFor(`${index + 1}번 표정 ${castLabel(d, p.characterId)}`)}
+                onChange={(patch) => change((x) => updatePerformance(x, p.characterId, patch))}
+              />
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
+            <Field label="감정" value={e.emotion} onChange={(v) => update({ emotion: v })} placeholder="예: 능청스러운 비웃음" />
+            {ref && <PanelSelect e={e} cells={s.refColumns * s.refRows} onChange={(panel) => update({ panel })} />}
+          </div>
+          <Seg label="강도" value={e.intensity} options={INTENSITY} labels={INTENSITY_LABEL} onChange={(v) => update({ intensity: v })} />
+          {showsHands(s.framing) && (
+            <Field
+              label="팔·손 동작"
+              multiline
+              rows={2}
+              value={e.gesture}
+              onChange={(v) => update({ gesture: v })}
+              placeholder={s.framing === "bust" ? "예: 왼손 손끝으로 입가를 가리고, 오른손은 땋은 머리를 만지작거림" : "예: 팔짱을 끼고 한쪽 어깨를 으쓱 올림"}
+              help="비워두면 그림 모델이 감정에 맞는 동작을 고릅니다."
+            />
           )}
+          <details className="rounded-lg border border-line">
+            <summary className="cursor-pointer p-3 text-[14px]">
+              <span className="font-semibold">세부 연기 (눈썹·눈·입·메모)</span>
+              {(e.brows || e.eyes || e.mouth) && <span className="block text-muted truncate">{[e.brows, e.eyes, e.mouth].filter(Boolean).join(" / ")}</span>}
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+              <div className="grid sm:grid-cols-3 gap-2">
+                <Field label="눈썹" multiline rows={2} value={e.brows} onChange={(v) => update({ brows: v })} />
+                <Field label="눈" multiline rows={2} value={e.eyes} onChange={(v) => update({ eyes: v })} />
+                <Field label="입" multiline rows={2} value={e.mouth} onChange={(v) => update({ mouth: v })} />
+              </div>
+              <Field label="메모" multiline rows={2} value={e.notes} onChange={(v) => update({ notes: v })} />
+            </div>
+          </details>
+          <DirectionEditor
+            e={e}
+            warnings={warningsFor(`${index + 1}번 표정`)}
+            onChange={(direction, confirm) => update({ direction, directionStatus: confirm ? "confirmed" : "manual" })}
+          />
+        </>
+      )}
+    </article>
+  );
+}
+
+function PanelSelect({ e, cells, onChange }: { e: Expression; cells: number; onChange: (panel: number | null) => void }) {
+  return (
+    <div>
+      <label className="field-label" htmlFor={`panel-${e.id}`}>참고 칸</label>
+      <select id={`panel-${e.id}`} className="select" value={e.panel ?? ""} onChange={(ev) => onChange(ev.target.value ? Number(ev.target.value) : null)}>
+        <option value="">없음</option>
+        {Array.from({ length: cells }, (_, i) => (
+          <option key={i} value={i + 1}>{i + 1}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/** One character's acting in a group beat: emotion, strength, arms and hands, face details and direction. */
+function PerformanceEditor(props: {
+  id: string;
+  title: string;
+  p: Performance & { lead: boolean };
+  framing: Framing;
+  warnings: string[];
+  onChange: (patch: Partial<Omit<Performance, "characterId">>) => void;
+}) {
+  const { p, onChange } = props;
+  return (
+    <section className={`rounded-lg border p-3 space-y-3 ${p.lead ? "border-accent bg-[#fffaf5]" : "border-line"}`} aria-label={props.title}>
+      <h4 className="font-semibold">{props.title}</h4>
+      <Field label="감정" value={p.emotion} onChange={(v) => onChange({ emotion: v })} placeholder={p.lead ? "예: 불같은 분노" : "예: 놀라서 움찔함"} />
+      <Seg label="강도" value={p.intensity} options={INTENSITY} labels={INTENSITY_LABEL} onChange={(v) => onChange({ intensity: v })} />
+      {showsHands(props.framing) && (
+        <Field label="팔·손 동작" multiline rows={2} value={p.gesture} onChange={(v) => onChange({ gesture: v })} help="비워두면 그림 모델이 감정에 맞는 동작을 고릅니다." />
+      )}
+      <details className="rounded-lg border border-line bg-white">
+        <summary className="cursor-pointer p-3 text-[14px]">
+          <span className="font-semibold">얼굴 연기 (눈썹·눈·입)</span>
+          {(p.brows || p.eyes || p.mouth) && <span className="block text-muted truncate">{[p.brows, p.eyes, p.mouth].filter(Boolean).join(" / ")}</span>}
         </summary>
-        <div className="px-3 pb-3 space-y-2">
-          <div className="grid sm:grid-cols-3 gap-2">
-            <Field label="눈썹" multiline rows={2} value={e.brows} onChange={(v) => update({ brows: v })} />
-            <Field label="눈" multiline rows={2} value={e.eyes} onChange={(v) => update({ eyes: v })} />
-            <Field label="입" multiline rows={2} value={e.mouth} onChange={(v) => update({ mouth: v })} />
-          </div>
-          <Field label="메모" multiline rows={2} value={e.notes} onChange={(v) => update({ notes: v })} />
+        <div className="px-3 pb-3 grid sm:grid-cols-3 gap-2">
+          <Field label="눈썹" multiline rows={2} value={p.brows} onChange={(v) => onChange({ brows: v })} />
+          <Field label="눈" multiline rows={2} value={p.eyes} onChange={(v) => onChange({ eyes: v })} />
+          <Field label="입" multiline rows={2} value={p.mouth} onChange={(v) => onChange({ mouth: v })} placeholder={p.lead ? "" : "말하지 않으면 다문 입"} />
         </div>
       </details>
       <DirectionEditor
-        e={e}
-        index={index}
-        onChange={(direction, confirm) => update({ direction, directionStatus: confirm ? "confirmed" : "manual" })}
+        e={{ id: props.id, direction: p.direction, directionStatus: p.directionStatus }}
+        warnings={props.warnings}
+        onChange={(direction, confirm) => onChange({ direction, directionStatus: confirm ? "confirmed" : "manual" })}
       />
-    </article>
+    </section>
   );
 }
 
@@ -533,7 +599,7 @@ export function ExpressionStep({ onNavigate }: { onNavigate: (s: StepIndex) => v
       title="표정을 설계하세요"
       intro={
         doc.data.cast.length > 1
-          ? "구도를 고르고 표정(비트)마다 연기하는 인물·감정·방향을 확인한 뒤, 표정마다 모든 인물이 들어간 장면 그림을 한 장씩 만듭니다."
+          ? "구도를 고르고 표정(비트)마다 모든 인물의 감정·연기·방향을 함께 정한 뒤, 표정마다 모든 인물이 들어간 장면 그림을 한 장씩 만듭니다."
           : "구도를 고르고 표정과 방향을 확인한 뒤, 표정마다 세로 그림을 한 장씩 만듭니다."
       }
       onNavigate={onNavigate}
@@ -613,8 +679,8 @@ export function ExpressionStep({ onNavigate }: { onNavigate: (s: StepIndex) => v
           kind="design_expressions"
           step={1}
           label={s.scene.trim() ? "상황 설정에 맞춰 AI로 표정 설계" : "AI로 표정 설계"}
-          disabled={doc.data.cast.some((c) => !c.baseAssetId)}
-          disabledReason="1단계에서 모든 인물의 기본 그림을 먼저 올리세요."
+          disabled={!doc.data.baseAssetId}
+          disabledReason={doc.data.cast.length > 1 ? "1단계에서 장면 기준 그림을 먼저 올리세요." : "1단계에서 기본 그림을 먼저 올리세요."}
           instruction={s.instruction}
           description={`${
             s.scene.trim()
@@ -622,7 +688,7 @@ export function ExpressionStep({ onNavigate }: { onNavigate: (s: StepIndex) => v
               : s.refAssetId
                 ? "참고 시트의 각 칸을 따로 관찰해 감정과 방향을 제안합니다."
                 : doc.data.cast.length > 1
-                  ? "인물들이 주고받는 장면의 표정(비트)과 연기하는 인물을 제안합니다."
+                  ? "장면의 표정(비트)마다 중심 인물과 모든 인물의 연기를 함께 제안합니다."
                   : "캐릭터에 맞는 표정을 제안합니다."
           }${showsHands(s.framing) ? " 구도에 맞는 팔·손 동작도 표정마다 다르게 제안합니다." : ""}`}
         />

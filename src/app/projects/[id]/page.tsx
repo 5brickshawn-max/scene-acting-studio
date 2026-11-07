@@ -33,7 +33,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const data = parseProjectData(ver?.data);
   // Assets referenced by this project but uploaded elsewhere (reused from another project)
   const referenced = [
-    ...data.cast.flatMap((c) => [c.baseAssetId, ...c.designRefAssetIds]),
+    data.baseAssetId,
+    ...data.designRefAssetIds,
     data.expressionSetup.refAssetId,
     data.expressionSetup.sheetAssetId,
     ...data.expressions.map((e) => e.imageAssetId),

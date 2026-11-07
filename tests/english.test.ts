@@ -64,6 +64,7 @@ const OUT = {
     body: "Arms loosely folded under the chest, gold armbands visible on both arms.",
     transition: panel < 4 ? "Eyelids lift and she unfolds her arms toward the next pose." : "",
     delivery: "tired sigh, rising at the end",
+    others: [],
   })),
 };
 
