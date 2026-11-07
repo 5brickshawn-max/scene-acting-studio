@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { continuityAnchor, imageAspectFor, timelineOrder } from "@/lib/domain/project";
+import { continuityAnchor, imageAspectFor, shotsOf, timelineOrder } from "@/lib/domain/project";
 import { composeImages, fetchAll, freshAssets, padImage, safeName, saveBlob, stamp, text, zipFiles, type PackFile } from "@/lib/export";
 import { useEditor } from "./editor-context";
 
@@ -178,7 +178,7 @@ export function HiggsfieldVideoPack() {
                   [
                     `${data.title || "작업"} — Higgsfield 영상 수동 제작용 (v${h.version})`,
                     "",
-                    "1. higgsfield.ai에서 영상 모델을 고릅니다 (Kling 4.0 또는 Seedance 2.5).",
+                    `1. higgsfield.ai에서 영상 모델을 고릅니다 (Kling 4.0 또는 Seedance 2.5 — 둘 다 최대 30초${Math.ceil(data.acting.duration) > 10 ? `; Gemini Omni Flash 1.2는 참고 그림·끝 프레임을 쓰면 최대 10초라 ${Math.ceil(data.acting.duration)}초 장면이 잘립니다` : ""}).`,
                     start
                       ? `2. 아래 그림을 시작 프레임(첫 장면)으로 첨부합니다.${end ? " 끝 프레임은 마지막 장면(end frame)으로 첨부합니다 (Kling 4.0·MiniMax H3)." : ""}`
                       : "2. 아래 그림을 번호 순서대로 참고 그림으로 첨부합니다. 번호가 프롬프트의 reference image 번호와 같아야 합니다.",
@@ -186,7 +186,9 @@ export function HiggsfieldVideoPack() {
                     `3. ‘프롬프트.txt’를 그대로 붙여넣습니다 (${h.prompt.length.toLocaleString("ko-KR")}자, 맨 끝에 스튜디오 제약사항 포함).`,
                     `4. 길이 ${Math.ceil(data.acting.duration)}초${
                       data.acting.duration % 1 ? ` (액팅 ${data.acting.duration}초를 올림 — Higgsfield는 초 단위)` : ""
-                    }, 화면 비율 ${data.video.aspectRatio}로 생성합니다. 컷 없는 한 쇼트입니다.`,
+                    }, 화면 비율 ${data.video.aspectRatio}로 생성합니다. ${
+                      shotsOf(data).length > 1 ? `컷 분할 ${shotsOf(data).length}쇼트입니다 (프롬프트가 컷 위치를 지시).` : "컷 없는 한 쇼트입니다."
+                    }`,
                     "5. 완성된 MP4를 앱의 5단계 ‘생성한 영상’에 올립니다.",
                     "",
                     start ? "시작·끝 프레임:" : "참고 그림 순서:",

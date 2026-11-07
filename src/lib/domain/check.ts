@@ -187,7 +187,10 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
       label: "4단계 시간 분배로",
     });
   const n = data.acting.segments.length;
-  if (n && duration / n < 2) add("warn", "표정당 시간", `표정당 ${r1(duration / n)}초로 짧아 전환이 급해질 수 있습니다.`, { kind: "goto", step: 1, label: "2단계 길이·표정 수로" });
+  if (n && duration / n < 2) {
+    const u = data.mode === "storyboard" ? "컷" : "표정";
+    add("warn", `${u}당 시간`, `${u}당 ${r1(duration / n)}초로 짧아 전환이 급해질 수 있습니다.`, { kind: "goto", step: 1, label: `2단계 길이·${u} 수로` });
+  }
 
   const allLines = data.dialogue.lines.map((l) => l.line).join(" ");
   if (/[가-힣]/.test(allLines) && /영어|english/i.test(data.dialogue.language))

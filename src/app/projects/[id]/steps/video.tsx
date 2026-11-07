@@ -452,7 +452,10 @@ export function VideoStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }
         <h3 className="section-title">Higgsfield에서 영상 만들기 (구독 크레딧 사용)</h3>
         <ol className="list-decimal pl-5 space-y-1">
           <li>아래 버튼으로 프롬프트를 만듭니다.</li>
-          <li>higgsfield.ai에서 이미지→영상 모델을 고르고 시작 프레임을 첨부합니다.</li>
+          <li>
+            higgsfield.ai에서 영상 모델을 고르고{" "}
+            {data.video.startFrameAssetId ? "시작 프레임(있으면 끝 프레임도)을 첨부합니다." : "아래 참고 그림을 번호 순서대로 첨부합니다."}
+          </li>
           <li>프롬프트를 붙여넣고, 길이 {data.acting.duration}초·비율 {data.video.aspectRatio}로 생성합니다.</li>
           <li>완성된 영상을 아래에 올려 팀과 검토합니다.</li>
         </ol>

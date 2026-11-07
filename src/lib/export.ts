@@ -115,7 +115,7 @@ export async function padImage(bytes: Uint8Array, aspect: "16:9" | "9:16"): Prom
  */
 export async function composeImages(images: Uint8Array[], aspect: "16:9" | "9:16"): Promise<Uint8Array> {
   const bmps = await Promise.all(images.map((b) => createImageBitmap(new Blob([b as BlobPart]))));
-  const L = comboLayout(bmps.map((b) => ({ width: b.width, height: b.height })));
+  const L = comboLayout(bmps.map((b) => ({ width: b.width, height: b.height })), 3072);
   const canvas = document.createElement("canvas");
   canvas.width = L.width;
   canvas.height = L.height;

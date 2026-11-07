@@ -266,7 +266,7 @@ export function ComposeProposal({ job, out }: { job: JobView; out: SceneComposeO
               </ol>
             )}
             {st.clipped && <span className="block notice notice-warn">패널이 {st.total}개라 앞의 12개만 들어갑니다(한 장면 최대 12개). 장면을 둘로 나누는 것도 방법입니다.</span>}
-            {st.duration > 30 && <span className="block notice notice-warn">{st.duration}초는 영상 모델 한도(Kling·Seedance 30초, MiniMax 15초)를 넘습니다. 생성할 때 모델 한도로 잘립니다.</span>}
+            {st.duration > 30 && <span className="block notice notice-warn">{st.duration}초는 영상 모델 한도(Kling·Seedance 30초, Gemini Omni·MiniMax 15초)를 넘습니다. 생성할 때 모델 한도로 잘립니다.</span>}
           </ComposeRow>
         )}
         <ComposeRow picked={picked} toggle={toggle} k="opening" title="첫 장면 묘사 (장면 기준 그림 생성에 씀)">

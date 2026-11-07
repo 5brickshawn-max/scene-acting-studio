@@ -33,3 +33,11 @@ describe("combined reference images", () => {
     expect(px(info.width - 5)).toEqual([0, 255, 0]);
   });
 });
+
+describe("combined image size", () => {
+  it("scales large panels down to the width cap", () => {
+    const L = comboLayout([{ width: 2048, height: 1152 }, { width: 2048, height: 1152 }, { width: 2048, height: 1152 }], 3072);
+    expect(L.width).toBeLessThanOrEqual(3072);
+    expect(L.widths[0]).toBeGreaterThan(900);
+  });
+});

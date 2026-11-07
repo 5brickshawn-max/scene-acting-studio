@@ -43,7 +43,8 @@ export async function composeSideBySide(inputs: Buffer[], aspect: VideoAspect): 
       return { b, width: m.width, height: m.height };
     }),
   );
-  const L = comboLayout(imgs);
+  // keep the joined image a normal upload size (each panel stays at least ~1000 px wide)
+  const L = comboLayout(imgs, 3072);
   const parts = await Promise.all(
     imgs.map((im, k) => sharp(im.b).flatten({ background: "#ffffff" }).resize(L.widths[k], L.height, { fit: "fill" }).png().toBuffer()),
   );

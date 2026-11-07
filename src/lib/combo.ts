@@ -17,9 +17,12 @@ export function comboParts(id: string): string[] | null {
 /** Panels per combined image at most (smaller ones stop reading as separate frames). */
 export const MAX_COMBO_PARTS = 3;
 
-/** Canvas layout for parts drawn side by side at a common height with a white gutter. */
-export function comboLayout(sizes: { width: number; height: number }[]) {
-  const height = Math.min(...sizes.map((s) => s.height));
+/** Canvas layout for parts drawn side by side at a common height with a white gutter, at most `maxWidth` wide. */
+export function comboLayout(sizes: { width: number; height: number }[], maxWidth = Infinity) {
+  const natural = Math.min(...sizes.map((s) => s.height));
+  // total width at height h: h * (sum of aspect ratios + gutters)
+  const perHeight = sizes.reduce((a, s) => a + s.width / s.height, 0) + 0.06 * (sizes.length - 1);
+  const height = Math.max(1, Math.min(natural, Math.floor(maxWidth / perHeight)));
   const widths = sizes.map((s) => Math.round((s.width * height) / s.height));
   const gutter = Math.round(height * 0.06);
   const xs: number[] = [];

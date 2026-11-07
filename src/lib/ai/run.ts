@@ -411,7 +411,7 @@ async function buildRequest(job: JobRow, data: ProjectData) {
           {
             type: "text",
             text:
-              `아래는 영상 모델(Kling·Seedance·MiniMax)에 보낼 최종 영상 프롬프트입니다. 렌더 전에, 서로 부딪히는 지시를 찾고 고칠 글까지 써 주세요.\n` +
+              `아래는 영상 모델(Kling·Seedance·Gemini Omni·MiniMax)에 보낼 최종 영상 프롬프트입니다. 렌더 전에, 서로 부딪히는 지시를 찾고 고칠 글까지 써 주세요.\n` +
               `우선순위: ① DIRECTOR'S DIRECTION(감독의 추가 연출) ② 맨 끝의 스튜디오 제약사항 ③ 앱이 만든 일반 문장·구간 설명.\n` +
               `찾을 것:\n` +
               `- 프롬프트 안의 문장끼리 부딪히는 곳 (카메라·장비·각도·구도·배경·조명·속도·소리·컷 여부 등)\n` +
