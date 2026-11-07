@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addCastMember, shotsOf, approve, canApprove, createProjectData, imageAspectFor, MAX_CAST, MAX_CAST_STORYBOARD, parseProjectData, stepIssues, type ProjectData } from "@/lib/domain/project";
-import { buildExpressionHandoffs, buildFrameHandoff, buildVideoHandoff } from "@/lib/domain/handoff";
+import { buildExpressionHandoffs, buildFrameHandoff, buildVideoHandoff, cameraTextMoves } from "@/lib/domain/handoff";
 import { applyStoryboard } from "@/lib/domain/apply";
 import { buildEnglishSheet, englishStale } from "@/lib/domain/english";
 import { preRenderCheck } from "@/lib/domain/check";
@@ -213,5 +213,48 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     const refs = buildVideoHandoff(d).references;
     expect(refs.map((r) => r.assetId)).toEqual(["scene-1", "img-0", "img-1", "img-3", "img-4", "img-6", "img-7"]);
     expect(preRenderCheck(d, buildVideoHandoff(d)).find((i) => i.area === "참고 그림 수")?.text).toContain("컷 그림 2장(3번, 6번)");
+  });
+
+  it("voice-over lines are heard, not spoken on screen (auto from the delivery, or set by hand)", () => {
+    const d = market();
+    d.dialogue.lines[1].delivery = "샤리의 V.O.(속마음)입니다. 낮게.";
+    let p = buildVideoHandoff(d).prompt;
+    expect(p).toContain('칼리엘라 is heard in voice-over (not spoken on screen: lips stay still) (English): "Step aside."');
+    expect(p).toContain('브람 says exactly (English): "Not one step further!"');
+    expect(p).toContain("Lines marked voice-over are heard over the picture with no lip movement.");
+    d.dialogue.lines[2].vo = true;
+    p = buildVideoHandoff(d).prompt;
+    expect(p).toContain("Dialogue: every line is voice-over");
+    d.dialogue.lines[1].vo = false;
+    expect(buildVideoHandoff(d).prompt).toContain('칼리엘라 says exactly (English): "Step aside."');
+  });
+
+  it("locked framings are not a camera move; motion words in a camera field are", () => {
+    expect(cameraTextMoves("Ultra-wide eye-level locked shot; only the heat haze moves.")).toBe(false);
+    expect(cameraTextMoves("수직 완전 부감 와이드 고정 샷")).toBe(false);
+    expect(cameraTextMoves("칼리엘라 쪽으로 다가감")).toBe(true);
+    expect(cameraTextMoves("slow push-in toward her face")).toBe(true);
+    const d = market();
+    d.expressions.forEach((e) => (e.camera = "고정 샷"));
+    const h = buildVideoHandoff(d);
+    expect(h.cameraMove).toBe(false);
+    expect(h.prompt).not.toContain("HANDHELD as in the Constraints");
+  });
+
+  it("keeps the panels that open a shot or carry a line when there are too many images", () => {
+    const d = createProjectData("많은 컷", 1, "storyboard");
+    d.baseAssetId = "scene-1";
+    d.expressionSetup.count = 9;
+    d.expressions = Array.from({ length: 9 }, (_, i) => ({ ...d.expressions[i % d.expressions.length], id: `p${i}`, action: "x", imageAssetId: `img-${i}`, link: [1, 2, 3, 4, 6, 7].includes(i) ? ("cut" as const) : ("continuous" as const) }));
+    d.acting.segments = d.expressions.map((e, i) => ({ expressionId: e.id, start: i, end: i + 1, transition: "" }));
+    d.acting.duration = 9;
+    d.dialogue.lines = [{ expressionId: "p7", line: "Surely…", meaning: "", delivery: "" }];
+    const imgs = buildVideoHandoff(d).references.filter((r) => r.role === "expression").map((r) => r.assetId);
+    expect(imgs).toHaveLength(6);
+    expect(imgs).toContain("img-0");
+    expect(imgs).toContain("img-8");
+    expect(imgs).toContain("img-7");
+    // a panel inside a shot (no cut, no line) is the first to go
+    expect(imgs).not.toContain("img-5");
   });
 });

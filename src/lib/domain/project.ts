@@ -316,7 +316,16 @@ export const ProjectDataSchema = z.object({
   expressions: z.array(ExpressionSchema),
   dialogue: z.object({
     language: z.string(),
-    lines: z.array(z.object({ expressionId: z.string(), line: z.string(), meaning: z.string(), delivery: z.string() })),
+    lines: z.array(
+      z.object({
+        expressionId: z.string(),
+        line: z.string(),
+        meaning: z.string(),
+        delivery: z.string(),
+        /** voice-over (속마음·내레이션): heard over the picture, nobody's lips move. null = decided from the text (V.O., 속마음 …) */
+        vo: z.boolean().nullable().optional(),
+      }),
+    ),
   }),
   acting: z.object({
     duration: z.number(),
@@ -591,6 +600,12 @@ function performanceDirectionIssues(e: Pick<Performance, "direction" | "directio
 
 export const isMultiCast = (data: Pick<ProjectData, "cast">) => data.cast.length > 1;
 export const isStoryboard = (data: Pick<ProjectData, "mode">) => data.mode === "storyboard";
+
+/** A line heard over the picture (voice-over, inner voice, narration): the speaker's lips do not move. */
+export function isVoiceOver(line: { vo?: boolean | null; delivery: string; meaning: string }): boolean {
+  if (typeof line.vo === "boolean") return line.vo;
+  return /\bV\.?\s?O\b|voice[- ]?over|보이스\s*오버|속마음|내레이션|나레이션|독백\s*\(?V/i.test(`${line.delivery} ${line.meaning}`);
+}
 
 /** Panel links in timeline order: false for the first panel, true where a panel starts with a hard cut. */
 export function cutBefore(data: Pick<ProjectData, "mode" | "expressions" | "acting">): Map<string, boolean> {

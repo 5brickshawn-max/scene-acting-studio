@@ -139,7 +139,13 @@ export const DialogueOut = z.object({
     .array(z.object({ character: z.number().int().describe("인물 번호 (1부터)"), voice: z.string().describe("그 인물의 목소리: 나이·음색·속도·말투·억양") }))
     .describe("대사가 있는 인물마다 하나"),
   lines: z.array(
-    z.object({ panel: z.number().int(), line: z.string(), meaning: z.string(), delivery: z.string() }),
+    z.object({
+      panel: z.number().int(),
+      line: z.string(),
+      meaning: z.string(),
+      delivery: z.string(),
+      vo: z.boolean().describe("보이스오버(속마음·내레이션·화면 밖 목소리)면 true — 화면 속 입은 움직이지 않음. 시나리오에 V.O.·속마음이라고 되어 있으면 true"),
+    }),
   ),
 });
 

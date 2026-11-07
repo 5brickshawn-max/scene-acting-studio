@@ -191,7 +191,7 @@ export function applyDialogue(data: ProjectData, out: DialogueOutT): ProjectData
     const o = out.lines.find((l) => l.panel === i + 1);
     const prev = data.dialogue.lines.find((l) => l.expressionId === e.id);
     return o
-      ? { expressionId: e.id, line: o.line, meaning: o.meaning, delivery: o.delivery }
+      ? { expressionId: e.id, line: o.line, meaning: o.meaning, delivery: o.delivery, vo: o.vo ?? null }
       : prev ?? { expressionId: e.id, line: "", meaning: "", delivery: "" };
   });
   // voices are per cast member (by cast number); an empty voice keeps what is there

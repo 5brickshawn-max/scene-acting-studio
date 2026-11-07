@@ -1,5 +1,5 @@
 "use client";
-import { castLabel, imageAspectFor, type StepIndex } from "@/lib/domain/project";
+import { castLabel, imageAspectFor, isVoiceOver, type StepIndex } from "@/lib/domain/project";
 import { estimateSpeechSeconds } from "@/lib/domain/speech";
 import { useEditor } from "../editor-context";
 import { AiAction, Field, PanelCrop } from "../ui";
@@ -7,10 +7,11 @@ import { PendingProposal } from "../proposals";
 import { StepFrame } from "./step-frame";
 
 export function DialogueStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) {
-  const { doc, assets } = useEditor();
+  const { doc, assets, canEdit } = useEditor();
   const { data } = doc;
   const sheet = data.expressionSetup.sheetAssetId ? assets.get(data.expressionSetup.sheetAssetId) : undefined;
-  const lineOf = (id: string) => data.dialogue.lines.find((l) => l.expressionId === id) ?? { expressionId: id, line: "", meaning: "", delivery: "" };
+  const lineOf = (id: string): (typeof data.dialogue.lines)[number] =>
+    data.dialogue.lines.find((l) => l.expressionId === id) ?? { expressionId: id, line: "", meaning: "", delivery: "" };
   const setLine = (id: string, patch: Partial<ReturnType<typeof lineOf>>) =>
     doc.edit(2, (d) => {
       const existing = d.dialogue.lines.some((l) => l.expressionId === id);
@@ -79,6 +80,15 @@ export function DialogueStep({ onNavigate }: { onNavigate: (s: StepIndex) => voi
               </div>
               <div className="space-y-3">
                 <Field label={multi ? `대사 · ${castLabel(data, e.characterId)}` : "대사"} value={l.line} onChange={(v) => setLine(e.id, { line: v })} />
+                {l.line && (
+                  <label className="flex items-center gap-2 text-[14px]">
+                    <input type="checkbox" className="size-4" checked={isVoiceOver(l)} disabled={!canEdit} onChange={(ev) => setLine(e.id, { vo: ev.target.checked })} />
+                    <span>
+                      V.O. (보이스오버·속마음 — 화면에서 입을 움직이지 않음)
+                      {(l.vo === null || l.vo === undefined) && isVoiceOver(l) && <span className="text-muted"> · 말투의 ‘V.O.’를 보고 자동으로 켬</span>}
+                    </span>
+                  </label>
+                )}
                 {l.line && (
                   <p className={`text-[13px] ${seg && need > have ? "text-warn font-semibold" : "text-muted"}`}>
                     말하는 데 약 {need}초{seg ? ` · 현재 구간 ${Math.round(have * 10) / 10}초` : ""}

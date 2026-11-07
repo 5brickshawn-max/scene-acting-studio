@@ -13,6 +13,7 @@
 import { constraintsFor, directorAngle, directorBackground, directorRig, hasCameraMove, reconcile, type Adjustment } from "./constraints";
 import { freshEnglish } from "./english";
 import {
+  isVoiceOver,
   cutBefore,
   shotsOf,
   isStoryboard,
@@ -480,6 +481,22 @@ export function buildFrameHandoff(data: ProjectData, expressionId: string, shot:
 
 export type VideoReference = { assetId: string; label: string; role: "identity" | "expression"; expressionId?: string; characterId?: string };
 
+/**
+ * More beat images than the model takes: keep the most useful ones. First and last always; then the panel that
+ * opens each shot (a cut needs its own picture; inside a shot the camera carries on) and panels with dialogue;
+ * the rest spread evenly over the timeline.
+ */
+function pickReferences(data: ProjectData, ids: string[], max: number): Set<string> {
+  const cuts = cutBefore(data);
+  const spoken = new Set(data.dialogue.lines.filter((l) => l.line.trim()).map((l) => l.expressionId));
+  const score = (id: string, k: number) => (k === 0 || k === ids.length - 1 ? 100 : 0) + (cuts.get(id) ? 10 : 0) + (spoken.has(id) ? 5 : 0);
+  const ranked = ids
+    .map((id, k) => ({ id, k, s: score(id, k) }))
+    // equal scores: prefer panels far from those already kept (even spread) by position order of an even sample
+    .sort((a, b) => b.s - a.s || Math.abs((a.k * (max - 1)) / (ids.length - 1) - Math.round((a.k * (max - 1)) / (ids.length - 1))) - Math.abs((b.k * (max - 1)) / (ids.length - 1) - Math.round((b.k * (max - 1)) / (ids.length - 1))) || a.k - b.k);
+  return new Set(ranked.slice(0, max).map((r) => r.id));
+}
+
 /** Reference images a video model takes at most (identity + beat images). */
 export const MAX_VIDEO_REFERENCES = 7;
 
@@ -521,10 +538,7 @@ export function videoReferences(data: ProjectData, maxExpressions = MAX_VIDEO_RE
   const seen = new Set<string>();
   // more images than the model takes: keep them spread over the whole timeline, first and last included
   const withImage = data.acting.segments.filter((seg) => data.expressions.find((e) => e.id === seg.expressionId)?.imageAssetId);
-  const keep =
-    withImage.length > maxExpressions && maxExpressions > 1
-      ? new Set(Array.from({ length: maxExpressions }, (_, k) => withImage[Math.round((k * (withImage.length - 1)) / (maxExpressions - 1))].expressionId))
-      : null;
+  const keep = withImage.length > maxExpressions && maxExpressions > 1 ? pickReferences(data, withImage.map((x) => x.expressionId), maxExpressions) : null;
   for (const seg of data.acting.segments) {
     const i = data.expressions.findIndex((e) => e.id === seg.expressionId);
     const e = data.expressions[i];
@@ -870,7 +884,13 @@ export function buildVideoHandoff(
           const src = fixed ? ko : p;
           return `${name} (${p.emotion || "듣는 반응"}): ${actingKo(src, framing, L2)}`;
         });
-      const says = (text: string) => (multi ? `${who} says exactly (${lang}): "${text}"` : `Say exactly (${lang}): "${text}"`);
+      const vo = l ? isVoiceOver(l) : false;
+      const says = (text: string) =>
+        vo
+          ? `${multi ? who : "The character"} is heard in voice-over (${lang}, not spoken on screen: lips stay still): "${text}"`
+          : multi
+            ? `${who} says exactly (${lang}): "${text}"`
+            : `Say exactly (${lang}): "${text}"`;
       if (eb && original) {
         // short English: face, hands, the checked direction, then the move into the next expression
         const B = "enPose" in L ? L : BUDGETS[0];
@@ -954,7 +974,9 @@ export function buildVideoHandoff(
         angle ? "" : ", eye-level"
       }${vertical ? ", composed for a vertical frame" : ""}. ${camera} No extra characters, text or subtitles.`,
       multi &&
-        `Dialogue: only the character named for a line speaks it, with their own voice and lip movement; while one character speaks the others keep their mouths closed and listen (reacting with eyes, brows, breath and small head moves). Lines never overlap unless a beat says so.`,
+        `Dialogue: only the character named for a line speaks it, with their own voice and lip movement; while one character speaks the others keep their mouths closed and listen (reacting with eyes, brows, breath and small head moves). Lines never overlap unless a beat says so.${
+          data.dialogue.lines.some((l) => l.line.trim() && isVoiceOver(l)) ? " Lines marked voice-over are heard over the picture with no lip movement." : ""
+        }`,
       hands &&
         `Arms and hands act together with the face, stepping through in-between poses from one expression reference's gesture to the next (never jumping straight to the next pose); hands always correctly drawn.`,
       refs.length
@@ -1026,6 +1048,17 @@ export function buildVideoHandoff(
 }
 
 /* ───────────── Storyboard mode (스토리보드 · 컷 단위) ───────────── */
+
+/**
+ * In a panel's camera field the camera is the subject, so a motion verb is a camera move ("칼리엘라 쪽으로
+ * 다가감", "slow push-in"); a framing alone ("locked close-up", "고정 샷") is not.
+ */
+export function cameraTextMoves(t: string): boolean {
+  return (
+    hasCameraMove([t]) ||
+    /다가|물러|따라(?:가|붙|간|감)|틸트|패닝|선회|돌아(?:가|감|들)|올라가|내려가|내려와|이동|트래킹|트랙|줌|당겨|밀고\s*들|빠진다|빠지며|\b(?:push(?:es)?[- ]?in|pull(?:s)?[- ]?(?:back|out)|dolly|tracking|tilt(?:s|ing)?\s+(?:up|down)|pans?\s+(?:left|right|across|to)|zoom(?:s|ing)?\s+(?:in|out)|crane|orbit(?:s|ing)?)\b|\bcamera\s+(?:slowly\s+)?(?:moves?|follows?|rises|descends|circles|drifts?|travels?|tracks?)\b/i.test(t)
+  );
+}
 /*
  * Each beat is a storyboard panel: one finished picture of the whole moment, described as a whole
  * (action, camera, an optional rough sketch). Named characters are kept by identity, not by fixed
@@ -1199,13 +1232,20 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
   const angle = directorAngle(director);
   const background = directorBackground(director);
   const directorCamera = Boolean(rig) || angle || hasCameraMove([director]);
-  const cameraMove = directorCamera || data.expressions.some((e) => e.camera.trim()) || hasCameraMove(data.expressions.map((e) => e.action));
+  // a camera text alone is not a move ("locked close-up"): only words that move the camera count
+  const cameraMove =
+    directorCamera ||
+    hasCameraMove(data.expressions.map((e) => e.action)) ||
+    [...data.expressions.map((e) => e.camera), ...[...panels.values()].map((p) => p.camera)].some(cameraTextMoves);
   const overrides = [
     rig && `카메라 장비: 추가 연출의 ‘${rig}’을(를) 따름 — 제약사항의 HANDHELD 문장 대신 적용`,
     directorCamera && !rig && "카메라: 추가 연출을 따름",
     background && "배경: 추가 연출을 따름",
   ].filter((x): x is string => Boolean(x));
-  const speaking = data.dialogue.lines.some((l) => l.line.trim());
+  const spoken = data.dialogue.lines.filter((l) => l.line.trim());
+  const speaking = spoken.length > 0;
+  const anyVo = spoken.some((l) => isVoiceOver(l));
+  const voOnly = speaking && spoken.every((l) => isVoiceOver(l));
 
   const beatsWith = (B: (typeof STORY_BUDGETS)[number], fixed = true) =>
     data.acting.segments.map((seg, k) => {
@@ -1228,7 +1268,9 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         cut(camera, B.camera) && `Camera: ${sentence(cut(camera, B.camera))}`,
         !last && B.transition && cut(transition, B.transition) && `Into the next panel: ${sentence(cut(transition, B.transition))}`,
         l?.line.trim()
-          ? `${e ? castName(data, beatActor(data, e).id) : "The speaker"} says exactly (${lang}): "${l.line}"${B.delivery && cut(delivery, B.delivery) ? ` — ${cut(delivery, B.delivery)}` : ""}`
+          ? `${e ? castName(data, beatActor(data, e).id) : "The speaker"} ${isVoiceOver(l) ? "is heard in voice-over (not spoken on screen: lips stay still)" : "says exactly"} (${lang}): "${l.line}"${
+              B.delivery && cut(delivery, B.delivery) ? ` — ${cut(delivery, B.delivery)}` : ""
+            }`
           : "No dialogue in this beat.",
       ]
         .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
@@ -1248,7 +1290,9 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         ? `Camera: exactly as in the DIRECTOR'S DIRECTION below${multiShot ? "" : "; one continuous take with no cuts"}.`
         : cameraMove
           ? `Camera: follows the panel cameras below${multiShot ? ", moving continuously inside each shot" : ", moving continuously between them"} (HANDHELD as in the Constraints at the end)${multiShot ? "" : "; one continuous take with no cuts"}.`
-          : "Camera move: none. The framing holds still for the whole shot.",
+          : multiShot
+            ? "Camera: each panel's framing as described; the camera does not move inside a shot."
+            : "Camera move: none. The framing holds still for the whole shot.",
       refs.length
         ? [
             "Reference images (upload in this order):",
@@ -1260,7 +1304,12 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
           ].join("\n")
         : `Use the start frame as the exact first panel.${endFrame ? " The shot ends exactly on the end frame." : ""}`,
       speaking &&
-        `Dialogue: only the character named for a line speaks it, with their own voice and lip movement; everyone else keeps their mouth closed. Crowd sound only as quiet natural ambience, never words.`,
+        (voOnly
+          ? `Dialogue: every line is voice-over — heard over the picture, never spoken on screen; nobody's lips move for it.`
+          : `Dialogue: only the character named for a line speaks it, with their own voice and lip movement; everyone else keeps their mouth closed.${
+              anyVo ? " Lines marked voice-over are heard over the picture with no lip movement." : ""
+            }`),
+      speaking && data.extras.trim() && "Crowd sound only as quiet natural ambience, never words.",
       voices.length &&
         `Voices: ${voices.map((v) => `${castName(data, v.id)} — ${noEndDot(clip(v.text, 160) || clean(v.text).slice(0, 80))}`).join("; ")}. Speak only the exact dialogue below; never read direction text aloud.`,
       `Everyone stays alive between the panels (breathing, blinks, small weight shifts); every change ${multiShot ? "inside a shot " : ""}is acted through a physical action and in-between poses, never morphed.${
