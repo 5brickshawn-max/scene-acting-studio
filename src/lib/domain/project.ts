@@ -194,6 +194,8 @@ export const CastMemberSchema = z.object({
   outfit: z.string(),
   /** this character's voice (age, timbre, pace, accent) */
   voice: z.string().default(""),
+  /** optional material for this character (a design sheet or close-up), used to compose the scene and draw the opening */
+  refAssetId: z.string().nullable().default(null),
   position: z.enum(POSITIONS).default("center"),
   questions: z.array(QuestionSchema),
 });
@@ -275,6 +277,8 @@ export const ProjectDataSchema = z.object({
   mode: z.enum(SCENE_MODES).default("cast"),
   /** storyboard mode: the crowd and background people (unnamed), described once for the whole scene */
   extras: z.string().default(""),
+  /** 첫 장면: the opening moment, drawn as the scene reference picture when the team has no picture of its own */
+  opening: z.string().default(""),
   /** one art style for the whole scene (every character is drawn in it) */
   style: z.string(),
   /**
@@ -351,7 +355,7 @@ export const DEFAULT_DIRECTION: Direction = {
 };
 
 export function blankCastMember(position: Position = "center", name = ""): CastMember {
-  return { id: uid(), name, locks: "", appearance: "", outfit: "", voice: "", position, questions: [] };
+  return { id: uid(), name, locks: "", appearance: "", outfit: "", voice: "", refAssetId: null, position, questions: [] };
 }
 
 export function blankPerformance(characterId: string): Performance {
@@ -395,6 +399,7 @@ export function createProjectData(title = "새 장면", castCount = 1, mode: Sce
     title,
     mode,
     extras: "",
+    opening: "",
     style: "",
     baseAssetId: null,
     designRefAssetIds: [],
@@ -718,7 +723,13 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
       if (open) warn(`${who}: AI 확인 질문 ${open}개에 아직 답하지 않았습니다.`);
     });
     if (!data.baseAssetId)
-      block(isStoryboard(data) ? "장면 기준 그림(주요 인물·분위기)을 올리세요." : data.cast.length > 1 ? "출연진이 함께 있는 장면 기준 그림을 올리세요." : "기본 그림을 올리세요.");
+      block(
+        isStoryboard(data)
+          ? "장면 기준 그림을 올리거나 시나리오로 첫 장면을 생성하세요."
+          : data.cast.length > 1
+            ? "출연진이 함께 있는 장면 기준 그림을 올리거나 시나리오로 첫 장면을 생성하세요."
+            : "기본 그림을 올리거나 시나리오로 첫 장면을 생성하세요.",
+      );
     if (!filled(data.style)) block("장면의 그림체와 색감을 작성하세요.");
     const names = data.cast.map((c) => c.name.trim()).filter(Boolean);
     if (new Set(names).size !== names.length) block("출연진 이름이 겹칩니다. 프롬프트에서 인물을 구분할 수 있게 서로 다른 이름을 쓰세요.");
@@ -885,6 +896,7 @@ function upgradeLegacy(raw: unknown): unknown {
     appearance: String(c.appearance ?? ""),
     outfit: String(c.outfit ?? ""),
     voice: String(o.dialogue?.voice ?? ""),
+    refAssetId: null,
     position: "center",
     questions: (c.questions as CastMember["questions"]) ?? [],
   };
@@ -927,7 +939,7 @@ export function parseProjectData(raw: unknown): ProjectData {
 }
 
 /** Every beat names a lead that exists (unknown or empty → the first) and has one reaction per other member. */
-function withActors(d: ProjectData): ProjectData {
+export function withActors(d: ProjectData): ProjectData {
   const ids = new Set(d.cast.map((c) => c.id));
   let changed = false;
   const expressions = d.expressions.map((e) => {

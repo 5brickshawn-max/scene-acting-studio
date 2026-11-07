@@ -18,12 +18,13 @@ type Spec =
   | { target: "expressions"; model: string; expressionIds?: string[] }
   | { target: "video"; model: string; resolution: string }
   | { target: "finalize"; draftRowId: string }
-  | { target: "frame"; model: string; expressionId: string; shot: Framing; slot: "start" | "end" };
+  | { target: "frame"; model: string; expressionId: string; shot: Framing; slot: "start" | "end" }
+  | { target: "scene"; model: string };
 
 const fmtCredits = (n: number | null) => (n === null ? "?" : Math.floor(n).toLocaleString("ko-KR"));
 
 /** Shared quote → generate → poll logic for one kind of Higgsfield job. */
-function useHfJobs(kind: "hf_expr" | "hf_video" | "hf_frame") {
+function useHfJobs(kind: "hf_expr" | "hf_video" | "hf_frame" | "hf_scene") {
   const { projectId, doc, jobs, assets, addAsset } = useEditor();
   const [quote, setQuote] = useState<{ spec: Spec; q: Quote } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -166,6 +167,67 @@ function ResultActions({ job, primary, onPrimary, extra }: { job: JobView; prima
 
 const jobLabel = (j: JobView) => (j.input as { label?: string }).label ?? "Higgsfield";
 const jobAssetId = (j: JobView) => (j.output as { assetId?: string } | null)?.assetId;
+
+/* ───────────── Step 1: the opening scene drawn from the scenario ───────────── */
+
+/**
+ * 첫 장면 생성: when the team has no scene picture, draw the opening moment from the scenario and the
+ * character material, and use the result as the scene reference picture.
+ */
+export function SceneImageGenerator({ onUse }: { onUse: (assetId: string) => void }) {
+  const { doc, canEdit, assets } = useEditor();
+  const h = useHfJobs("hf_scene");
+  const [model, setModel] = useState<ImageModelKey>("gpt_image_2_5");
+  const d = doc.data;
+  const ready = canEdit && !h.busy && !h.quote && Boolean(d.expressionSetup.scene.trim() || d.opening.trim());
+  const current = d.baseAssetId ? assets.get(d.baseAssetId) : undefined;
+  return (
+    <section className="rounded-xl border-2 border-[#c6dfbf] bg-[#f7fbf5] p-4 space-y-3" aria-label="첫 장면 생성">
+      <p className="text-[14px] text-muted">
+        시나리오·첫 장면 묘사·인물 자료로 이 장면의 첫 순간을 그립니다. 고른 그림이 <strong className="text-ink">장면 기준 그림</strong>이 되어 이후 모든 그림과
+        영상의 인물·그림체 기준이 됩니다. Higgsfield 구독 크레딧이 차감됩니다.
+      </p>
+      <div role="group" aria-label="이미지 모델">
+        <div className="text-[13px] font-semibold mb-1 text-muted">생성 모델</div>
+        <div className="seg">
+          {(Object.keys(IMAGE_MODELS) as ImageModelKey[]).map((k) => (
+            <button key={k} aria-pressed={model === k} disabled={!canEdit || !!h.quote} onClick={() => setModel(k)}>
+              {IMAGE_MODELS[k].label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {!h.quote && (
+        <button className="btn btn-dark" disabled={!ready} onClick={() => h.askQuote({ target: "scene", model })}>
+          {h.busy ? "비용 확인 중…" : current ? "첫 장면 다시 생성" : "비용 확인 후 첫 장면 생성"}
+        </button>
+      )}
+      {!d.expressionSetup.scene.trim() && !d.opening.trim() && <p className="field-help">먼저 씬 시놉시스·시나리오나 첫 장면 묘사를 쓰세요.</p>}
+      <QuoteBox h={h} />
+      <Status h={h} typical="20초~1분" />
+      {h.pending.length > 0 && (
+        <ol className="grid sm:grid-cols-2 gap-3">
+          {h.pending.map((j) => {
+            const a = assets.get(jobAssetId(j) ?? "");
+            return (
+              <li key={j.id} className="rounded-lg border-2 border-[#f3c9ae] bg-[#fffaf5] p-2 space-y-2">
+                <div className="text-[13px] font-semibold">새 결과 · {jobLabel(j)}</div>
+                {a ? (
+                  <a href={a.url} target="_blank" rel="noreferrer">
+                    <img src={a.previewUrl} alt="생성한 첫 장면" className="w-full object-contain checker rounded" />
+                  </a>
+                ) : (
+                  <p className="text-[13px] text-muted">불러오는 중…</p>
+                )}
+                {a && <ResultActions job={j} primary="이 그림을 장면 기준 그림으로 사용" onPrimary={() => onUse(a.id)} />}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </section>
+  );
+}
 
 /* ───────────── Step 2: one image per expression ───────────── */
 

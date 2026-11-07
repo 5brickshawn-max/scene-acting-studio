@@ -55,6 +55,7 @@ function referencedAssetIds(d: ProjectData): string[] {
   return [
     d.baseAssetId,
     ...d.designRefAssetIds,
+    ...d.cast.map((c) => c.refAssetId),
     d.expressionSetup.refAssetId,
     d.expressionSetup.sheetAssetId,
     ...d.expressions.flatMap((e) => [e.imageAssetId, e.sketchAssetId]),

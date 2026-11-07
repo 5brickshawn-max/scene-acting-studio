@@ -2,12 +2,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { castLabel, effectiveText, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, parseProjectData, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
+import { castLabel, effectiveText, maxCastFor, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, parseProjectData, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
 import {
   ActingOut,
   CharacterOut,
   DialogueOut,
   ExpressionsOut,
+  SceneComposeOut,
   StoryboardOut,
   EnglishOut,
   PromptCheckOut,
@@ -158,6 +159,47 @@ async function buildRequest(job: JobRow, data: ProjectData) {
   const multi = data.cast.length > 1;
 
   switch (job.kind) {
+    case "compose_scene": {
+      // the scenario is the source; the scene picture, extra references and each character's material help when there
+      const scenario = data.expressionSetup.scene.trim();
+      if (!scenario && !data.baseAssetId) throw new Error("먼저 씬 시놉시스·시나리오를 쓰거나 장면 기준 그림을 올리세요.");
+      const [base, refs, people] = await Promise.all([
+        data.baseAssetId ? castImages(data) : Promise.resolve([] as Content),
+        imageBlocks(data.designRefAssetIds.map((id) => ({ assetId: id, label: "[추가 참고 그림]" }))),
+        imageBlocks(data.cast.map((c, i) => ({ assetId: c.refAssetId, label: `[인물 ${i + 1} ${castLabel(data, c.id)}의 참고 자료]` }))),
+      ]);
+      const max = maxCastFor(data.mode);
+      const notes = data.cast
+        .map((c, i) =>
+          [c.name, c.locks, c.appearance, c.outfit].some((x) => x.trim())
+            ? `인물 ${i + 1} ${castLabel(data, c.id)} — 특징: ${c.locks || "(없음)"} / 외형: ${c.appearance || "(없음)"} / 의상: ${c.outfit || "(없음)"}`
+            : "",
+        )
+        .filter(Boolean)
+        .join("\n");
+      return {
+        schema: SceneComposeOut,
+        content: [
+          ...base,
+          ...refs,
+          ...people,
+          {
+            type: "text",
+            text:
+              `아래 씬 시놉시스·시나리오로 이 장면을 구성하세요. 결과는 그림·영상 생성의 기준이 됩니다.\n` +
+              `- characters: 대사를 하거나 이름으로 불리는 주요 인물만, 최대 ${max}명(${data.mode === "storyboard" ? "스토리보드 방식" : "인물별 연기 방식"}). 그 밖의 사람들은 extras에 무리로 적으세요.\n` +
+              `- 인물마다 그림 모델이 같은 인물을 계속 그릴 수 있게 locks(구별되는 식별 요소부터), appearance, outfit을 구체적으로. 위에 참고 자료나 팀이 적은 메모가 있으면 그것을 따르고, 없는 부분은 시나리오의 시대·장소·분위기에 맞게 정하되 지어낸 핵심 결정은 questions에 '…로 정했습니다, 맞나요?'처럼 남기세요.\n` +
+              `- style: ${data.baseAssetId || refs.length ? "참고 그림의 그림체를 따라" : "시나리오의 장르·분위기에 맞는 2D 애니메이션 그림체로"} 선·채색·명암·색감을 구체적으로.\n` +
+              `- opening: 이 장면의 첫 순간을 한 장의 그림으로 그릴 묘사. 모든 주요 인물이 얼굴이 보이게 화면에 들어가야 합니다(이 그림이 이후 모든 컷의 인물 기준이 됨). 장소·시간·빛·군중·소품 포함.\n\n` +
+              `씬 시놉시스·시나리오:\n${scenario || "(없음 — 그림만 보고 구성)"}\n` +
+              (notes ? `\n팀이 적어 둔 인물 메모:\n${notes}\n` : "") +
+              (data.extras.trim() ? `\n팀이 적어 둔 군중: ${data.extras}\n` : "") +
+              (data.style.trim() ? `\n팀이 적어 둔 그림체: ${data.style}\n` : "") +
+              extra,
+          },
+        ] as Content,
+      };
+    }
     case "analyze_character": {
       // one analysis of the scene drawing describes every cast member and the shared style
       const [base, refs] = await Promise.all([

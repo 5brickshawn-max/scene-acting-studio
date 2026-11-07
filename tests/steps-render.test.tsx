@@ -33,7 +33,11 @@ describe("step screens render for one and for several characters", () => {
   it("step 1: one scene picture, cast tabs, blocking preview and the shared style", () => {
     const html = render(trio(), createElement(CharacterStep, nav));
     expect(html).toContain("장면 기준 그림 (출연진 전원이 함께)");
-    expect(html).toContain("AI로 장면 기준 그림 분석");
+    expect(html).toContain("① 씬 시놉시스·시나리오 (기준)");
+    expect(html).toContain("AI로 씬 구성");
+    expect(html).toContain("시나리오로 첫 장면 생성");
+    expect(html).toContain("첫 장면 묘사");
+    expect(html).toContain("이 인물 참고 자료 (선택)");
     expect(html).toContain("장면과 출연진을 정하세요");
     expect(html).toContain("화면 배치");
     expect(html).toContain("A · 칼리엘라");

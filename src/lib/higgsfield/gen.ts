@@ -8,7 +8,7 @@
  */
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { FRAMING_LABEL, parseProjectData, type Framing, type ProjectData } from "@/lib/domain/project";
-import { buildExpressionHandoffs, buildFrameHandoff, buildVideoHandoff } from "@/lib/domain/handoff";
+import { buildExpressionHandoffs, buildFrameHandoff, buildSceneImageHandoff, buildVideoHandoff } from "@/lib/domain/handoff";
 import { findJobIds, getConnection, openSession, withWorkspace, type McpSession } from "./client";
 import sharp from "sharp";
 import { padToAspect, type VideoAspect } from "./pad";
@@ -20,13 +20,15 @@ export type GenSpec =
   | { target: "expressions"; model: string; expressionIds?: string[] }
   | { target: "video"; model: string; resolution: string }
   | { target: "finalize"; draftRowId: string }
+  /** 첫 장면: the scene reference picture drawn from the scenario (step 1) */
+  | { target: "scene"; model: string }
   /** a start or end frame for the video (시작·끝 프레임), drawn at the video's aspect ratio */
   | { target: "frame"; model: string; expressionId: string; shot: Framing; slot: "start" | "end" };
 
 type Media = { assetId: string; role: string };
 type Item = { params: Record<string, unknown>; medias: Media[]; label: string; meta: Record<string, unknown> };
 type Plan = {
-  kind: "hf_expr" | "hf_video" | "hf_frame";
+  kind: "hf_expr" | "hf_video" | "hf_frame" | "hf_scene";
   step: number;
   tool: "generate_image_batch" | "generate_video_batch";
   single: "generate_image" | "generate_video";
@@ -65,6 +67,29 @@ async function plan(projectId: string, spec: GenSpec, data: ProjectData): Promis
     if (!items.length) throw new Error("생성할 표정이 없습니다.");
     if (items.length > 12) throw new Error("한 번에 12장까지 생성할 수 있습니다.");
     return { kind: "hf_expr", step: 1, tool: "generate_image_batch", single: "generate_image", items };
+  }
+
+  if (spec.target === "scene") {
+    if (!isImageModel(spec.model)) throw new Error("지원하지 않는 이미지 모델입니다.");
+    if (!data.expressionSetup.scene.trim() && !data.opening.trim()) throw new Error("먼저 씬 시놉시스·시나리오나 첫 장면 묘사를 쓰세요.");
+    if (!data.cast.some((c) => c.name.trim() || c.appearance.trim() || c.refAssetId))
+      throw new Error("주요 인물의 이름·외형을 적거나 ‘AI로 씬 구성’을 먼저 하세요.");
+    const m = IMAGE_MODELS[spec.model];
+    const h = buildSceneImageHandoff(data);
+    return {
+      kind: "hf_scene",
+      step: 0,
+      tool: "generate_image_batch",
+      single: "generate_image",
+      items: [
+        {
+          params: { ...m.params, prompt: h.prompt, aspect_ratio: h.aspectRatio },
+          medias: h.references.map((r) => ({ assetId: r.assetId, role: "image_references" })),
+          label: `첫 장면 · ${m.label}`,
+          meta: { model: spec.model, aspect: h.aspectRatio },
+        },
+      ],
+    };
   }
 
   if (spec.target === "frame") {
@@ -364,7 +389,7 @@ export async function poll(rowId: string, session?: Opened): Promise<"running" |
       id,
       workspace_id: row.workspace_id,
       project_id: row.project_id,
-      kind: isVideo ? "video" : "sheet",
+      kind: isVideo ? "video" : row.kind === "hf_scene" ? "base" : "sheet",
       name: `${input.label ?? "Higgsfield"} ${when}.${extOf(mime)}`,
       storage_path: path,
       mime,

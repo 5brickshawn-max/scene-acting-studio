@@ -1,7 +1,11 @@
 /** Pure functions that merge an AI proposal into project data. Applying is
  * always an explicit user action; fields can be picked individually. */
-import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, StoryboardOutT } from "@/lib/ai/schemas";
+import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, SceneComposeOutT, StoryboardOutT } from "@/lib/ai/schemas";
 import {
+  blankCastMember,
+  defaultPositions,
+  maxCastFor,
+  withActors,
   blankExpression,
   withReactionsFor,
   type Performance,
@@ -31,6 +35,47 @@ export function applyCharacter(data: ProjectData, out: CharacterOutT, fields: Ch
     return c;
   });
   return reopenFrom({ ...data, cast, style: pick.has("style") ? out.style : data.style }, 0);
+}
+
+export type ComposeField = "cast" | "style" | "extras" | "opening" | "questions";
+
+/**
+ * Apply a scene composition (씬 구성). "cast" replaces the named characters with the AI's list (up to the
+ * mode's limit), keeping each existing member — its id, picture and voice — in order; beats are re-pointed.
+ */
+export function applyComposition(data: ProjectData, out: SceneComposeOutT, fields: ComposeField[]): ProjectData {
+  const pick = new Set(fields);
+  let cast = data.cast;
+  if (pick.has("cast") && out.characters.length) {
+    const list = out.characters.slice(0, maxCastFor(data.mode));
+    const positions = defaultPositions(list.length);
+    cast = list.map((o, i) => {
+      const prev = data.cast[i] ?? blankCastMember();
+      return {
+        ...prev,
+        name: o.name.trim() || prev.name,
+        locks: o.locks,
+        appearance: o.appearance,
+        outfit: o.outfit,
+        voice: prev.voice.trim() || o.voice,
+        position: list.length === data.cast.length ? prev.position : positions[i],
+      };
+    });
+  }
+  if (pick.has("questions") && out.questions.length) {
+    const first = { ...cast[0] };
+    const existing = new Set(first.questions.map((q) => q.question));
+    first.questions = [...first.questions, ...out.questions.filter((q) => !existing.has(q)).map((q) => ({ question: q, answer: "" }))];
+    cast = [first, ...cast.slice(1)];
+  }
+  const next: ProjectData = {
+    ...data,
+    cast,
+    style: pick.has("style") && out.style.trim() ? out.style : data.style,
+    extras: pick.has("extras") ? out.extras : data.extras,
+    opening: pick.has("opening") && out.opening.trim() ? out.opening : data.opening,
+  };
+  return reopenFrom(withActors(next), 0);
 }
 
 /** AI directions are marked "ai" so the step cannot be approved until a person confirms them. */

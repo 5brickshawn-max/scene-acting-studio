@@ -1,9 +1,9 @@
 "use client";
 import { useState } from "react";
-import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, SheetCheckOutT, StoryboardOutT } from "@/lib/ai/schemas";
+import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, SceneComposeOutT, SheetCheckOutT, StoryboardOutT } from "@/lib/ai/schemas";
 import { JOB_LABEL, type JobKind } from "@/lib/ai/schemas";
-import { applyActing, applyCharacter, applyDialogue, applyExpressions, applyStoryboard, type CharacterField } from "@/lib/domain/apply";
-import { castLabel, FACING_LABEL, GAZE_LABEL, INTENSITY_LABEL, type ProjectData } from "@/lib/domain/project";
+import { applyActing, applyCharacter, applyComposition, applyDialogue, applyExpressions, applyStoryboard, type CharacterField, type ComposeField } from "@/lib/domain/apply";
+import { castLabel, FACING_LABEL, GAZE_LABEL, INTENSITY_LABEL, maxCastFor, type ProjectData } from "@/lib/domain/project";
 import type { JobView } from "@/lib/types";
 import { useEditor } from "./editor-context";
 
@@ -164,6 +164,80 @@ export function CharacterProposal({ job, out }: { job: JobView; out: CharacterOu
               </ul>
             </span>
           </label>
+        )}
+      </div>
+    </ProposalShell>
+  );
+}
+
+/** 씬 구성: the named characters, style, crowd and opening the AI composed from the scenario. */
+export function ComposeProposal({ job, out }: { job: JobView; out: SceneComposeOutT }) {
+  const { doc } = useEditor();
+  const apply = useApply(job);
+  const d = doc.data;
+  const story = d.mode === "storyboard";
+  const max = maxCastFor(d.mode);
+  const [picked, setPicked] = useState<Set<ComposeField>>(new Set<ComposeField>(["cast", "style", "extras", "opening", "questions"]));
+  const toggle = (k: ComposeField) =>
+    setPicked((s) => {
+      const n = new Set(s);
+      if (n.has(k)) n.delete(k);
+      else n.add(k);
+      return n;
+    });
+  const Row = ({ k, title, children }: { k: ComposeField; title: string; children: React.ReactNode }) => (
+    <label className="flex gap-3 items-start rounded-lg bg-white border border-line p-3">
+      <input type="checkbox" className="mt-1 size-5" checked={picked.has(k)} onChange={() => toggle(k)} />
+      <span className="flex-1 space-y-1">
+        <span className="font-semibold block">{title}</span>
+        {children}
+      </span>
+    </label>
+  );
+  return (
+    <ProposalShell
+      job={job}
+      title="씬 구성"
+      summary={out.summary}
+      applyDisabled={picked.size === 0}
+      onApply={() => apply(applyComposition(doc.data, out, [...picked]), "AI 씬 구성 적용")}
+    >
+      <div className="space-y-3">
+        <Row k="cast" title={`주요 인물 ${Math.min(out.characters.length, max)}명 (지금 ${d.cast.length}명을 이 목록으로 바꿈)`}>
+          {out.characters.length > max && (
+            <span className="block notice notice-warn">이 방식은 최대 {max}명이라 앞의 {max}명만 들어갑니다.{story ? "" : " 더 많으면 스토리보드 방식을 쓰세요."}</span>
+          )}
+          <ol className="space-y-2">
+            {out.characters.slice(0, max).map((c, i) => (
+              <li key={i} className="text-[14px]">
+                <span className="font-semibold">{c.name}</span>
+                <span className="block whitespace-pre-wrap">특징: {c.locks}</span>
+                <span className="block">외형: {c.appearance}</span>
+                <span className="block">의상: {c.outfit}</span>
+                {c.voice && <span className="block text-muted">목소리: {c.voice}</span>}
+              </li>
+            ))}
+          </ol>
+        </Row>
+        <Row k="style" title="그림체 (장면 공통)">
+          <span className="block whitespace-pre-wrap">{out.style}</span>
+        </Row>
+        {story && out.extras.trim() && (
+          <Row k="extras" title="군중·배경 인물">
+            <span className="block whitespace-pre-wrap">{out.extras}</span>
+          </Row>
+        )}
+        <Row k="opening" title="첫 장면 묘사 (장면 기준 그림 생성에 씀)">
+          <span className="block whitespace-pre-wrap">{out.opening}</span>
+        </Row>
+        {out.questions.length > 0 && (
+          <Row k="questions" title={`확인 질문 ${out.questions.length}개 추가`}>
+            <ul className="list-disc pl-5">
+              {out.questions.map((q) => (
+                <li key={q}>{q}</li>
+              ))}
+            </ul>
+          </Row>
         )}
       </div>
     </ProposalShell>
@@ -378,7 +452,11 @@ export function PendingProposal({ step, kinds, except }: { step: number; kinds?:
   if (job.kind === "check_sheet") return <SheetCheckResult job={job} out={proposal as SheetCheckOutT} />;
   switch (step) {
     case 0:
-      return <CharacterProposal job={job} out={proposal as CharacterOutT} />;
+      return job.kind === "compose_scene" ? (
+        <ComposeProposal job={job} out={proposal as SceneComposeOutT} />
+      ) : (
+        <CharacterProposal job={job} out={proposal as CharacterOutT} />
+      );
     case 1:
       return (proposal as { panels?: unknown }).panels ? (
         <StoryboardProposal job={job} out={proposal as StoryboardOutT} />

@@ -18,6 +18,7 @@ import { useEditor } from "../editor-context";
 import { AiAction, Field, ImageSlot, Seg } from "../ui";
 import { PendingProposal } from "../proposals";
 import { StepFrame } from "./step-frame";
+import { SceneImageGenerator } from "./higgsfield-direct";
 
 /** Step 1: the cast (1–4 characters in one shot) and the scene's shared art style. */
 export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) {
@@ -28,6 +29,8 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
   const multi = d.cast.length > 1 && !story;
   const group = d.cast.length > 1;
   const [active, setActive] = useState(d.cast[0].id);
+  // the scene picture: drawn from the scenario (default when there is none yet) or uploaded
+  const [source, setSource] = useState<"generate" | "upload">(d.baseAssetId ? "upload" : "generate");
   const current = d.cast.find((c) => c.id === active) ?? d.cast[0];
 
   const setMember = (id: string, patch: Partial<CastMember>) =>
@@ -39,8 +42,8 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
       title="장면과 출연진을 정하세요"
       intro={
         story
-          ? "장면 기준 그림(주요 인물·분위기·세계)을 올리고, 이름이 있는 주요 인물과 군중을 정합니다. 2단계에서 콘티처럼 컷 단위로 장면을 만듭니다."
-          : "출연진이 함께 있는 장면 기준 그림 한 장을 올리고, AI 분석으로 인물마다 설명 초안을 받은 뒤 직접 다듬어 승인합니다. 모든 인물의 모습·크기·그림체가 이 한 장에서 나옵니다."
+          ? "씬 시놉시스·시나리오를 쓰고, 장면 기준 그림을 올리거나 시나리오로 첫 장면을 생성합니다. 이름이 있는 주요 인물과 군중을 정한 뒤, 2단계에서 콘티처럼 컷 단위로 장면을 만듭니다."
+          : "씬 시놉시스·시나리오를 쓰고, 장면 기준 그림을 올리거나 시나리오로 첫 장면을 생성합니다. 모든 인물의 모습·크기·그림체가 이 그림 한 장에서 나옵니다."
       }
       onNavigate={onNavigate}
     >
@@ -88,61 +91,122 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-[minmax(0,420px)_1fr] gap-6">
-          <div className="space-y-3">
-            <ImageSlot
-              label={story ? "장면 기준 그림 (주요 인물·분위기·세계)" : multi ? "장면 기준 그림 (출연진 전원이 함께)" : "기본 그림"}
-              kind="base"
-              assetId={d.baseAssetId}
-              tall={!multi}
-              emptyText={
-                multi
-                  ? "출연진이 모두 함께 그려진 그림 한 장을 올리세요. 인물의 모습·키 차이·그림체가 모두 이 그림에서 나옵니다. 아래 화면 위치를 이 그림 속 위치와 맞추세요."
-                  : "캐릭터의 기준이 되는 그림을 올리세요. 이후 모든 단계가 이 그림을 기준으로 합니다."
-              }
-              onChange={(id) => doc.edit(0, (x) => ({ ...x, baseAssetId: id }))}
-            />
-            <div className="space-y-2">
-              <div className="field-label">추가 참고 그림 (선택)</div>
-              {d.designRefAssetIds.map((id, i) => (
-                <ImageSlot
-                  key={id}
-                  label={`추가 참고 ${i + 1}`}
-                  kind="design_ref"
-                  assetId={id}
-                  removable
-                  emptyText=""
-                  onChange={(nid) =>
-                    doc.edit(0, (x) => ({
-                      ...x,
-                      designRefAssetIds: nid ? x.designRefAssetIds.map((y) => (y === id ? nid : y)) : x.designRefAssetIds.filter((y) => y !== id),
-                    }))
-                  }
-                />
-              ))}
-              {d.designRefAssetIds.length < 2 && (
-                <ImageSlot
-                  label={d.designRefAssetIds.length ? "참고 그림 더 추가" : "참고 그림"}
-                  kind="design_ref"
-                  assetId={null}
-                  emptyText={multi ? "인물 클로즈업, 옆모습처럼 장면 기준 그림에서 잘 안 보이는 부분이 있으면 올리세요." : "옆모습, 뒷모습, 소품 같은 추가 디자인을 올리면 분석이 더 정확해집니다."}
-                  onChange={(id) => id && doc.edit(0, (x) => ({ ...x, designRefAssetIds: [...x.designRefAssetIds, id] }))}
-                />
+        <section className="space-y-3" aria-labelledby="synopsis-title">
+          <h3 id="synopsis-title" className="section-title">① 씬 시놉시스·시나리오 (기준)</h3>
+          <Field
+            label="씬 시놉시스·시나리오 (기초 대사 포함)"
+            multiline
+            rows={7}
+            value={d.expressionSetup.scene}
+            onChange={(v) => doc.edit(0, (x) => ({ ...x, expressionSetup: { ...x.expressionSetup, scene: v } }))}
+            placeholder={
+              "예: 해 질 녘 시장 광장. 횃불을 든 군중이 술렁이는 가운데 칼리엘라가 걸어 나오고, 브람이 칼자루를 쥔 채 앞을 막아선다.\n" +
+              "칼리엘라 : “Step aside.”\n" +
+              "브람 : “Not one step further!”"
+            }
+            help="이 장면의 기준입니다. 대사 앞에 말하는 인물 이름을 붙이세요(‘이름 : …’). 2단계 설계와 3단계 대사가 이 글을 따릅니다."
+          />
+          <AiAction
+            kind="compose_scene"
+            step={0}
+            label="AI로 씬 구성"
+            disabled={!d.expressionSetup.scene.trim() && !d.baseAssetId}
+            disabledReason="먼저 씬 시놉시스·시나리오를 쓰세요."
+            description={`시나리오와 인물 자료(있으면 그림까지)로 주요 인물(최대 ${maxCastFor(d.mode)}명)·외형·의상·그림체${story ? "·군중" : ""}·첫 장면을 구성합니다.`}
+          />
+          <PendingProposal step={0} kinds={["compose_scene"]} />
+        </section>
+
+        <section className="space-y-3" aria-labelledby="base-title">
+          <h3 id="base-title" className="section-title">② 장면 기준 그림</h3>
+          <Seg
+            label="기준 그림을 어떻게 정할까요"
+            value={source}
+            options={["generate", "upload"] as const}
+            labels={{ generate: "시나리오로 첫 장면 생성", upload: "그림 올리기" }}
+            onChange={setSource}
+          />
+          <div className="grid lg:grid-cols-[minmax(0,420px)_1fr] gap-6">
+            <div className="space-y-3">
+              <ImageSlot
+                label={story ? "장면 기준 그림 (주요 인물·분위기·세계)" : multi ? "장면 기준 그림 (출연진 전원이 함께)" : "기본 그림"}
+                kind="base"
+                assetId={d.baseAssetId}
+                tall={!multi && !story}
+                emptyText={
+                  source === "generate"
+                    ? "오른쪽에서 첫 장면을 생성해 고르면 여기에 들어갑니다."
+                    : story
+                      ? "주요 인물과 장면의 분위기·세계가 담긴 그림 한 장을 올리세요. 인물의 모습과 그림체가 이 그림에서 나옵니다."
+                      : multi
+                        ? "출연진이 모두 함께 그려진 그림 한 장을 올리세요. 인물의 모습·키 차이·그림체가 모두 이 그림에서 나옵니다. 아래 화면 위치를 이 그림 속 위치와 맞추세요."
+                        : "캐릭터의 기준이 되는 그림을 올리세요. 이후 모든 단계가 이 그림을 기준으로 합니다."
+                }
+                onChange={(id) => doc.edit(0, (x) => ({ ...x, baseAssetId: id }))}
+              />
+              <div className="space-y-2">
+                <div className="field-label">추가 참고 그림 (선택)</div>
+                {d.designRefAssetIds.map((id, i) => (
+                  <ImageSlot
+                    key={id}
+                    label={`추가 참고 ${i + 1}`}
+                    kind="design_ref"
+                    assetId={id}
+                    removable
+                    emptyText=""
+                    onChange={(nid) =>
+                      doc.edit(0, (x) => ({
+                        ...x,
+                        designRefAssetIds: nid ? x.designRefAssetIds.map((y) => (y === id ? nid : y)) : x.designRefAssetIds.filter((y) => y !== id),
+                      }))
+                    }
+                  />
+                ))}
+                {d.designRefAssetIds.length < 2 && (
+                  <ImageSlot
+                    label={d.designRefAssetIds.length ? "참고 그림 더 추가" : "참고 그림"}
+                    kind="design_ref"
+                    assetId={null}
+                    emptyText="배경·소품·분위기 참고처럼 장면 전체에 쓸 그림이 있으면 올리세요. 인물별 자료는 아래 인물 카드에 올립니다."
+                    onChange={(id) => id && doc.edit(0, (x) => ({ ...x, designRefAssetIds: [...x.designRefAssetIds, id] }))}
+                  />
+                )}
+              </div>
+            </div>
+            <div className="space-y-4">
+              {source === "generate" ? (
+                <>
+                  <Field
+                    label="첫 장면 묘사"
+                    multiline
+                    rows={4}
+                    value={d.opening}
+                    onChange={(v) => doc.edit(0, (x) => ({ ...x, opening: v }))}
+                    placeholder="예: 해 질 녘 시장 광장, 횃불을 든 군중 사이로 칼리엘라가 화면 왼쪽에서 걸어 나오고, 오른쪽의 브람이 칼자루를 쥐고 그녀를 노려본다."
+                    help="‘AI로 씬 구성’이 채워 줍니다. 모든 주요 인물의 얼굴이 보이는 순간이 좋습니다(이후 모든 그림의 인물 기준이 됨). 비우면 시나리오 앞부분을 씁니다."
+                  />
+                  <SceneImageGenerator onUse={(id) => doc.edit(0, (x) => ({ ...x, baseAssetId: id }))} />
+                </>
+              ) : (
+                <>
+                  <AiAction
+                    kind="analyze_character"
+                    step={0}
+                    label={group || story ? "AI로 장면 기준 그림 분석" : "AI로 기본 그림 분석"}
+                    disabled={!d.baseAssetId}
+                    disabledReason={group || story ? "먼저 장면 기준 그림을 올리세요." : "먼저 기본 그림을 올리세요."}
+                    description={
+                      group
+                        ? `그림 속 ${d.cast.length}명을 이름·위치로 찾아 인물마다 설명 초안과 확인 질문을 제안합니다. 먼저 아래에 이름과 위치를 적어 두세요.`
+                        : "인물 설명(특징·외형·의상)과 그림체 초안, 확인 질문을 제안합니다."
+                    }
+                  />
+                  <PendingProposal step={0} except={["compose_scene"]} />
+                </>
               )}
             </div>
           </div>
-          <div className="space-y-4">
-            <AiAction
-              kind="analyze_character"
-              step={0}
-              label={group || story ? "AI로 장면 기준 그림 분석" : "AI로 기본 그림 분석"}
-              disabled={!d.baseAssetId}
-              disabledReason={multi ? "먼저 장면 기준 그림을 올리세요." : "먼저 기본 그림을 올리세요."}
-              description={multi ? `그림 속 ${d.cast.length}명을 이름·위치로 찾아 인물마다 설명 초안과 확인 질문을 제안합니다. 먼저 아래에 이름과 위치를 적어 두세요.` : "네 가지 설명 초안과 확인 질문을 제안합니다."}
-            />
-            <PendingProposal step={0} />
-          </div>
-        </div>
+        </section>
 
         {multi && (
           <div className="space-y-2">
@@ -250,6 +314,16 @@ function CastCard(props: {
       </div>
       <div className="space-y-6">
           <Field label="이름" value={c.name} onChange={(v) => set({ name: v })} help={props.multi ? "프롬프트에서 인물을 구분하는 이름입니다. 다른 인물과 겹치지 않게 쓰세요." : undefined} />
+          <div className="max-w-xs">
+            <ImageSlot
+              label="이 인물 참고 자료 (선택)"
+              kind="design_ref"
+              assetId={c.refAssetId}
+              removable
+              emptyText="캐릭터 시트·설정화가 있으면 올리세요. ‘AI로 씬 구성’과 첫 장면 생성에 쓰입니다."
+              onChange={(id) => set({ refAssetId: id })}
+            />
+          </div>
           {props.positions && (
             <Seg label={props.story ? "장면 기준 그림 속 위치 (누가 누구인지 찾는 데 씀)" : "화면 위치"} value={c.position} options={POSITIONS} labels={POSITION_LABEL} onChange={(v) => set({ position: v })} />
           )}

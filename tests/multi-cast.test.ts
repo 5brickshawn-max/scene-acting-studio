@@ -104,7 +104,7 @@ describe("a cast of several characters", () => {
     const d = duo();
     expect(canApprove(d, 0)).toBe(true);
     d.baseAssetId = null;
-    expect(stepIssues(d, 0).map((i) => i.message)).toContain("출연진이 함께 있는 장면 기준 그림을 올리세요.");
+    expect(stepIssues(d, 0).map((i) => i.message)).toContain("출연진이 함께 있는 장면 기준 그림을 올리거나 시나리오로 첫 장면을 생성하세요.");
     d.baseAssetId = "scene-1";
     d.cast[1].name = "칼리엘라";
     expect(stepIssues(d, 0).map((i) => i.message).join(" ")).toContain("출연진 이름이 겹칩니다");

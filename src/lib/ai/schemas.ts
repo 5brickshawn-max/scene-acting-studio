@@ -23,6 +23,28 @@ export const CharacterOut = z.object({
   questions: z.array(z.string()).describe("그림만으로 확신할 수 없는 점에 대한 확인 질문"),
 });
 
+/** 씬 구성: the scene composed from the scenario (and any material): the named characters, style, crowd and the opening. */
+export const SceneComposeOut = z.object({
+  summary: z.string().describe("이 장면을 어떻게 구성했는지 한두 문장"),
+  characters: z
+    .array(
+      z.object({
+        name: z.string().describe("인물 이름 (시나리오에 나온 그대로)"),
+        locks: z.string().describe("그림에서 절대 변하면 안 되는 식별 요소, 번호 목록 (다른 인물과 구별되는 것부터)"),
+        appearance: z.string().describe("나이대, 얼굴, 체형·키, 피부, 머리"),
+        outfit: z.string().describe("의상과 장신구"),
+        voice: z.string().describe("목소리: 나이·음색·속도·말투 (대사가 없는 인물은 빈 문자열)"),
+      }),
+    )
+    .describe("이름이 있는 주요 인물 (대사하거나 이름으로 불리는 인물), 등장 순서대로"),
+  extras: z.string().describe("이름 없는 군중·배경 인물 (없으면 빈 문자열)"),
+  style: z.string().describe("장면 전체의 그림체: 선, 채색, 명암, 색감"),
+  opening: z
+    .string()
+    .describe("첫 장면 묘사: 장소·시간·빛, 모든 주요 인물이 어디서 무엇을 하는지(얼굴이 보이게), 군중·소품 (3~5문장)"),
+  questions: z.array(z.string()).describe("시나리오와 자료만으로 정할 수 없어 앱이 정한 것이나 확인이 필요한 것"),
+});
+
 /** Another character's acting at the same moment (group scenes). */
 const ReactionOutItem = z.object({
   character: z.number().int().describe("인물 번호 (1부터)"),
@@ -186,6 +208,7 @@ export const EnglishOut = z.object({
 });
 
 export const JOB_KINDS = [
+  "compose_scene",
   "analyze_character",
   "design_expressions",
   "check_sheet",
@@ -198,6 +221,7 @@ export const JOB_KINDS = [
 export type JobKind = (typeof JOB_KINDS)[number];
 
 export const JOB_STEP: Record<Exclude<JobKind, "consult">, number> = {
+  compose_scene: 0,
   analyze_character: 0,
   design_expressions: 1,
   check_sheet: 1,
@@ -208,6 +232,7 @@ export const JOB_STEP: Record<Exclude<JobKind, "consult">, number> = {
 };
 
 export const JOB_LABEL: Record<JobKind, string> = {
+  compose_scene: "씬 구성",
   analyze_character: "기본 그림 분석",
   design_expressions: "표정 설계",
   check_sheet: "표정 그림 검사",
@@ -243,6 +268,7 @@ export function consultSchemaFor(step: number, storyboard = false) {
 }
 
 export type CharacterOutT = z.infer<typeof CharacterOut>;
+export type SceneComposeOutT = z.infer<typeof SceneComposeOut>;
 export type ExpressionsOutT = z.infer<typeof ExpressionsOut>;
 export type StoryboardOutT = z.infer<typeof StoryboardOut>;
 export type SheetCheckOutT = z.infer<typeof SheetCheckOut>;

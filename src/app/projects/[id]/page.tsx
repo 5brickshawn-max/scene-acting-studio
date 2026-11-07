@@ -35,6 +35,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const referenced = [
     data.baseAssetId,
     ...data.designRefAssetIds,
+    ...data.cast.map((c) => c.refAssetId),
     data.expressionSetup.refAssetId,
     data.expressionSetup.sheetAssetId,
     ...data.expressions.flatMap((e) => [e.imageAssetId, e.sketchAssetId]),

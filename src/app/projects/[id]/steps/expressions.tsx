@@ -149,7 +149,7 @@ function SceneField() {
   return (
     <div>
       <label className="field-label" htmlFor="scene">
-        상황 설정·기초 대사 (선택)
+        씬 시놉시스·시나리오 (1단계와 같은 글 — 여기서 고쳐도 됨)
       </label>
       <textarea
         id="scene"
@@ -654,7 +654,7 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
         <AiAction
           kind="design_expressions"
           step={1}
-          label={s.scene.trim() ? "상황 설정에 맞춰 AI로 콘티 설계" : "AI로 콘티 설계"}
+          label={s.scene.trim() ? "시나리오에 맞춰 AI로 콘티 설계" : "AI로 콘티 설계"}
           disabled={!d.baseAssetId}
           disabledReason="1단계에서 장면 기준 그림을 먼저 올리세요."
           description={`컷 ${s.count}개의 제목·장면 묘사·카메라·말하는 인물을 제안합니다. 러프 스케치를 올린 컷은 그 구도를 따릅니다.`}
@@ -844,13 +844,13 @@ function CastExpressionStep({ onNavigate }: { onNavigate: (s: StepIndex) => void
         <AiAction
           kind="design_expressions"
           step={1}
-          label={s.scene.trim() ? "상황 설정에 맞춰 AI로 표정 설계" : "AI로 표정 설계"}
+          label={s.scene.trim() ? "시나리오에 맞춰 AI로 표정 설계" : "AI로 표정 설계"}
           disabled={!doc.data.baseAssetId}
           disabledReason={doc.data.cast.length > 1 ? "1단계에서 장면 기준 그림을 먼저 올리세요." : "1단계에서 기본 그림을 먼저 올리세요."}
           instruction={s.instruction}
           description={`${
             s.scene.trim()
-              ? `상황 설정의 장면을 연기하는 표정 ${s.count}개를 순서대로 설계합니다${s.refAssetId ? " (참고 시트에서 장면에 맞는 칸을 골라 분석)" : ""}.`
+              ? `시나리오의 장면을 연기하는 표정 ${s.count}개를 순서대로 설계합니다${s.refAssetId ? " (참고 시트에서 장면에 맞는 칸을 골라 분석)" : ""}.`
               : s.refAssetId
                 ? "참고 시트의 각 칸을 따로 관찰해 감정과 방향을 제안합니다."
                 : doc.data.cast.length > 1

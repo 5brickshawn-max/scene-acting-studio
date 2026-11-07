@@ -1225,3 +1225,52 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
     lengthTarget,
   };
 }
+
+/* ───────────── 첫 장면: the scene picture drawn from the scenario ───────────── */
+
+export type SceneImageHandoff = { prompt: string; aspectRatio: string; references: ReferenceSlot[] };
+
+/**
+ * The opening moment drawn from the scenario and the character material, used as the scene reference
+ * picture when the team has none: every named character clearly visible, in the scene's style.
+ * One character in character-by-character mode: a portrait 3:4 character picture on a plain background.
+ */
+export function buildSceneImageHandoff(data: ProjectData): SceneImageHandoff {
+  const en = freshEnglish(data);
+  const story = isStoryboard(data);
+  const multi = isMultiCast(data);
+  const aspect = story || multi ? data.video.aspectRatio : EXPRESSION_IMAGE_ASPECT;
+  const references: ReferenceSlot[] = [];
+  for (const c of data.cast)
+    if (c.refAssetId)
+      references.push({ role: `image reference ${references.length + 1}`, assetId: c.refAssetId, why: `${castLabel(data, c.id)} 참고 자료`, characterId: c.id });
+  for (const id of data.designRefAssetIds) references.push({ role: `image reference ${references.length + 1}`, assetId: id, why: "추가 참고 그림" });
+  const refOf = (id: string) => references.findIndex((r) => r.characterId === id) + 1;
+  const style = en.style ?? clean(data.style);
+  const scene = clean(data.opening) || clip(data.expressionSetup.scene, 600) || clean(data.expressionSetup.scene).slice(0, 600);
+  const people = data.cast.map((c) => {
+    const f = en.cast.get(c.id);
+    const n = refOf(c.id);
+    const look = f?.look ? f.look.join("; ") : [clean(c.locks), clean(c.appearance)].filter(Boolean).join(" ");
+    const outfit = f?.outfit ?? clean(c.outfit);
+    return `- ${castName(data, c.id)}${multi && !story ? ` (${POSITION_EN[c.position]})` : ""}: ${[look, outfit && `Outfit: ${outfit}`].filter(Boolean).join(". ")}${
+      n ? ` Match image reference ${n} exactly for this character.` : ""
+    }`;
+  });
+  const prompt = [
+    story || multi
+      ? `Opening frame of an animated scene, ${aspect}, a finished illustration — not a sketch, not a character sheet, no panels.`
+      : `Single character illustration of ONE character, portrait ${aspect}, bust shot, eye-level camera, plain white background — not a sheet, no panels.`,
+    `This picture becomes the reference for every later frame: draw ${multi ? "every named character" : "the character"} clearly — whole head and upper body visible, face readable, nobody hidden, cut off or covering another's face.`,
+    multi ? `Named characters (exactly these, each one distinct; never mix features between them):` : `The character:`,
+    ...people,
+    story && data.extras.trim() && `Crowd and background people (unnamed): ${clean(data.extras)}.`,
+    style && `Art style: ${style.replace(/[.。]+$/, "")}. 2D animation style; never photorealistic or 3D.`,
+    scene && (story || multi) && `The moment: ${sentence(scene)}`,
+    !story && multi && `Background: plain and light so every character reads clearly.`,
+    `No text, no labels, no name tags, no borders.`,
+  ]
+    .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+    .join("\n");
+  return { prompt, aspectRatio: aspect, references };
+}

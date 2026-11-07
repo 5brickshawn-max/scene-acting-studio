@@ -213,7 +213,8 @@ export function ReviewView({ b, dataUrl }: { b: ReviewBundle; dataUrl: string })
             <Media a={A(s.refAssetId)} label="표정 참고 시트" />
           </div>
         )}
-        <Field label="상황 설정·기초 대사" value={s.scene} />
+        <Field label="씬 시놉시스·시나리오" value={s.scene} />
+        {d.opening.trim() && <Field label="첫 장면 묘사" value={d.opening} />}
         <Field label="연출 지시" value={s.instruction} />
         {s.styleWarning && <p className="notice notice-warn">그림체 경고: {s.styleWarning}</p>}
         <ol className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
