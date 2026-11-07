@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+/* Design tokens — every text color passes WCAG AA (4.5:1) on its background.
+ * Smallest UI text is 13px; body text 15px. */
+@theme {
+  --color-bg: #f6f6f2;
+  --color-paper: #ffffff;
+  --color-ink: #1f2a1b;
+  --color-muted: #4d5945;      /* 7.3:1 on white */
+  --color-line: #dfe3d8;
+  --color-line-strong: #c4cbb9;
+  --color-accent: #c2410c;     /* 5.2:1 with white text */
+  --color-accent-soft: #fff1e8;
+  --color-ok: #2f6b2a;
+  --color-ok-soft: #edf6ea;
+  --color-warn: #8a5300;
+  --color-warn-soft: #fff6e3;
+  --color-err: #a32a1b;
+  --color-err-soft: #fdeeea;
+  --font-sans: "Pretendard", "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html { background: var(--color-bg); color: var(--color-ink); }
+body { font-family: var(--font-sans); font-size: 15px; line-height: 1.6; letter-spacing: -0.01em; }
+
+:focus-visible { outline: 3px solid #e2733f; outline-offset: 2px; }
+
+@layer components {
+  .card { background: var(--color-paper); border: 1px solid var(--color-line); border-radius: 14px; }
+  .brand-mark { display: grid; place-items: center; width: 34px; height: 36px; border-radius: 6px; background: var(--color-accent); color: #fff; font-weight: 800; font-size: 22px; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    min-height: 40px; padding: 8px 16px; border-radius: 9px; font-weight: 600; font-size: 14px;
+    border: 1px solid var(--color-line-strong); background: #fff; color: var(--color-ink);
+    cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { background: #f3f5ef; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: var(--color-accent); border-color: var(--color-accent); color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: #a8380a; }
+  .btn-dark { background: #26301f; border-color: #26301f; color: #fff; }
+  .btn-dark:hover:not(:disabled) { background: #354230; }
+  .btn-ghost { border-color: transparent; background: transparent; }
+  .btn-sm { min-height: 32px; padding: 4px 10px; font-size: 13px; }
+  .btn-danger { color: var(--color-err); border-color: #e5b9b1; }
+
+  .input, .textarea, .select {
+    width: 100%; border: 1px solid var(--color-line-strong); border-radius: 8px; background: #fff;
+    padding: 8px 11px; font-size: 15px; color: var(--color-ink);
+  }
+  .textarea { min-height: 88px; resize: vertical; line-height: 1.65; }
+  .input:disabled, .textarea:disabled, .select:disabled { background: #f4f5f1; color: var(--color-muted); }
+  .field-label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .field-help { font-size: 13px; color: var(--color-muted); margin-top: 4px; }
+
+  .notice { border-radius: 9px; padding: 10px 12px; font-size: 14px; border: 1px solid; }
+  .notice-ok { background: var(--color-ok-soft); border-color: #c6dfbf; color: var(--color-ok); }
+  .notice-warn { background: var(--color-warn-soft); border-color: #ecd6a6; color: var(--color-warn); }
+  .notice-error { background: var(--color-err-soft); border-color: #efc2b8; color: var(--color-err); }
+  .notice-info { background: #f1f4ec; border-color: var(--color-line); color: var(--color-ink); }
+
+  .pill { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 600; border: 1px solid var(--color-line); background: #fff; }
+  .pill-ok { background: var(--color-ok-soft); color: var(--color-ok); border-color: #c6dfbf; }
+  .pill-warn { background: var(--color-warn-soft); color: var(--color-warn); border-color: #ecd6a6; }
+  .pill-err { background: var(--color-err-soft); color: var(--color-err); border-color: #efc2b8; }
+  .pill-accent { background: var(--color-accent-soft); color: var(--color-accent); border-color: #f3c9ae; }
+
+  .seg { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+  .seg button {
+    min-height: 34px; padding: 4px 10px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    border: 1px solid var(--color-line-strong); background: #fff; color: var(--color-ink); cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: #26301f; border-color: #26301f; color: #fff; }
+  .seg button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .section-title { font-size: 17px; font-weight: 700; }
+  .eyebrow { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; color: var(--color-muted); }
+
+  .checker { background: repeating-conic-gradient(#f3f4ef 0% 25%, #fff 0% 50%) 50% / 16px 16px; }
+}
