@@ -743,7 +743,8 @@ describe("pre-render check (충돌 점검)", () => {
     const h = buildVideoHandoff(d);
     const items = preRenderCheck(d, h);
     const text = (level: string) => items.filter((i) => i.level === level).map((i) => `${i.area}: ${i.text}`).join(" | ");
-    expect(text("ok")).toContain("추가 연출: 추가 연출이 줄이지 않고 그대로 들어갔습니다");
+    // the music clause was taken out, so the check says the text was adjusted (not "unchanged")
+    expect(text("ok")).toContain("추가 연출: 추가 연출이 들어갔습니다");
     expect(text("ok")).toContain("스튜디오 제약사항이 프롬프트 맨 끝에 있습니다");
     expect(text("fixed")).toContain("Steadicam");
     expect(text("fixed")).toContain("음악 지시를 뺌");

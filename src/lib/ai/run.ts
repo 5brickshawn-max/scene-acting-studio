@@ -494,7 +494,7 @@ async function buildRequest(job: JobRow, data: ProjectData) {
                 multi ? " (다른 인물과 구별되는 요소를 앞에)" : ""
               }. outfit, voice는 각각 영어 한 문장\n` +
               (storyboard
-                ? `- beats: 컷마다 하나씩(panel = 컷 번호). 이 장면은 스토리보드 방식이라 필드를 이렇게 씁니다: emotion = 컷 제목(영어 2~6단어), face = 장면 묘사(누가 무엇을 하는지, 군중 포함, 영어 1~2문장), body = 카메라(영어 한 문장), delivery = 대사 말투, others = 빈 배열\n`
+                ? `- beats: 컷마다 하나씩(panel = 컷 번호). 이 장면은 스토리보드 방식이라 필드를 이렇게 씁니다: emotion = 컷 제목(영어 2~6단어), face = 장면 묘사(누가 무엇을 하는지, 군중 포함, 대사하는 인물의 동작까지 끝까지, 영어 1~2문장, 350자 이내), body = 카메라(시작 구도와 움직임까지, 영어 한 문장, 220자 이내), delivery = 대사 말투, others = 빈 배열\n`
                 : `- beats: 표정마다 하나씩(panel = 표정 번호). face는 중심 인물의 얼굴 연기, body는 팔·손·몸 연기, delivery는 대사 말투${
                     multi ? ". others에는 '같은 순간' 나머지 인물마다 하나씩(character = 인물 번호) emotion·face·body" : ""
                   }\n`) +

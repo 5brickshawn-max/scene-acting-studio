@@ -37,6 +37,8 @@ export function englishSources(d: ProjectData) {
       return {
         expressionId: e.id,
         source: JSON.stringify([
+          // v2: storyboard moments are kept whole (older sheets were cut at 200 characters) → written again once
+          d.mode === "storyboard" ? "sb2" : "",
           d.expressionSetup.framing,
           e.characterId,
           // storyboard panels: the whole moment and the camera
@@ -190,8 +192,9 @@ export function buildEnglishSheet(d: ProjectData, out: EnglishOut): EnglishSheet
           expressionId: e.id,
           key: textKey(s.source),
           emotion: fitText(b.emotion, 60),
-          face: fitText(b.face, 200),
-          body: fitText(b.body, 200),
+          // storyboard: face = the whole moment (who does what), body = the camera — longer than one look
+          face: fitText(b.face, d.mode === "storyboard" ? 380 : 200),
+          body: fitText(b.body, d.mode === "storyboard" ? 240 : 200),
           transition: fitText(b.transition, 140),
           delivery: fitText(b.delivery, 80),
           others: (b.others ?? []).flatMap((o) => {

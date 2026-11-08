@@ -241,9 +241,9 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     const d = market();
     d.dialogue.lines[1].delivery = "샤리의 V.O.(속마음)입니다. 낮게.";
     let p = buildVideoHandoff(d).prompt;
-    expect(p).toContain('칼리엘라 is heard in voice-over (not spoken on screen: lips stay still) (English): "Step aside."');
+    expect(p).toContain('칼리엘라 is heard in voice-over (the speaker is not seen saying it, no lip-sync) (English): "Step aside."');
     expect(p).toContain('브람 says exactly (English): "Not one step further!"');
-    expect(p).toContain("Lines marked voice-over are heard over the picture with no lip movement.");
+    expect(p).toContain("Lines marked voice-over are heard over the picture; nobody lip-syncs them.");
     d.dialogue.lines[2].vo = true;
     p = buildVideoHandoff(d).prompt;
     expect(p).toContain("Dialogue: every line is voice-over");

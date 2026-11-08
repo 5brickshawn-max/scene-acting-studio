@@ -159,14 +159,6 @@ const tidy = (t: string) =>
     .replace(/[ \t]{2,}/g, " ")
     .trim();
 
-/** Split one line into clauses (keeping their punctuation), drop the ones that match. */
-function dropClauses(line: string, re: RegExp): string {
-  const parts = line.split(/(?<=[,，;；.!?。])\s+/);
-  const kept = parts.filter((p) => !re.test(p));
-  if (kept.length === parts.length) return line;
-  return kept.join(" ").replace(/[,，;；]\s*$/, "").trim();
-}
-
 const CUT_TEST =
   /컷\s*전환|컷(?:이|을)\s*(?:전환|바뀌|넘어가)|컷\s*(?:별로|마다)|(?:다음|이전|앞|첫|마지막|새|각)\s*컷|\bjump[- ]?cuts?\b|\b(?:hard\s+)?cut(?:s|ting)?\s+(?:to|into|away)\b|\b(?:per|each|every)\s+cut\b/i;
 const MUSIC_STRICT = /배경\s*음악|BGM|사운드\s*트랙|soundtrack|background\s+music|\bmusic\b/i;
@@ -175,6 +167,24 @@ const MUSIC_ANY = /배경\s*음악|BGM|사운드\s*트랙|soundtrack|background\
 const INTERP_SRC =
   "(?:모핑|디졸브|크로스\\s*페이드|모션\\s*블러|보간|글라이드|미끄러지듯|스르르|스르륵)(?:처럼|으로|로|하듯이?|하며|되며|되듯|과\\s*함께|와\\s*함께)?(?:\\s*자연스럽게)?|\\b(?:morph(?:ing|s|ed)?|dissolv(?:e|es|ing)|cross-?fad(?:e|es|ing)|motion\\s+blur|interpolat(?:e|ed|ion|ing)|glid(?:e|es|ing))\\b";
 const SMOOTH_SRC = "(?:부드럽게|매끄럽게|부드러운|매끄러운|\\bsmooth(?:ly)?\\b|\\bseamless(?:ly)?\\b)\\s*";
+
+/**
+ * A word that is itself forbidden ("never gliding", "NO morphing", "모핑 없이", "BGM 금지") already agrees
+ * with the constraints: removing it would leave "never." / "NO," behind.
+ */
+const NEG_BEFORE = /(?:\b(?:no|never|not|without|avoid|avoiding|zero|nor|non)\b|없이|금지|말고)[\s\-:]*(?:\w+[\s-]+){0,2}$/i;
+const NEG_AFTER = /^\s*(?:없이|없는|없음|금지|하지\s*(?:말|않)|되지\s*않|않|은\s*없|는\s*없|이\s*없|가\s*없|을\s*쓰지|를\s*쓰지)/;
+function negated(text: string, index: number, length: number) {
+  return NEG_BEFORE.test(text.slice(Math.max(0, index - 30), index)) || NEG_AFTER.test(text.slice(index + length, index + length + 12));
+}
+/** Replace the matches of `src` that are not themselves negated. */
+function removeUnnegated(t: string, src: string): string {
+  return t.replace(new RegExp(src, "gi"), (m: string, ...rest: unknown[]) => {
+    const offset = rest.find((x) => typeof x === "number") as number;
+    return negated(t, offset, m.length) ? m : "";
+  });
+}
+const hasUnnegated = (t: string, re: RegExp) => [...t.matchAll(new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g"))].some((m) => !negated(t, m.index ?? 0, m[0].length));
 
 const RULES: Rule[] = [
   {
@@ -197,22 +207,27 @@ const RULES: Rule[] = [
     label: "음악 지시를 뺌 (제약: NO MUSIC, 자연음만)",
     kinds: ["direction", "motion", "voice"],
     // voice texts keep the plain word "음악" (e.g. "음악적인 억양"); only clear music-layer phrases go
-    test: (t, kind) => (kind === "voice" ? MUSIC_STRICT : MUSIC_ANY).test(t),
-    apply: (t, kind) => dropClauses(t, kind === "voice" ? MUSIC_STRICT : MUSIC_ANY),
+    test: (t, kind) => hasUnnegated(t, kind === "voice" ? MUSIC_STRICT : MUSIC_ANY),
+    apply: (t, kind) => {
+      const re = kind === "voice" ? MUSIC_STRICT : MUSIC_ANY;
+      const parts = t.split(/(?<=[,，;；.!?。])\s+/);
+      const kept = parts.filter((p) => !hasUnnegated(p, re));
+      return kept.length === parts.length ? t : kept.join(" ").replace(/[,，;；]\s*$/, "").trim();
+    },
   },
   {
     id: "interp",
     label: "모핑·보간·모션 블러·미끄러지는 움직임 지시를 뺌 (제약: 포즈에서 포즈로 스텝 모션)",
     kinds: ["motion", "direction"],
-    test: (t) => new RegExp(INTERP_SRC, "i").test(t),
-    apply: (t) => tidy(t.replace(new RegExp(INTERP_SRC, "gi"), "")),
+    test: (t) => hasUnnegated(t, new RegExp(INTERP_SRC, "i")),
+    apply: (t) => tidy(removeUnnegated(t, INTERP_SRC)),
   },
   {
     id: "smooth",
     label: "움직임의 ‘부드럽게·매끄럽게’를 뺌 (제약: NO smooth interpolation)",
     kinds: ["motion", "direction"],
-    test: (t) => new RegExp(SMOOTH_SRC, "i").test(t),
-    apply: (t) => tidy(t.replace(new RegExp(SMOOTH_SRC, "gi"), "")),
+    test: (t) => hasUnnegated(t, new RegExp(SMOOTH_SRC, "i")),
+    apply: (t) => tidy(removeUnnegated(t, SMOOTH_SRC)),
   },
 ];
 
@@ -267,5 +282,28 @@ export function reconcile(text: string, kind: FieldKind, where: string, log: Adj
     .replace(/\n{3,}/g, "\n\n")
     .trim();
   if (applied.size && result !== original) log.push({ where, rule: [...applied].join(" / "), before: original, after: result });
+  return result;
+}
+
+const words = (t: string) => (t.toLowerCase().match(/[a-z0-9가-힣]{3,}/g) ?? []);
+
+/**
+ * Paragraphs of the director's text that only repeat the studio constraints (which close the prompt anyway)
+ * are left out of the director's block, so the room goes to the beats. A paragraph stays when it adds
+ * anything of its own (more than a few words the constraints do not have).
+ */
+export function dropConstraintRepeats(direction: string, where: string, log: Adjustment[]): string {
+  if (!direction.trim()) return direction;
+  const known = new Set(words(constraintsFor(null)));
+  const paras = direction.split(/\n\s*\n/);
+  const kept = paras.filter((p) => {
+    const w = words(p.replace(/^\s*[A-Za-z가-힣 &]{2,30}\s*[:：]/, ""));
+    if (w.length < 4) return true;
+    const own = w.filter((x) => !known.has(x)).length;
+    return own >= Math.max(1, Math.ceil(w.length * 0.1));
+  });
+  if (kept.length === paras.length) return direction;
+  const result = kept.join("\n\n").trim();
+  log.push({ where, rule: "제약사항과 같은 문단을 뺌 (프롬프트 맨 끝 제약사항에 이미 있음)", before: direction, after: result });
   return result;
 }

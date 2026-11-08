@@ -11,7 +11,7 @@
  * shipped to the browser bundle.
  */
 import { comboId, MAX_COMBO_PARTS } from "@/lib/combo";
-import { constraintsFor, directorAngle, directorBackground, directorRig, hasCameraMove, reconcile, type Adjustment } from "./constraints";
+import { constraintsFor, dropConstraintRepeats, directorAngle, directorBackground, directorRig, hasCameraMove, reconcile, type Adjustment } from "./constraints";
 import { freshEnglish } from "./english";
 import {
   isVoiceOver,
@@ -920,7 +920,7 @@ export function buildVideoHandoff(
     }))
     .filter((v) => v.text.trim());
   // The director's additional direction: kept whole (line breaks too), never trimmed.
-  const director = reconcile(data.video.extraDirection, "direction", "추가 연출", adjustments);
+  const director = dropConstraintRepeats(reconcile(data.video.extraDirection, "direction", "추가 연출", adjustments), "추가 연출", adjustments);
 
   // ── What the director's direction decides (it wins over the app's general lines) ──
   const rig = directorRig(director);
@@ -967,7 +967,7 @@ export function buildVideoHandoff(
       const vo = l ? isVoiceOver(l) : false;
       const says = (text: string) =>
         vo
-          ? `${multi ? who : "The character"} is heard in voice-over (${lang}, not spoken on screen: lips stay still): "${text}"`
+          ? `${multi ? who : "The character"} is heard in voice-over (${lang}; the speaker is not seen saying it, no lip-sync): "${text}"`
           : multi
             ? `${who} says exactly (${lang}): "${text}"`
             : `Say exactly (${lang}): "${text}"`;
@@ -1055,8 +1055,8 @@ export function buildVideoHandoff(
       }${vertical ? ", composed for a vertical frame" : ""}. ${camera} No extra characters, text or subtitles.`,
       multi &&
         `Dialogue: only the character named for a line speaks it, with their own voice and lip movement; while one character speaks the others keep their mouths closed and listen (reacting with eyes, brows, breath and small head moves). Lines never overlap unless a beat says so.${
-          data.dialogue.lines.some((l) => l.line.trim() && isVoiceOver(l)) ? " Lines marked voice-over are heard over the picture with no lip movement." : ""
-        }`,
+          data.dialogue.lines.some((l) => l.line.trim() && isVoiceOver(l)) ? " Lines marked voice-over are heard over the picture; nobody lip-syncs them." : ""
+        } A character a beat describes as silently mouthing words moves their lips without sound.`,
       hands &&
         `Arms and hands act together with the face, stepping through in-between poses from one expression reference's gesture to the next (never jumping straight to the next pose); hands always correctly drawn.`,
       refs.length
@@ -1068,7 +1068,7 @@ export function buildVideoHandoff(
                   ? `${i + 1}. scene reference drawing of the whole cast — ${data.cast.map((c) => spotEn(data, c, en)).join("; ")}; use it for identity and relative sizes only`
                   : `${i + 1}. character design — may show several views of the same character; use it for identity only`;
               if (r.parts)
-                return `${i + 1}. ${multi ? "frames" : "expressions"} ${r.parts.map((p) => numberOf(p.expressionId)).join(", ")} side by side, left to right — ${r.parts.length} consecutive ${multi ? "approved scene frames" : "approved expression targets"} in one image (separate moments, not one picture)`;
+                return `${i + 1}. ${multi ? "frames" : "expressions"} ${r.parts.map((p) => numberOf(p.expressionId)).join(", ")} side by side, left to right — consecutive ${multi ? "approved scene frames" : "approved expression targets"}`;
               const eb = r.expressionId ? enBeats.get(r.expressionId) : undefined;
               const label = multi ? "approved scene frame" : "approved expression target";
               return `${i + 1}. ${eb ? `${multi ? "frame" : "expression"} ${numberOf(r.expressionId!)} (${multi ? `${nameOf(r.expressionId!)}: ` : ""}${eb.emotion}) — ${label}` : r.label}`;
@@ -1298,7 +1298,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
           action: reconcile(t.action, "motion", `${i + 1}번 컷 장면 묘사`, adjustments, allowCuts),
           camera: reconcile(t.camera, "direction", `${i + 1}번 컷 카메라`, adjustments, allowCuts),
           transition: reconcile(t.transition ?? fixOf("transition", e.id, seg?.transition ?? ""), "motion", `${i + 1}번 컷 다음 컷으로`, adjustments, allowCuts),
-          delivery: reconcile(t.delivery ?? fixOf("delivery", e.id, line?.delivery ?? ""), "voice", `${i + 1}번 컷 대사 말투`, adjustments),
+          delivery: reconcile(t.delivery ?? fixOf("delivery", e.id, line?.delivery ?? ""), "voice", `${i + 1}번 컷 대사 말투`, adjustments, allowCuts),
         },
       ] as const;
     }),
@@ -1306,7 +1306,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
   const voices = data.cast
     .map((c) => ({ id: c.id, text: reconcile(en.cast.get(c.id)?.voice ?? fixOf("voice", c.id, c.voice), "voice", `${castLabel(data, c.id)} 목소리`, adjustments) }))
     .filter((v) => v.text.trim());
-  const director = reconcile(data.video.extraDirection, "direction", "추가 연출", adjustments, allowCuts);
+  const director = dropConstraintRepeats(reconcile(data.video.extraDirection, "direction", "추가 연출", adjustments, allowCuts), "추가 연출", adjustments);
   const rig = directorRig(director);
   const angle = directorAngle(director);
   const background = directorBackground(director);
@@ -1347,7 +1347,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         cut(camera, B.camera) && `Camera: ${sentence(cut(camera, B.camera))}`,
         !last && B.transition && cut(transition, B.transition) && `Into the next panel: ${sentence(cut(transition, B.transition))}`,
         l?.line.trim()
-          ? `${e ? castName(data, beatActor(data, e).id) : "The speaker"} ${isVoiceOver(l) ? "is heard in voice-over (not spoken on screen: lips stay still)" : "says exactly"} (${lang}): "${l.line}"${
+          ? `${e ? castName(data, beatActor(data, e).id) : "The speaker"} ${isVoiceOver(l) ? "is heard in voice-over (the speaker is not seen saying it, no lip-sync)" : "says exactly"} (${lang}): "${l.line}"${
               B.delivery && cut(delivery, B.delivery) ? ` — ${cut(delivery, B.delivery)}` : ""
             }`
           : "No dialogue in this beat.",
@@ -1379,7 +1379,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
               r.role === "identity"
                 ? `${i + 1}. scene reference drawing — named characters, style and world; identity only`
                 : r.parts
-                  ? `${i + 1}. panels ${r.parts.map((p) => panelNo(p.expressionId)).join(", ")} side by side, left to right — ${r.parts.length} consecutive storyboard frames in one image (separate moments; each fills the whole frame in the video)`
+                  ? `${i + 1}. panels ${r.parts.map((p) => panelNo(p.expressionId)).join(", ")} side by side, left to right — consecutive storyboard frames`
                   : `${i + 1}. panel ${r.expressionId ? panelNo(r.expressionId) : "?"}${r.expressionId && panels.get(r.expressionId)?.title ? ` (${panels.get(r.expressionId)!.title})` : ""} — storyboard frame target`,
             ),
           ].join("\n")
@@ -1388,9 +1388,9 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         "Panels shown side by side in one reference are separate moments: each plays in full frame in turn; never show a split screen, grid or side-by-side frames.",
       speaking &&
         (voOnly
-          ? `Dialogue: every line is voice-over — heard over the picture, never spoken on screen; nobody's lips move for it.`
-          : `Dialogue: only the character named for a line speaks it, with their own voice and lip movement; everyone else keeps their mouth closed.${
-              anyVo ? " Lines marked voice-over are heard over the picture with no lip movement." : ""
+          ? `Dialogue: every line is voice-over — heard over the picture, never spoken on screen; nobody lip-syncs it (a beat that says someone silently mouths words still shows that).`
+          : `Dialogue: only the character named for a line speaks it, with their own voice and lip movement; everyone else keeps their mouth closed unless a beat says they silently mouth words.${
+              anyVo ? " Lines marked voice-over are heard over the picture; nobody lip-syncs them." : ""
             }`),
       speaking && data.extras.trim() && "Crowd sound only as quiet natural ambience, never words.",
       voices.length &&
@@ -1407,7 +1407,9 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
     : "";
   const constraints = constraintsFor(rig);
   // room for the named characters beyond four (their names, features and voices)
-  const lengthTarget = (en.beats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) + Math.max(0, data.cast.length - 4) * 200;
+  // each panel past six carries its own action, camera and line
+  const lengthTarget =
+    (en.beats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) + Math.max(0, data.cast.length - 4) * 200 + Math.max(0, data.acting.segments.length - 6) * 250;
   let prompt = "";
   for (const B of STORY_BUDGETS) {
     prompt = [headerWith(B), beatsWith(B).join("\n\n"), directorBlock, constraints].filter(Boolean).join("\n\n");

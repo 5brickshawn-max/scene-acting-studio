@@ -5,7 +5,7 @@
  * Each warning carries the fix the team can apply with one click, when there is one.
  */
 import { hasCameraMove } from "./constraints";
-import { VIDEO_PROMPT_TARGET, shownBeats, type VideoHandoff } from "./handoff";
+import { VIDEO_PROMPT_TARGET, cameraTextMoves, shownBeats, type VideoHandoff } from "./handoff";
 import { castLabel, continuityAnchor, imageAspectFor, imageIsStale, shotsOf, timelineOrder, type ProjectData } from "./project";
 import { estimateSpeechSeconds } from "./speech";
 import { retime, timingMismatch } from "./timing";
@@ -95,7 +95,10 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
 
   // ── the director's direction wins over the app's general lines ──
   if (director) {
-    if (h.prompt.includes("DIRECTOR'S DIRECTION")) add("ok", "추가 연출", `추가 연출이 줄이지 않고 그대로 들어갔습니다 (${director.length.toLocaleString("ko-KR")}자, 줄바꿈 유지).`);
+    if (h.prompt.includes("DIRECTOR'S DIRECTION"))
+      add("ok", "추가 연출", h.adjustments.some((a) => a.where === "추가 연출")
+        ? `추가 연출이 들어갔습니다 (줄바꿈 유지). 제약사항과 부딪히거나 겹치는 부분만 아래 ‘자동 조율’대로 손봤습니다.`
+        : `추가 연출이 줄이지 않고 그대로 들어갔습니다 (${director.length.toLocaleString("ko-KR")}자, 줄바꿈 유지).`);
     else add("warn", "추가 연출", "추가 연출이 프롬프트에 들어가지 않았습니다.");
   }
   for (const o of h.overrides) add("fixed", "추가 연출 우선", o);
@@ -190,6 +193,24 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
   if (n && duration / n < 2) {
     const u = data.mode === "storyboard" ? "컷" : "표정";
     add("warn", `${u}당 시간`, `${u}당 ${r1(duration / n)}초로 짧아 전환이 급해질 수 있습니다.`, { kind: "goto", step: 1, label: `2단계 길이·${u} 수로` });
+  }
+  // a storyboard cut of about a second cannot hold a camera move plus several actions
+  if (data.mode === "storyboard") {
+    const crowded = data.acting.segments.flatMap((seg) => {
+      const i = data.expressions.findIndex((e) => e.id === seg.expressionId);
+      const e = data.expressions[i];
+      const len = seg.end - seg.start;
+      if (!e || len >= 1.5) return [];
+      const busy = cameraTextMoves(e.camera) || e.action.trim().length > 160;
+      return busy ? [`${i + 1}번 컷 ${r1(len)}초`] : [];
+    });
+    if (crowded.length)
+      add(
+        "warn",
+        "짧은 컷",
+        `${crowded.join(" · ")}: 1.5초도 안 되는 컷에 카메라 움직임이나 여러 동작이 있어 영상 모델이 다 하지 못하고 건너뛰거나 뭉갤 수 있습니다. 시간을 늘리거나(4단계), 동작을 하나로 줄이거나, 고정 샷으로 바꾸세요.`,
+        { kind: "goto", step: 3, label: "4단계 시간 분배로" },
+      );
   }
 
   const allLines = data.dialogue.lines.map((l) => l.line).join(" ");
