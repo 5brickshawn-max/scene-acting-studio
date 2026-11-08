@@ -159,6 +159,11 @@ export const ExpressionSchema = z.object({
   action: z.string().default(""),
   /** the camera for this panel (shot size, angle, move toward the next panel) */
   camera: z.string().default(""),
+  /**
+   * storyboard 연결 상태: the continuity of this moment — who stands where on screen and faces which way,
+   * where they are moving, costume and prop state, light direction — carried on from the previous panel
+   */
+  continuity: z.string().default(""),
   /** a rough storyboard sketch for this panel: composition, poses and camera are taken from it, not its drawing style */
   sketchAssetId: z.string().nullable().default(null),
   /**
@@ -236,6 +241,8 @@ const EnText = z.object({ text: z.string(), key: z.string() });
 export const EnglishSheetSchema = z.object({
   language: EnText,
   style: EnText,
+  /** storyboard: the scene's continuity rules (연결 규칙) */
+  continuity: EnText.default({ text: "", key: "" }),
   cast: z.array(
     z.object({
       characterId: z.string(),
@@ -253,6 +260,8 @@ export const EnglishSheetSchema = z.object({
       body: z.string(),
       transition: z.string(),
       delivery: z.string(),
+      /** storyboard: this panel's continuity state (연결 상태) */
+      state: z.string().default(""),
       /** group scenes: every other character's acting in this beat */
       others: z.array(z.object({ characterId: z.string(), emotion: z.string(), face: z.string(), body: z.string() })).default([]),
     }),
@@ -316,6 +325,11 @@ export const ProjectDataSchema = z.object({
     scene: z.string().default(""),
     /** storyboard: the shot count the team chose (step 2 ①); null = the AI decides (at most MAX_SHOTS) */
     shots: z.number().int().nullable().default(null),
+    /**
+     * storyboard 연결 규칙: the scene's continuity rules every panel keeps — the 180° line and screen sides,
+     * light direction, costume/prop changes and when they happen, the geography of the place
+     */
+    continuity: z.string().default(""),
   }),
   expressions: z.array(ExpressionSchema),
   dialogue: z.object({
@@ -386,6 +400,7 @@ export function blankExpression(panel: number | null = null, characterId = ""): 
     characterId,
     action: "",
     camera: "",
+    continuity: "",
     sketchAssetId: null,
     link: "continuous",
     reactions: [],
@@ -435,6 +450,7 @@ export function createProjectData(title = "새 장면", castCount = 1, mode: Sce
       framing: n === 1 && mode === "cast" ? "bust" : "medium",
       scene: "",
       shots: null,
+      continuity: "",
     },
     expressions,
     dialogue: { language: "한국어", lines: [] },

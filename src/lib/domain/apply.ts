@@ -194,11 +194,22 @@ export function applyStoryboard(data: ProjectData, out: StoryboardOutT, indexes?
     const o = out.panels[i];
     if (!o || !pick.has(i)) return prev;
     const speaker = data.cast[o.speaker - 1]?.id ?? prev.characterId;
-    return withReactionsFor(data.cast, { ...prev, characterId: speaker, emotion: o.title, action: o.action, camera: o.camera, link: i === 0 ? "continuous" : o.link ?? prev.link });
+    return withReactionsFor(data.cast, {
+      ...prev,
+      characterId: speaker,
+      emotion: o.title,
+      action: o.action,
+      camera: o.camera,
+      continuity: o.state ?? prev.continuity,
+      link: i === 0 ? "continuous" : o.link ?? prev.link,
+    });
   });
   // a shot count the team chose (step 2 ①) stays, keeping the AI's cut places where they fit; else at most MAX_SHOTS
   const chosen = data.expressionSetup.shots;
-  const next = { ...data, expressions };
+  // the scene's continuity rules come with a full design (a partial pick keeps the team's rules)
+  const whole = !indexes || out.panels.every((_, i) => i >= count || indexes.includes(i));
+  const rules = whole && out.continuity?.trim() ? out.continuity.trim() : data.expressionSetup.continuity;
+  const next = { ...data, expressions, expressionSetup: { ...data.expressionSetup, continuity: rules } };
   return reopenFrom(chosen !== null ? fitShots(next, chosen) : capShots(next), 1);
 }
 

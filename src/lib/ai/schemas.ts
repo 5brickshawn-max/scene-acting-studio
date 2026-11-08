@@ -108,11 +108,21 @@ export const ExpressionsOut = z.object({
 /** Storyboard mode: the scene as successive panels, each described as a whole. */
 export const StoryboardOut = z.object({
   summary: z.string(),
+  continuity: z
+    .string()
+    .describe(
+      "장면 전체의 연결 규칙(모든 컷이 지킴), 번호 목록: 1) 180도 축 — 주요 인물이 화면 어느 쪽에 서고 서로 어느 방향을 보는지 2) 장소의 지리 — 성문·벽·출구 등이 화면 어느 쪽에 있는지 3) 빛 방향·시간 4) 의상·소품의 상태 변화와 그 변화가 일어나는 컷(예: 4번 컷에서 숄을 건넴 → 5번 컷부터 아이가 숄을 듦) 5) 인물의 이동 경로(어디서 어디로)",
+    ),
   panels: z.array(
     z.object({
       title: z.string().describe("컷 제목, 짧게 (예: 군중이 갈라지며 칼리엘라 등장)"),
       action: z.string().describe("이 순간 화면 전체에서 일어나는 일: 누가 어디서 무엇을 하는지, 군중·소품, 표정과 자세의 핵심 (2~4문장)"),
       camera: z.string().describe("이 컷의 카메라: 샷 크기·앵글·다음 컷까지의 움직임 (한 문장)"),
+      state: z
+        .string()
+        .describe(
+          "이 컷의 연결 상태 (한두 문장): 보이는 주요 인물마다 화면 위치(왼쪽·가운데·오른쪽, 앞·뒤)와 보는 방향, 이동 중이면 어디로, 의상·소품 상태(누가 무엇을 들었는지), 빛이 오는 쪽. 앞 컷의 끝 상태에서 이어지게",
+        ),
       speaker: z.number().int().describe("대사가 있으면 말하는 주요 인물 번호(1부터), 없으면 0"),
       link: z
         .enum(["continuous", "cut"])
@@ -194,6 +204,7 @@ export const PromptCheckOut = z.object({
 export const EnglishOut = z.object({
   language: z.string().describe("대사 언어의 영어 이름 (예: 고대 아랍어 → Classical Arabic)"),
   style: z.string().describe("장면 전체의 그림체(선·채색·명암), 영어 한 문장 (160자 이내)"),
+  continuity: z.string().describe("스토리보드의 연결 규칙(180도 축·지리·빛·의상/소품 변화·동선)을 영어로 짧게, 번호 목록 그대로 (500자 이내). 스토리보드가 아니거나 규칙이 없으면 빈 문자열"),
   cast: z
     .array(
       z.object({
@@ -224,6 +235,7 @@ export const EnglishOut = z.object({
         .string()
         .describe("다음 표정으로 넘어가게 하는 몸의 동작(깜빡임·숨·고개 돌림·얼굴 앞을 지나는 손 등), 영어 한 문장 (100자 이내). 마지막 표정이면 빈 문자열"),
       delivery: z.string().describe("대사 말투, 영어 3~8단어. 대사가 없으면 빈 문자열"),
+      state: z.string().describe("스토리보드: 이 컷의 연결 상태(화면 위치·보는 방향·이동·의상/소품 상태·빛), 영어 한 문장 (220자 이내). 스토리보드가 아니면 빈 문자열"),
     }),
   ),
 });

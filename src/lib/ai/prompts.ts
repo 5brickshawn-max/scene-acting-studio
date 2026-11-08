@@ -61,11 +61,12 @@ export function projectContext(d: ProjectData, step: number): string {
     lines.push(`컷 수: ${d.expressionSetup.count} · 컷 그림 비율 ${imageAspectFor(d)}`);
     lines.push(`영상 전체 길이: ${d.acting.duration}초 (고정)`);
     if (d.expressionSetup.scene.trim()) lines.push(`상황 설정·기초 대사:\n${d.expressionSetup.scene.trim()}`);
+    if (d.expressionSetup.continuity.trim()) lines.push(`장면 연결 규칙:\n${d.expressionSetup.continuity.trim()}`);
     d.expressions.forEach((e, i) => {
       lines.push(
         `컷 ${i + 1}: ${i > 0 ? (e.link === "cut" ? "[컷 분할 — 새 쇼트] " : "[이어짐] ") : ""}${e.emotion || "(제목 없음)"} · 장면 묘사: ${e.action || "(없음)"}${
           e.camera ? ` · 카메라: ${e.camera}` : ""
-        } · 말하는 인물(대사가 있을 때): ${castLabel(d, e.characterId)}`,
+        }${e.continuity ? ` · 연결 상태: ${e.continuity}` : ""} · 말하는 인물(대사가 있을 때): ${castLabel(d, e.characterId)}`,
       );
     });
   } else if (step >= 1) {

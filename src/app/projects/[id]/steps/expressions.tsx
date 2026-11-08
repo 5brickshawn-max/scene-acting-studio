@@ -708,6 +708,15 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
           />
         </div>
         <PendingProposal step={1} except={["check_sheet"]} />
+        <Field
+          label="장면 연결 규칙 (모든 컷이 지킴: 180도 축·화면 좌우, 장소 지리, 빛 방향, 의상·소품 변화, 동선)"
+          multiline
+          rows={4}
+          value={s.continuity}
+          onChange={(v) => doc.edit(1, (x) => ({ ...x, expressionSetup: { ...x.expressionSetup, continuity: v } }))}
+          placeholder={"AI 콘티 설계가 채워 줍니다. 예:\n1) 아스파샤는 늘 화면 왼쪽, 샤르휘나는 오른쪽 — 서로 마주 봄\n2) 성문은 화면 왼쪽, 사막은 오른쪽\n3) 해는 화면 오른쪽 낮은 곳(역광)\n4) 3번 컷에서 숄을 건넴 → 4번 컷부터 샤르휘나가 숄을 듦"}
+          help="컷 그림과 영상 프롬프트에 함께 들어가, 컷과 컷·쇼트와 쇼트 사이의 의상·위치·방향·빛이 어긋나지 않게 합니다."
+        />
       </section>
 
       <section className="space-y-4">
@@ -855,6 +864,14 @@ function PanelCard({ e, index }: { e: Expression; index: number }) {
         value={e.camera}
         onChange={(v) => update({ camera: v })}
         placeholder={e.link === "cut" && index > 0 ? "예: 입술 특대 클로즈업, 고정" : "예: 와이드 로우앵글에서 칼리엘라 쪽으로 천천히 다가감"}
+      />
+      <Field
+        label="연결 상태 (화면 위치·보는 방향·동선·의상/소품·빛)"
+        multiline
+        rows={2}
+        value={e.continuity}
+        onChange={(v) => update({ continuity: v })}
+        placeholder="예: 칼리엘라 화면 왼쪽에서 오른쪽을 봄, 브람 오른쪽 앞에서 왼쪽을 봄. 칼리엘라는 횃불을 오른손에 듦. 해는 화면 오른쪽 뒤."
       />
       {d.cast.length > 1 && (
         <div>

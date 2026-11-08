@@ -103,7 +103,8 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     const d = market();
     const out = StoryboardOut.parse({
       summary: "",
-      panels: d.expressions.map((_, i) => ({ title: `T${i}`, action: `A${i}`, camera: `C${i}`, speaker: i === 3 ? 2 : 0, link: i === 3 ? "cut" : "continuous" })),
+      continuity: "",
+      panels: d.expressions.map((_, i) => ({ title: `T${i}`, action: `A${i}`, camera: `C${i}`, state: "", speaker: i === 3 ? 2 : 0, link: i === 3 ? "cut" : "continuous" })),
     });
     const next = applyStoryboard(d, out, [0, 3]);
     expect(next.expressions[0]).toMatchObject({ emotion: "T0", action: "A0", camera: "C0" });
@@ -131,7 +132,7 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     expect(ctx).toContain("통제 방식: 스토리보드");
     expect(ctx).toContain("군중·배경 인물: 횃불을 든 상인과 구경꾼 수십 명");
     expect(ctx).toContain("컷 2: [이어짐] 칼리엘라 등장 · 장면 묘사: 그 사이로 칼리엘라가 걸어 나온다.");
-    const panels = { summary: "", panels: [{ title: "t", action: "a", camera: "c", speaker: 0, link: "continuous" }] };
+    const panels = { summary: "", continuity: "", panels: [{ title: "t", action: "a", camera: "c", state: "", speaker: 0, link: "continuous" }] };
     expect(consultSchemaFor(1, true).safeParse({ reply: "", proposal: panels }).success).toBe(true);
     expect(consultSchemaFor(1, false).safeParse({ reply: "", proposal: panels }).success).toBe(false);
   });

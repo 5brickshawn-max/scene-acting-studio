@@ -84,6 +84,9 @@ describe("step screens render for one and for several characters", () => {
     expect(s2).toContain("장면 묘사 (이 순간 화면 전체)");
     expect(s2).toContain("러프 스케치 (선택)");
     expect(s2).toContain("러프 콘티 바로 생성");
+    expect(s2).toContain("장면 연결 규칙");
+    expect(s2).toContain("연결 상태 (화면 위치·보는 방향·동선·의상/소품·빛)");
+    expect(s2).toContain("연결성 우선: 앞 컷부터 한 장씩 차례로 생성");
     expect(s2).toContain("러프 콘티 전부 생성 (0컷)");
     expect(s2).toContain("앞 컷과의 연결");
     expect(s2).toContain("✂ 컷 분할 (새 쇼트)");

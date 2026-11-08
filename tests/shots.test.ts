@@ -31,7 +31,7 @@ describe(`storyboard shots (at most ${MAX_SHOTS})`, () => {
 
   it("an AI storyboard with too many cuts is brought down to four shots", () => {
     const d = board(8, []);
-    const out = { summary: "", panels: d.expressions.map((_, i) => ({ title: `p${i}`, action: "a", camera: "c", speaker: 0, link: "cut" as const })) };
+    const out = { summary: "", continuity: "", panels: d.expressions.map((_, i) => ({ title: `p${i}`, action: "a", camera: "c", state: "", speaker: 0, link: "cut" as const })) };
     expect(shotsOf(applyStoryboard(d, out))).toHaveLength(4);
   });
 
@@ -56,14 +56,14 @@ describe("shot count and panel count chosen separately", async () => {
   });
   it("the AI keeps a chosen shot count, moving cuts where it wants", () => {
     const d = evenShots(board(8, []), 2);
-    const out = { summary: "", panels: d.expressions.map((_, i) => ({ title: `p${i}`, action: "a", camera: "c", speaker: 0, link: [2, 5, 6].includes(i) ? ("cut" as const) : ("continuous" as const) })) };
+    const out = { summary: "", continuity: "", panels: d.expressions.map((_, i) => ({ title: `p${i}`, action: "a", camera: "c", state: "", speaker: 0, link: [2, 5, 6].includes(i) ? ("cut" as const) : ("continuous" as const) })) };
     const next = applyStoryboard(d, out);
     expect(shotsOf(next)).toHaveLength(2);
   });
   it("without a chosen count the AI decides (up to four); a hand edit updates a chosen count", () => {
     const d = board(8, []);
     expect(d.expressionSetup.shots).toBeNull();
-    const out = { summary: "", panels: d.expressions.map((_, i) => ({ title: `p${i}`, action: "a", camera: "c", speaker: 0, link: i === 4 ? ("cut" as const) : ("continuous" as const) })) };
+    const out = { summary: "", continuity: "", panels: d.expressions.map((_, i) => ({ title: `p${i}`, action: "a", camera: "c", state: "", speaker: 0, link: i === 4 ? ("cut" as const) : ("continuous" as const) })) };
     expect(shotsOf(applyStoryboard(d, out))).toHaveLength(2);
     const chosen = evenShots(board(8, []), 2);
     const edited = syncChosenShots({ ...chosen, expressions: chosen.expressions.map((e, i) => (i === 6 ? { ...e, link: "cut" as const } : e)) });

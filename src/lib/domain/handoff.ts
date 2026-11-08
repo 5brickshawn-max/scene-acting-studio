@@ -1181,10 +1181,15 @@ function panelTexts(data: ProjectData, e: Expression, en: ReturnType<typeof fres
     title: b?.emotion || e.emotion,
     action: b?.face || clean(e.action),
     camera: b?.body || clean(e.camera),
+    // 연결 상태: screen positions, facing, movement, costume/prop state, light (English where fresh)
+    state: (b ? b.state : "") || clean(e.continuity),
     transition: b?.transition,
     delivery: b?.delivery,
   };
 }
+
+/** The scene's continuity rules (연결 규칙), English where fresh. */
+const continuityRules = (data: ProjectData, en: ReturnType<typeof freshEnglish>) => en.continuity ?? clean(data.expressionSetup.continuity);
 
 function storyboardRefs(data: ProjectData): ReferenceSlot[] {
   const refs: ReferenceSlot[] = [];
@@ -1213,6 +1218,15 @@ function buildStoryboardHandoffs(data: ProjectData): ExpressionHandoff[] {
     if (e.sketchAssetId) references.push({ role: `image reference ${sketchNo}`, assetId: e.sketchAssetId, why: `${i + 1}번 컷 러프 스케치 — 구도·자세·카메라만` });
     const usesAnchor = Boolean(anchor?.imageAssetId && anchor.id !== e.id);
     if (usesAnchor) references.push({ role: `image reference ${references.length + 1}`, assetId: anchor!.imageAssetId!, why: `연결 기준: ${anchorNo}번 컷 그림 (같은 쇼트의 다른 순간)` });
+    // the panel just before this one in the timeline (when drawn): costumes, props, positions and light carry on from it
+    const order = data.acting.segments.map((sg) => sg.expressionId);
+    const prevId = order[order.indexOf(e.id) - 1];
+    const prev = prevId ? data.expressions.find((x) => x.id === prevId) : undefined;
+    const prevNo = prev ? data.expressions.indexOf(prev) + 1 : 0;
+    const usesPrev = Boolean(prev?.imageAssetId && prev.imageAssetId !== anchor?.imageAssetId);
+    if (usesPrev) references.push({ role: `image reference ${references.length + 1}`, assetId: prev!.imageAssetId!, why: `바로 앞: ${prevNo}번 컷 그림 (연결성)` });
+    const prevRef = usesPrev ? references.length : usesAnchor && prev?.id === anchor?.id ? references.length : 0;
+    const rules = continuityRules(data, en);
     const line = data.dialogue.lines.find((l) => l.expressionId === e.id)?.line.trim();
     const prompt = [
       `Storyboard panel ${i + 1} of ${n}, drawn as a finished ${aspect} frame of the animation — not a rough sketch, not a comic page; no panel borders, no text, no speech bubbles.`,
@@ -1227,7 +1241,13 @@ function buildStoryboardHandoffs(data: ProjectData): ExpressionHandoff[] {
       ...extraRefsEn(data, references),
       style && `Art style: ${style.replace(/[.。]+$/, "")}. Keep this style for everyone in the frame; never photorealistic or 3D.`,
       usesAnchor &&
-        `Image reference ${references.length} is panel ${anchorNo} of this same ${multiShot ? "scene" : "shot"}: keep its world, lighting, line quality and character designs exactly; follow this panel's own composition and camera below.`,
+        `Image reference ${references.findIndex((r) => r.why.startsWith("연결 기준")) + 1} is panel ${anchorNo} of this same ${multiShot ? "scene" : "shot"}: keep its world, lighting, line quality and character designs exactly; follow this panel's own composition and camera below.`,
+      prevRef &&
+        `Image reference ${prevRef} is the panel just before this one (panel ${prevNo}). Continuity with it is essential: the same costumes and props in the same state (unless this moment changes them), everyone on the same side of the screen and facing the same way (180° rule), positions carried on from where they were, the same light direction${
+          cuts.get(e.id) ? "; this panel opens a new shot after a hard cut, so the camera position changes but the screen sides, eyelines and states continue" : "; this panel is in the same shot, so the camera moves on from that framing"
+        }.`,
+      rules && `Continuity rules of this scene (every panel keeps them): ${clip(rules, 600) || rules.slice(0, 600)}`,
+      t.state && `Continuity at this moment: ${sentence(t.state)}`,
       sketchNo &&
         `Image reference ${sketchNo} is a rough storyboard sketch of this panel: follow its composition, character placement, poses and camera angle; do NOT copy its rough lines or missing details — render it fully in the art style above.`,
       t.action ? `This moment: ${sentence(t.action)}` : sketchNo ? "This moment: exactly as in the sketch." : "",
@@ -1305,10 +1325,10 @@ function buildStoryboardFrame(data: ProjectData, expressionId: string, shot: Fra
 
 /** Caps per panel field, tried in order until the prompt fits (the last is used regardless). */
 const STORY_BUDGETS = [
-  { action: Infinity, camera: Infinity, transition: 140, delivery: 100, features: 4 },
-  { action: 400, camera: 200, transition: 100, delivery: 80, features: 4 },
-  { action: 250, camera: 140, transition: 70, delivery: 50, features: 3 },
-  { action: 150, camera: 80, transition: 0, delivery: 40, features: 2 },
+  { action: Infinity, camera: Infinity, state: Infinity, rules: 600, transition: 140, delivery: 100, features: 4 },
+  { action: 400, camera: 200, state: 200, rules: 450, transition: 100, delivery: 80, features: 4 },
+  { action: 250, camera: 140, state: 140, rules: 300, transition: 70, delivery: 50, features: 3 },
+  { action: 150, camera: 80, state: 90, rules: 200, transition: 0, delivery: 40, features: 2 },
 ];
 
 function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "references", opts: { endFrame?: boolean }): VideoHandoff {
@@ -1342,6 +1362,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
           title: t.title,
           action: reconcile(t.action, "motion", `${i + 1}번 컷 장면 묘사`, adjustments, allowCuts),
           camera: reconcile(t.camera, "direction", `${i + 1}번 컷 카메라`, adjustments, allowCuts),
+          state: t.state,
           transition: reconcile(t.transition ?? fixOf("transition", e.id, seg?.transition ?? ""), "motion", `${i + 1}번 컷 다음 컷으로`, adjustments, allowCuts),
           delivery: reconcile(t.delivery ?? fixOf("delivery", e.id, line?.delivery ?? ""), "voice", `${i + 1}번 컷 대사 말투`, adjustments, allowCuts),
         },
@@ -1390,6 +1411,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         n && `Frame target: ${n}.`,
         cut(action, B.action) && `Action: ${sentence(cut(action, B.action))}`,
         cut(camera, B.camera) && `Camera: ${sentence(cut(camera, B.camera))}`,
+        cut(fixed ? p?.state ?? "" : e?.continuity ?? "", B.state) && `Continuity: ${sentence(cut(fixed ? p?.state ?? "" : e?.continuity ?? "", B.state))}`,
         !last && B.transition && cut(transition, B.transition) && `Into the next panel: ${sentence(cut(transition, B.transition))}`,
         l?.line.trim()
           ? `${e ? castName(data, beatActor(data, e).id) : "The speaker"} ${isVoiceOver(l) ? "is heard in voice-over (the speaker is not seen saying it, no lip-sync)" : "says exactly"} (${lang}): "${l.line}"${
@@ -1409,6 +1431,8 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
       ...storyboardCastEn(data, en, B.features),
       (en.style || data.style.trim()) && `Art style: ${sentence(clip(en.style ?? data.style, 200) || clean(en.style ?? data.style).slice(0, 200))} Stay in this 2D style; never photorealistic or 3D.`,
       `Match the reference images exactly: the named characters' faces, hair, colors and costumes, the world, the lighting and the drawing style; nobody's proportions change and no character is duplicated.`,
+      continuityRules(data, en) &&
+        `Continuity rules (keep them in every shot): ${clip(continuityRules(data, en), B.rules) || continuityRules(data, en).slice(0, B.rules)}${multiShot ? " Across each HARD CUT the screen sides, eyelines, costumes, props and light carry on." : ""}`,
       background ? "Background as in the DIRECTOR'S DIRECTION below." : "Background and world as in the panel references.",
       directorCamera
         ? `Camera: exactly as in the DIRECTOR'S DIRECTION below${multiShot ? "" : "; one continuous take with no cuts"}.`

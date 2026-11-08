@@ -49,6 +49,7 @@ function project(): ProjectData {
 const OUT = {
   language: "Classical Arabic",
   style: "Thin even dark-brown outlines, soft cel shading with gentle gradients, low contrast.",
+  continuity: "",
   cast: [
     {
       character: 1,
@@ -64,6 +65,7 @@ const OUT = {
     body: "Arms loosely folded under the chest, gold armbands visible on both arms.",
     transition: panel < 4 ? "Eyelids lift and she unfolds her arms toward the next pose." : "",
     delivery: "tired sigh, rising at the end",
+    state: "",
     others: [],
   })),
 };

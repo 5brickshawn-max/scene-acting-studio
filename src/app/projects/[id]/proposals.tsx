@@ -368,6 +368,12 @@ export function StoryboardProposal({ job, out }: { job: JobView; out: Storyboard
       {out.panels.length !== count && (
         <p className="notice notice-warn">설정한 컷 수는 {count}개인데 AI가 {out.panels.length}개를 제안했습니다. 앞에서부터 {count}개까지만 적용됩니다.</p>
       )}
+      {out.continuity?.trim() && (
+        <div className="rounded-lg bg-white border border-line p-3 text-[14px]">
+          <div className="font-semibold mb-1">장면 연결 규칙 (모든 컷이 지킴 · 모든 컷을 고르면 함께 적용)</div>
+          <p className="whitespace-pre-wrap">{out.continuity}</p>
+        </div>
+      )}
       <ol className="grid sm:grid-cols-2 gap-3">
         {out.panels.map((p, i) => {
           const speaker = doc.data.cast[p.speaker - 1];
@@ -394,6 +400,7 @@ export function StoryboardProposal({ job, out }: { job: JobView; out: Storyboard
                   <span className="block text-muted">
                     {i > 0 ? (p.link === "cut" ? "✂ 컷 분할 · " : "→ 이어짐 · ") : ""}카메라: {p.camera}
                   </span>
+                  {p.state && <span className="block text-muted">연결: {p.state}</span>}
                   {speaker && <span className="block text-muted">말하는 인물: {castLabel(doc.data, speaker.id)}</span>}
                 </span>
               </label>

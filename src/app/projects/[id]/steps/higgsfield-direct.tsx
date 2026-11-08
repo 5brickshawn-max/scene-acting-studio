@@ -102,16 +102,35 @@ function useHfJobs(kind: "hf_expr" | "hf_video" | "hf_frame" | "hf_scene" | "hf_
       const q = await call("quote", spec);
       if (q) setQuote({ spec, q });
     },
+    /** returns whether the generation was accepted */
     confirm: async () => {
-      if (!quote) return;
+      if (!quote) return false;
       const r = await call("generate", quote.spec);
       setQuote(null);
       if (r) await jobs.refresh();
+      return Boolean(r);
+    },
+    /** generate without a new cost check (the next step of a sequence the team already confirmed) */
+    generate: async (spec: Spec) => {
+      const r = await call("generate", spec);
+      if (r) await jobs.refresh();
+      return Boolean(r);
     },
   };
 }
 
-function QuoteBox({ h }: { h: ReturnType<typeof useHfJobs> }) {
+function QuoteBox({
+  h,
+  onConfirmed,
+  onCancel,
+  note,
+}: {
+  h: ReturnType<typeof useHfJobs>;
+  onConfirmed?: () => void;
+  onCancel?: () => void;
+  /** extra line under the price (e.g. a sequence charged once per panel) */
+  note?: string | null;
+}) {
   if (!h.quote) return null;
   const { q } = h.quote;
   const short = q.credits !== null && q.balance !== null && q.credits > q.balance;
@@ -123,12 +142,21 @@ function QuoteBox({ h }: { h: ReturnType<typeof useHfJobs> }) {
         <strong className="text-[17px]">{fmtCredits(q.credits)} 크레딧</strong>
         {q.count && q.count > 1 ? ` (장당 ${q.each ?? "?"})` : ""} 사용 · {q.workspace} (남은 크레딧 {fmtCredits(q.balance)})
       </p>
+      {note && <p className="field-help">{note}</p>}
       {short && <p className="notice notice-error">크레딧이 부족합니다. 팀·사용량에서 다른 워크스페이스를 고르세요.</p>}
       <div className="flex gap-2">
-        <button className="btn btn-primary" disabled={h.busy || short} onClick={h.confirm}>
+        <button className="btn btn-primary" disabled={h.busy || short} onClick={() => void h.confirm().then((ok) => ok && onConfirmed?.())}>
           {h.busy ? "보내는 중…" : "생성하기"}
         </button>
-        <button className="btn" onClick={h.cancelQuote}>취소</button>
+        <button
+          className="btn"
+          onClick={() => {
+            h.cancelQuote();
+            onCancel?.();
+          }}
+        >
+          취소
+        </button>
       </div>
     </div>
   );
@@ -361,6 +389,57 @@ export function HiggsfieldDirect({
   const runningFor = (id: string) => h.running.some((j) => (j.input as { expressionId?: string }).expressionId === id);
   const stale = exps.filter((e) => imageIsStale(e, framing, aspect)).length;
 
+  // 연결성 우선 (storyboard): panels drawn one at a time in timeline order, each seeing the panel before it
+  const story = data.mode === "storyboard";
+  const order = data.acting.segments.map((sg) => sg.expressionId).filter((id) => exps.some((e) => e.id === id));
+  const [seq, setSeq] = useState<{ queue: string[]; current: string; since: number } | null>(null);
+  const [seqNote, setSeqNote] = useState<string | null>(null);
+  // the sequence waits for the cost check of its first panel to be confirmed
+  const [seqStart, setSeqStart] = useState<string | null>(null);
+  const startSeq = (from: string) => {
+    setSeqNote(null);
+    setSeqStart(from);
+    void ask([from]);
+  };
+  const seqConfirmed = () => {
+    if (!seqStart) return;
+    const at = order.indexOf(seqStart);
+    setSeq({ queue: order.slice(at + 1), current: seqStart, since: Date.now() - 30_000 });
+    setSeqStart(null);
+  };
+  useEffect(() => {
+    if (!seq || !canEdit) return;
+    const mine = h.pending.filter((j) => (j.input as { expressionId?: string }).expressionId === seq.current && Date.parse(j.created_at) >= seq.since);
+    const failed = jobs.jobs.find(
+      (j) => j.kind === "hf_expr" && j.status === "failed" && (j.input as { expressionId?: string }).expressionId === seq.current && Date.parse(j.created_at) >= seq.since,
+    );
+    if (failed) {
+      setSeq(null);
+      setSeqNote(`${numberOf(seq.current)}번 컷 생성이 실패해 차례 생성을 멈췄습니다: ${failed.error ?? ""}`);
+      return;
+    }
+    const done = mine.find((j) => jobAssetId(j));
+    if (!done) return;
+    const made = done.input as { framing?: Framing; aspect?: string };
+    onUse(seq.current, jobAssetId(done)!, made.framing ?? null, made.aspect ?? null);
+    void jobs.markApplied(done.id, doc.version);
+    const [next, ...rest] = seq.queue;
+    if (!next) {
+      setSeq(null);
+      setSeqNote("모든 컷을 차례로 생성해 적용했습니다. 마음에 안 드는 컷은 그 컷만 다시 생성하세요(앞뒤 컷을 보고 다시 그립니다).");
+      return;
+    }
+    setSeq({ queue: rest, current: next, since: Date.now() - 5_000 });
+    // the image just used is saved first (generate flushes the document), so the next panel sees it
+    void h.generate({ target: "expressions", model, expressionIds: [next] }).then((ok) => {
+      if (!ok) {
+        setSeq(null);
+        setSeqNote(`${numberOf(next)}번 컷을 요청하지 못해 차례 생성을 멈췄습니다.`);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [h.pending, jobs.jobs, seq, canEdit]);
+
   const askRef = useRef(ask);
   askRef.current = ask;
   const redoKey = redo.join(",");
@@ -457,7 +536,40 @@ export function HiggsfieldDirect({
         </div>
       </div>
 
-      {!h.quote && (
+      {story && !h.quote && !seq && order.length > 1 && (
+        <div className="rounded-lg border border-line bg-white p-3 space-y-2">
+          <div className="font-semibold">연결성 우선: 앞 컷부터 한 장씩 차례로 생성</div>
+          <p className="field-help">
+            컷마다 바로 앞 컷의 완성 그림을 보고 그려서 의상·소품·화면 좌우·위치·빛이 이어집니다. 한 장씩 차례로 만들어 시간이 더 걸리고(컷당 약 20초~1분), 결과는
+            자동으로 컷에 적용됩니다. 비용은 첫 컷 기준으로 확인하며, 컷 수만큼 차감됩니다.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn btn-dark" disabled={!ready} onClick={() => startSeq(order[0])}>
+              {h.busy && seqStart ? "비용 확인 중…" : `처음부터 차례로 생성 (${order.length}컷)`}
+            </button>
+            {(() => {
+              const firstMissing = order.find((id) => !exps.find((e) => e.id === id)?.imageAssetId);
+              return firstMissing && firstMissing !== order[0] ? (
+                <button className="btn btn-sm" disabled={!ready} onClick={() => startSeq(firstMissing)}>
+                  그림 없는 {numberOf(firstMissing)}번 컷부터 이어서 ({order.length - order.indexOf(firstMissing)}컷)
+                </button>
+              ) : null;
+            })()}
+          </div>
+        </div>
+      )}
+      {seq && (
+        <div className="notice notice-info flex flex-wrap items-center gap-2" aria-live="polite">
+          <span>
+            차례 생성 중: {numberOf(seq.current)}번 컷{seq.queue.length ? ` → 남은 ${seq.queue.length}컷` : " (마지막)"}
+          </span>
+          <button className="btn btn-sm" onClick={() => setSeq(null)}>
+            여기서 멈추기
+          </button>
+        </div>
+      )}
+      {seqNote && <p className="notice notice-info">{seqNote}</p>}
+      {!h.quote && !seq && (
         <div className="flex flex-wrap items-center gap-2">
           {!anchor && first ? (
             <>
@@ -495,7 +607,12 @@ export function HiggsfieldDirect({
           )}
         </div>
       )}
-      <QuoteBox h={h} />
+      <QuoteBox
+        h={h}
+        onConfirmed={seqConfirmed}
+        onCancel={() => setSeqStart(null)}
+        note={seqStart ? `차례 생성: 첫 컷 비용입니다. ${order.length - order.indexOf(seqStart)}컷을 차례로 만들어 약 ${order.length - order.indexOf(seqStart)}배가 차감됩니다.` : null}
+      />
       <Status h={h} typical="20초~1분" />
       {canEdit && newest.length > 1 && (
         <div className="flex flex-wrap items-center gap-2">

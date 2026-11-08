@@ -25,6 +25,7 @@ export function englishSources(d: ProjectData) {
   return {
     language: d.dialogue.language.trim(),
     style: d.style.trim(),
+    continuity: d.mode === "storyboard" ? d.expressionSetup.continuity.trim() : "",
     cast: d.cast.map((c) => ({
       characterId: c.id,
       look: [c.name.trim(), c.locks.trim(), c.appearance.trim()].filter(Boolean).join("\n"),
@@ -44,6 +45,7 @@ export function englishSources(d: ProjectData) {
           // storyboard panels: the whole moment and the camera
           e.action,
           e.camera,
+          e.continuity,
           e.sketchAssetId,
           e.link,
           e.reactions.map((r) => [r.characterId, r.emotion, r.intensity, r.brows, r.eyes, r.mouth, r.gesture]),
@@ -69,6 +71,8 @@ export type FreshCast = { look: string[] | null; outfit: string | null; voice: s
 export type FreshEnglish = {
   language: string | null;
   style: string | null;
+  /** storyboard continuity rules in English, null when missing or out of date */
+  continuity: string | null;
   /** fresh per-character pieces by cast member id (every member has an entry) */
   cast: Map<string, FreshCast>;
   /** fresh beats by expression id */
@@ -81,7 +85,7 @@ const NO_CAST: FreshCast = { look: null, outfit: null, voice: null };
 export function freshEnglish(d: ProjectData): FreshEnglish {
   const en = d.english;
   const blank = new Map(d.cast.map((c) => [c.id, NO_CAST]));
-  const none: FreshEnglish = { language: null, style: null, cast: blank, beats: new Map() };
+  const none: FreshEnglish = { language: null, style: null, continuity: null, cast: blank, beats: new Map() };
   if (!en) return none;
   const src = englishSources(d);
   const ok = (key: string, source: string, text: string) => Boolean(source && text.trim() && key === textKey(source));
@@ -107,6 +111,7 @@ export function freshEnglish(d: ProjectData): FreshEnglish {
   return {
     language: ok(en.language.key, src.language, en.language.text) ? en.language.text.trim() : null,
     style: ok(en.style.key, src.style, en.style.text) ? en.style.text.trim() : null,
+    continuity: ok(en.continuity.key, src.continuity, en.continuity.text) ? en.continuity.text.trim() : null,
     cast,
     beats,
   };
@@ -132,6 +137,7 @@ export function englishStale(d: ProjectData): string[] {
     if (!current(ec?.voice.key, c.voice)) out.push(`${who}목소리`);
   });
   if (!current(en?.style.key, src.style)) out.push("그림체");
+  if (!current(en?.continuity.key, src.continuity)) out.push("연결 규칙");
   if (!current(en?.language.key, src.language)) out.push("대사 언어");
   src.beats.forEach((b, i) => {
     const eb = en?.beats.find((x) => x.expressionId === b.expressionId);
@@ -152,6 +158,7 @@ export function fitText(t: string, max: number): string {
 type EnglishOut = {
   language: string;
   style: string;
+  continuity?: string;
   cast: { character: number; look: string[]; outfit: string; voice: string }[];
   beats: {
     panel: number;
@@ -160,6 +167,7 @@ type EnglishOut = {
     body: string;
     transition: string;
     delivery: string;
+    state?: string;
     others?: { character: number; emotion: string; face: string; body: string }[];
   }[];
 };
@@ -171,6 +179,7 @@ export function buildEnglishSheet(d: ProjectData, out: EnglishOut): EnglishSheet
   return {
     language: piece(out.language, src.language, 60),
     style: piece(out.style, src.style, 200),
+    continuity: piece(out.continuity ?? "", src.continuity, 600),
     cast: src.cast.flatMap((c, i) => {
       const o = out.cast.find((x) => x.character === i + 1);
       if (!o) return [];
@@ -197,6 +206,7 @@ export function buildEnglishSheet(d: ProjectData, out: EnglishOut): EnglishSheet
           body: fitText(b.body, d.mode === "storyboard" ? 240 : 200),
           transition: fitText(b.transition, 140),
           delivery: fitText(b.delivery, 80),
+          state: fitText(b.state ?? "", 260),
           others: (b.others ?? []).flatMap((o) => {
             const id = d.cast[o.character - 1]?.id;
             return id && id !== e.characterId
