@@ -54,7 +54,7 @@ export const SceneComposeOut = z.object({
           .describe("이 쇼트 안의 패널, 순서대로. 카메라가 한 구도에 머무는 쇼트는 1개, 쇼트 안에서 카메라가 움직여 구도가 바뀌면 바뀌는 구도마다 1개"),
       }),
     )
-    .describe("쇼트(컷 분할) 구성, 순서대로. 쇼트와 쇼트 사이는 컷으로 끊김. 인물별 연기 방식이면 쇼트 1개(그 안의 패널 = 표정 비트)"),
+    .describe("쇼트(컷 분할) 구성, 순서대로, 최대 4개. 쇼트와 쇼트 사이는 컷으로 끊김. 인물별 연기 방식이면 쇼트 1개(그 안의 패널 = 표정 비트)"),
 });
 
 /** Another character's acting at the same moment (group scenes). */
@@ -116,7 +116,7 @@ export const StoryboardOut = z.object({
       speaker: z.number().int().describe("대사가 있으면 말하는 주요 인물 번호(1부터), 없으면 0"),
       link: z
         .enum(["continuous", "cut"])
-        .describe("앞 컷과의 연결: continuous = 같은 쇼트에서 카메라가 이어서 움직여 이 컷이 됨, cut = 컷 분할(장면이 끊기고 새 쇼트). 첫 컷은 continuous"),
+        .describe("앞 컷과의 연결: continuous = 같은 쇼트에서 카메라가 이어서 움직여 이 컷이 됨, cut = 컷 분할(장면이 끊기고 새 쇼트, 장면 전체에서 최대 3번). 첫 컷은 continuous"),
     }),
   ),
 });

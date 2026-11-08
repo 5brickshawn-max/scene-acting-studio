@@ -3,7 +3,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { z } from "zod";
 import sharp from "sharp";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { readProjectData, castLabel, effectiveText, maxCastFor, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
+import { readProjectData, castLabel, effectiveText, maxCastFor, MAX_SHOTS, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
 import {
   ActingOut,
   CharacterOut,
@@ -202,7 +202,7 @@ async function buildRequest(job: JobRow, data: ProjectData) {
               `- 인물마다 그림 모델이 같은 인물을 계속 그릴 수 있게 locks(구별되는 식별 요소부터), appearance, outfit을 구체적으로. 위에 참고 자료나 팀이 적은 메모가 있으면 그것을 따르고, 없는 부분은 시나리오의 시대·장소·분위기에 맞게 정하되 지어낸 핵심 결정은 questions에 '…로 정했습니다, 맞나요?'처럼 남기세요.\n` +
               `- style: ${data.baseAssetId || refs.length ? "참고 그림의 그림체를 따라" : "시나리오의 장르·분위기에 맞는 2D 애니메이션 그림체로"} 선·채색·명암·색감을 구체적으로.\n` +
               (data.mode === "storyboard"
-                ? `- shots: 시나리오를 쇼트(컷 분할)로 나누세요. 쇼트 사이는 컷으로 끊깁니다. 시나리오가 '세 컷이 1초씩', '완전 부감', '클로즈업으로' 처럼 화면을 바꾸면 새 쇼트, 한 쇼트 안에서 카메라가 움직여 구도가 바뀌면 그 쇼트의 패널을 늘리세요(머무는 쇼트는 패널 1개). 패널 합계는 2~12개. seconds는 쇼트 길이, 합이 duration과 같게.\n`
+                ? `- shots: 시나리오를 쇼트(컷 분할)로 나누세요. 쇼트 사이는 컷으로 끊깁니다. 시나리오가 '세 컷이 1초씩', '완전 부감', '클로즈업으로' 처럼 화면을 바꾸면 새 쇼트, 한 쇼트 안에서 카메라가 움직여 구도가 바뀌면 그 쇼트의 패널을 늘리세요(머무는 쇼트는 패널 1개). 쇼트는 최대 ${MAX_SHOTS}개(컷 분할 최대 ${MAX_SHOTS - 1}곳)이고 패널 합계는 2~12개입니다 — 화면이 여러 번 바뀌는 시나리오면 비슷한 장소·시점의 화면을 한 쇼트로 묶고 그 안의 패널(카메라 이동)로 나누세요(예: 쇼트 4개에 패널 12개). seconds는 쇼트 길이, 합이 duration과 같게.\n`
                 : `- shots: 인물별 연기 방식은 컷 없는 한 쇼트입니다. 쇼트 1개에 표정 비트(감정이 바뀌는 순간)를 패널로 2~12개 적으세요.\n`) +
               `- duration: 장면 길이(초). 시나리오에 타임코드(예: 02:02~02:18)가 있으면 그 길이로, 60초를 넘기지 마세요.\n` +
               `- extras: 이름 없는 사람들(군중·행인·병사 등)만. 사람이 없으면 빈 문자열로 두고, 배경·풍경은 opening에 쓰세요.\n` +
@@ -257,7 +257,7 @@ async function buildRequest(job: JobRow, data: ProjectData) {
             {
               type: "text",
               text:
-                `이 장면을 콘티처럼 컷 ${n}개로 나눠 설계하세요. panels 배열 길이는 정확히 ${n}개이고, 컷 1이 장면의 처음, 컷 ${n}이 끝입니다. 컷(콘티 칸)끼리는 카메라가 이어서 움직이거나(continuous), 컷 분할로 새 쇼트가 시작됩니다(cut) — link로 정하세요.\n` +
+                `이 장면을 콘티처럼 컷 ${n}개로 나눠 설계하세요. panels 배열 길이는 정확히 ${n}개이고, 컷 1이 장면의 처음, 컷 ${n}이 끝입니다. 컷(콘티 칸)끼리는 카메라가 이어서 움직이거나(continuous), 컷 분할로 새 쇼트가 시작됩니다(cut) — link로 정하세요. 쇼트는 최대 ${MAX_SHOTS}개입니다: cut은 전체에서 최대 ${MAX_SHOTS - 1}번만 쓰고, 나머지 화면 변화는 같은 쇼트 안의 카메라 이동(continuous)으로 이으세요.\n` +
                 `- 반드시 시나리오 전체(처음부터 끝까지, 모든 기초 대사 포함)를 이 컷 ${n}개·${data.acting.duration}초 안에 담으세요. 컷 수가 시나리오의 장면 전환보다 적으면 비슷한 순간을 합치고, 시나리오 뒷부분을 빼지 마세요.\n` +
                 (job.input.instruction?.includes("[처음부터 다시]")
                   ? `- 지금 있는 컷 제목·장면 묘사·연결은 무시하고 처음부터 다시 나누세요.\n`

@@ -616,6 +616,25 @@ export function cutBefore(data: Pick<ProjectData, "mode" | "expressions" | "acti
   return new Map(order.map((id, k) => [id, data.mode === "storyboard" && k > 0 && byId.get(id)?.link === "cut"]));
 }
 
+/** A storyboard scene has at most this many shots (cuts between them); panels inside a shot can be many. */
+export const MAX_SHOTS = 4;
+
+/**
+ * Bring a storyboard down to MAX_SHOTS shots: the shortest shot (fewest panels, the later one on a tie)
+ * joins the shot before it — its opening cut becomes a continuous camera move — until it fits.
+ */
+export function capShots(data: ProjectData): ProjectData {
+  if (data.mode !== "storyboard") return data;
+  let d = data;
+  for (let shots = shotsOf(d); shots.length > MAX_SHOTS; shots = shotsOf(d)) {
+    let k = 1;
+    for (let i = 2; i < shots.length; i++) if (shots[i].length <= shots[k].length) k = i;
+    const id = shots[k][0];
+    d = { ...d, expressions: d.expressions.map((e) => (e.id === id ? { ...e, link: "continuous" as const } : e)) };
+  }
+  return d;
+}
+
 /** Shots of a storyboard scene: runs of panels joined by continuous camera moves (one shot when nothing is cut). */
 export function shotsOf(data: Pick<ProjectData, "mode" | "expressions" | "acting">): string[][] {
   const cuts = cutBefore(data);
@@ -781,6 +800,9 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
   if (step === 1 && isStoryboard(data)) {
     // storyboard: each panel is described as a whole; no per-character acting or direction checks
     if (data.expressions.length !== data.expressionSetup.count) block("컷 수가 설정과 다릅니다.");
+    const shotCount = shotsOf(data).length;
+    if (shotCount > MAX_SHOTS)
+      block(`쇼트가 ${shotCount}개입니다. 한 장면은 쇼트 최대 ${MAX_SHOTS}개(컷 분할 ${MAX_SHOTS - 1}곳)까지입니다. ‘쇼트 ${MAX_SHOTS}개로 합치기’를 누르거나 컷 분할을 줄이세요.`);
     data.expressions.forEach((e, i) => {
       if (!filled(e.action) && !e.sketchAssetId) block(`${i + 1}번 컷: 장면 묘사를 쓰거나 러프 스케치를 올리세요.`);
     });

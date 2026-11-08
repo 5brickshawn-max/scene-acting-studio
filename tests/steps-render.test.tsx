@@ -95,6 +95,11 @@ describe("step screens render for one and for several characters", () => {
     const s3 = render(w, createElement(ExpressionStep, nav));
     expect(s3).toContain(`러프 콘티 전부 생성 (${w.expressions.length}컷)`);
     expect(s3.split("러프 콘티 생성").length - 1).toBe(w.expressions.length);
+    // more than four shots: a warning with the one-click merge
+    const many = { ...w, expressions: w.expressions.map((e, i) => ({ ...e, link: i ? ("cut" as const) : ("continuous" as const) })) };
+    const s4 = render(many, createElement(ExpressionStep, nav));
+    expect(s4).toContain("쇼트 4개로 합치기");
+    expect(s4).toContain("한 장면은 쇼트 최대 4개까지입니다");
   });
 
   it("offers more named characters in storyboard mode than in character-by-character mode", () => {

@@ -6,7 +6,7 @@
  */
 import { hasCameraMove } from "./constraints";
 import { VIDEO_PROMPT_TARGET, cameraTextMoves, shownBeats, type VideoHandoff } from "./handoff";
-import { castLabel, continuityAnchor, imageAspectFor, imageIsStale, shotsOf, timelineOrder, type ProjectData } from "./project";
+import { castLabel, continuityAnchor, imageAspectFor, imageIsStale, MAX_SHOTS, shotsOf, timelineOrder, type ProjectData } from "./project";
 import { estimateSpeechSeconds } from "./speech";
 import { retime, timingMismatch } from "./timing";
 import { englishStale } from "./english";
@@ -54,7 +54,9 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
 
   // ── the prompt's fixed frame ──
   const shots = shotsOf(data);
-  if (shots.length > 1)
+  if (shots.length > MAX_SHOTS)
+    add("warn", "쇼트 수", `쇼트가 ${shots.length}개입니다. 한 장면은 쇼트 최대 ${MAX_SHOTS}개까지입니다. 2단계 쇼트 구성에서 ‘쇼트 ${MAX_SHOTS}개로 합치기’를 누르세요.`, { kind: "goto", step: 1, label: "2단계 쇼트 구성으로" });
+  else if (shots.length > 1)
     add("ok", "컷 분할", `컷 분할로 ${shots.length}개 쇼트입니다. 표시한 곳에서만 컷이 바뀌고, 쇼트 안에서는 카메라가 이어서 움직이도록 지시합니다.`);
   else add("ok", "한 쇼트", "‘컷 없는 한 쇼트’ 지시가 프롬프트 맨 앞에 있습니다.");
   // the model takes a limited number of images: say which ones are left out (any mode)

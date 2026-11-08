@@ -309,6 +309,8 @@ export function Seg<T extends string>(props: {
   options: readonly T[];
   labels: Record<T, string>;
   onChange: (v: T) => void;
+  /** options that cannot be picked right now (shown, but disabled) */
+  disabledOptions?: readonly T[];
 }) {
   const { canEdit } = useEditor();
   return (
@@ -316,7 +318,7 @@ export function Seg<T extends string>(props: {
       <div className="text-[13px] font-semibold mb-1 text-muted">{props.label}</div>
       <div className="seg">
         {props.options.map((o) => (
-          <button key={o} type="button" aria-pressed={props.value === o} disabled={!canEdit} onClick={() => props.onChange(o)}>
+          <button key={o} type="button" aria-pressed={props.value === o} disabled={!canEdit || (props.value !== o && props.disabledOptions?.includes(o))} onClick={() => props.onChange(o)}>
             {props.labels[o]}
           </button>
         ))}

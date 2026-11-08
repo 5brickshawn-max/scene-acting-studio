@@ -17,6 +17,8 @@ import {
   TILT,
   TILT_LABEL,
   MAX_EXPRESSIONS,
+  MAX_SHOTS,
+  capShots,
   MAX_VIDEO_SECONDS,
   MIN_EXPRESSIONS,
   directionIssues,
@@ -718,7 +720,7 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
 
 /** The scene's shot structure at a glance: panels joined by camera moves (→) or split by cuts (|). */
 function ShotStrip() {
-  const { doc } = useEditor();
+  const { doc, canEdit } = useEditor();
   const d = doc.data;
   const shots = shotsOf(d);
   const no = (id: string) => d.expressions.findIndex((e) => e.id === id) + 1;
@@ -740,9 +742,19 @@ function ShotStrip() {
           </span>
         ))}
       </div>
+      {shots.length > MAX_SHOTS && (
+        <div className="notice notice-warn flex flex-wrap items-center gap-2">
+          <span>쇼트가 {shots.length}개입니다. 한 장면은 쇼트 최대 {MAX_SHOTS}개까지입니다(패널은 12개까지 괜찮음).</span>
+          {canEdit && (
+            <button className="btn btn-sm" onClick={() => doc.edit(1, (x) => capShots(x))}>
+              쇼트 {MAX_SHOTS}개로 합치기 (짧은 쇼트를 앞 쇼트에 이어 붙임)
+            </button>
+          )}
+        </div>
+      )}
       <p className="field-help">
         {shots.length > 1
-          ? `컷 분할 ${shots.length - 1}곳, 쇼트 ${shots.length}개. ✂ 에서 화면이 끊기고 새 쇼트가 시작되며, → 는 같은 쇼트 안에서 카메라가 이어서 움직입니다.`
+          ? `컷 분할 ${shots.length - 1}곳, 쇼트 ${shots.length}개 (최대 ${MAX_SHOTS}개). ✂ 에서 화면이 끊기고 새 쇼트가 시작되며, → 는 같은 쇼트 안에서 카메라가 이어서 움직입니다.`
           : "지금은 모든 컷이 카메라 이동으로 이어지는 한 쇼트입니다. 컷 카드의 ‘앞 컷과의 연결’에서 컷 분할을 고를 수 있습니다."}
       </p>
     </div>
@@ -792,13 +804,19 @@ function PanelCard({ e, index }: { e: Expression; index: number }) {
         placeholder="예: 횃불을 든 군중이 좌우로 갈라지고, 그 사이로 칼리엘라가 걸어 나온다. 브람은 오른쪽 앞에서 칼자루를 쥔 채 그녀를 노려본다."
       />
       {index > 0 && (
-        <Seg
-          label="앞 컷과의 연결"
-          value={e.link}
-          options={["continuous", "cut"] as const}
-          labels={{ continuous: "→ 이어짐 (카메라 이동)", cut: "✂ 컷 분할 (새 쇼트)" }}
-          onChange={(v) => update({ link: v })}
-        />
+        <div>
+          <Seg
+            label="앞 컷과의 연결"
+            value={e.link}
+            options={["continuous", "cut"] as const}
+            labels={{ continuous: "→ 이어짐 (카메라 이동)", cut: "✂ 컷 분할 (새 쇼트)" }}
+            disabledOptions={shotsOf(d).length >= MAX_SHOTS ? (["cut"] as const) : []}
+            onChange={(v) => update({ link: v })}
+          />
+          {e.link !== "cut" && shotsOf(d).length >= MAX_SHOTS && (
+            <p className="field-help">쇼트가 이미 {MAX_SHOTS}개라 더 나눌 수 없습니다. 다른 컷의 컷 분할을 ‘이어짐’으로 바꾸면 여기서 나눌 수 있습니다.</p>
+          )}
+        </div>
       )}
       <Field
         label="카메라"

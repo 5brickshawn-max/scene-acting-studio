@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, SceneComposeOutT, SheetCheckOutT, StoryboardOutT } from "@/lib/ai/schemas";
 import { JOB_LABEL, type JobKind } from "@/lib/ai/schemas";
 import { composeStructure, applyActing, applyCharacter, applyComposition, applyDialogue, applyExpressions, applyStoryboard, type CharacterField, type ComposeField } from "@/lib/domain/apply";
-import { castLabel, FACING_LABEL, GAZE_LABEL, INTENSITY_LABEL, maxCastFor, type ProjectData } from "@/lib/domain/project";
+import { castLabel, FACING_LABEL, GAZE_LABEL, INTENSITY_LABEL, MAX_SHOTS, maxCastFor, type ProjectData } from "@/lib/domain/project";
 import type { JobView } from "@/lib/types";
 import { useEditor } from "./editor-context";
 
@@ -239,7 +239,7 @@ export function ComposeProposal({ job, out }: { job: JobView; out: SceneComposeO
             k="structure"
             title={
               st.story
-                ? `쇼트 구성 · 쇼트 ${st.shots}개 · 패널 ${st.panels.length}개 · ${st.duration}초`
+                ? `쇼트 구성 · 쇼트 ${st.shots}개${st.mergedShots ? ` (제안 ${st.shots + st.mergedShots}개 → 최대 ${MAX_SHOTS}개로 합침)` : ""} · 패널 ${st.panels.length}개 · ${st.duration}초`
                 : `표정 비트 ${st.panels.length}개 · ${st.duration}초 (컷 없는 한 쇼트)`
             }
           >

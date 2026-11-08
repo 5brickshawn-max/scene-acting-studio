@@ -2,6 +2,8 @@
  * always an explicit user action; fields can be picked individually. */
 import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, SceneComposeOutT, StoryboardOutT } from "@/lib/ai/schemas";
 import {
+  capShots,
+  MAX_SHOTS,
   MAX_EXPRESSIONS,
   MAX_VIDEO_SECONDS,
   MIN_EXPRESSIONS,
@@ -48,13 +50,21 @@ export type ComposeField = "cast" | "style" | "extras" | "opening" | "questions"
 export function composeStructure(data: Pick<ProjectData, "mode">, out: Pick<SceneComposeOutT, "shots" | "duration">) {
   const story = data.mode === "storyboard";
   // character-by-character scenes are one continuous shot: its panels are the beats
-  const shots = (story ? out.shots : [{ title: "", seconds: out.duration, panels: out.shots.flatMap((s) => s.panels) }]).filter((s) => s.panels.length);
+  let shots = (story ? out.shots : [{ title: "", seconds: out.duration, panels: out.shots.flatMap((s) => s.panels) }]).filter((s) => s.panels.length);
+  const proposedShots = shots.length;
+  // at most MAX_SHOTS shots: the shortest shot (fewest panels) joins the one before it
+  while (shots.length > MAX_SHOTS) {
+    let k = 1;
+    for (let i = 2; i < shots.length; i++) if (shots[i].panels.length <= shots[k].panels.length) k = i;
+    const merged = { title: shots[k - 1].title, seconds: (shots[k - 1].seconds || 0) + (shots[k].seconds || 0), panels: [...shots[k - 1].panels, ...shots[k].panels] };
+    shots = [...shots.slice(0, k - 1), merged, ...shots.slice(k + 1)];
+  }
   const panels: { title: string; shot: number; weight: number }[] = [];
   shots.forEach((s, k) => s.panels.forEach((t) => panels.push({ title: t, shot: k, weight: Math.max(0.2, s.seconds || 1) / s.panels.length })));
   const total = panels.length;
   const kept = panels.slice(0, MAX_EXPRESSIONS);
   const duration = round3(Math.min(MAX_VIDEO_SECONDS, Math.max(1, out.duration || kept.reduce((a, p) => a + p.weight, 0))));
-  return { story, shots: shots.length, panels: kept, total, clipped: total > MAX_EXPRESSIONS, tooFew: kept.length < MIN_EXPRESSIONS, duration };
+  return { story, shots: shots.length, mergedShots: proposedShots - shots.length, panels: kept, total, clipped: total > MAX_EXPRESSIONS, tooFew: kept.length < MIN_EXPRESSIONS, duration };
 }
 
 /**
@@ -183,7 +193,8 @@ export function applyStoryboard(data: ProjectData, out: StoryboardOutT, indexes?
     const speaker = data.cast[o.speaker - 1]?.id ?? prev.characterId;
     return withReactionsFor(data.cast, { ...prev, characterId: speaker, emotion: o.title, action: o.action, camera: o.camera, link: i === 0 ? "continuous" : o.link ?? prev.link });
   });
-  return reopenFrom({ ...data, expressions }, 1);
+  // at most MAX_SHOTS shots, whatever the AI proposed
+  return reopenFrom(capShots({ ...data, expressions }), 1);
 }
 
 export function applyDialogue(data: ProjectData, out: DialogueOutT): ProjectData {
