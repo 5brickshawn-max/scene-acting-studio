@@ -43,7 +43,7 @@ type JobRow = {
 };
 
 /** Load an asset image as a base64 block (uses the downscaled preview if present). */
-async function imageBlock(assetId: string | null | undefined, label: string): Promise<Content> {
+async function imageBlock(assetId: string | null | undefined, label: string, maxSide = 1568): Promise<Content> {
   if (!assetId) return [];
   const sb = supabaseAdmin();
   const { data: asset } = await sb.from("assets").select("storage_path, mime, meta").eq("id", assetId).maybeSingle();
@@ -57,9 +57,11 @@ async function imageBlock(assetId: string | null | undefined, label: string): Pr
   let bytes = Buffer.from(await file.arrayBuffer());
   // Claude takes images up to 5 MB in jpeg/png/webp/gif; an original with no preview (a big PNG, a format the
   // browser could not preview) is shrunk here to a 1568 px long side, which is all the model uses anyway
-  if (bytes.length > 3_500_000 || !["image/jpeg", "image/png", "image/webp", "image/gif"].includes(mime)) {
+  // background/mood references are read at a smaller size (fewer image tokens: a faster answer); characters keep full detail
+  const small = maxSide < 1568 ? await sharp(bytes).metadata().then((m) => Math.max(m.width ?? 0, m.height ?? 0) > maxSide).catch(() => false) : false;
+  if (small || bytes.length > 3_500_000 || !["image/jpeg", "image/png", "image/webp", "image/gif"].includes(mime)) {
     try {
-      bytes = await sharp(bytes).rotate().resize(1568, 1568, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
+      bytes = await sharp(bytes).rotate().resize(maxSide, maxSide, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
       mime = "image/jpeg";
     } catch {
       return [];
@@ -72,8 +74,8 @@ async function imageBlock(assetId: string | null | undefined, label: string): Pr
 }
 
 /** Several images at once, kept in the given order. */
-async function imageBlocks(items: { assetId: string | null | undefined; label: string }[]): Promise<Content> {
-  return (await Promise.all(items.map((x) => imageBlock(x.assetId, x.label)))).flat();
+async function imageBlocks(items: { assetId: string | null | undefined; label: string }[], maxSide?: number): Promise<Content> {
+  return (await Promise.all(items.map((x) => imageBlock(x.assetId, x.label, maxSide)))).flat();
 }
 
 /** The scene drawing (the whole cast together), labelled with who stands where. */
@@ -186,7 +188,7 @@ async function buildRequest(job: JobRow, data: ProjectData) {
       if (!scenario && !data.baseAssetId) throw new Error("먼저 씬 시놉시스·시나리오를 쓰거나 장면 기준 그림을 올리세요.");
       const [base, refs, people] = await Promise.all([
         data.baseAssetId ? castImages(data) : Promise.resolve([] as Content),
-        imageBlocks(data.designRefAssetIds.map((id) => ({ assetId: id, label: "[추가 참고 그림 — 배경·건축·소품·문양·분위기 참고]" }))),
+        imageBlocks(data.designRefAssetIds.map((id) => ({ assetId: id, label: "[추가 참고 그림 — 배경·건축·소품·문양·분위기 참고]" })), 1024),
         characterSheets(data),
       ]);
       const pictured = data.cast.flatMap((c, i) => (c.refAssetId ? [`인물 ${i + 1} ${castLabel(data, c.id)}`] : []));
@@ -235,7 +237,7 @@ async function buildRequest(job: JobRow, data: ProjectData) {
       // one analysis of the scene drawing describes every cast member and the shared style
       const [base, refs, people] = await Promise.all([
         castImages(data),
-        imageBlocks(data.designRefAssetIds.map((id) => ({ assetId: id, label: "[추가 참고 그림 — 배경·건축·소품·문양·분위기 참고]" }))),
+        imageBlocks(data.designRefAssetIds.map((id) => ({ assetId: id, label: "[추가 참고 그림 — 배경·건축·소품·문양·분위기 참고]" })), 1024),
         characterSheets(data),
       ]);
       const sheetNote = data.cast.some((c) => c.refAssetId)
@@ -419,7 +421,7 @@ async function buildRequest(job: JobRow, data: ProjectData) {
               `duration은 반드시 ${data.acting.duration}으로 두고, 구간은 0초에서 시작해 빈틈없이 이어져 ${data.acting.duration}초에서 끝나야 합니다. 모든 표정을 한 번씩 쓰세요. ` +
               `대사를 말할 시간이 충분하도록 하고(한국어 기준 1초에 약 4~5음절), transition에는 다음 표정으로 넘어가는 연기를 짧게 적으세요.` +
               (data.mode === "storyboard"
-                ? ` 스토리보드 방식이라 transition은 다음 컷으로 넘어가는 방식입니다: 다음 컷이 [컷 분할]이면 무엇에서 끊기는지(예: 숨이 끝나는 순간 컷), [이어짐]이면 카메라·몸이 어떻게 이어지는지. 초 단위 시각은 쓰지 마세요.`
+                ? ` 스토리보드 방식이라 컷 순서는 2단계 순서(컷 1, 2, 3 …) 그대로 두고 시간만 나누세요 — 순서를 바꾸면 컷 사이 연결이 깨집니다. transition은 다음 컷으로 넘어가는 방식입니다: 다음 컷이 [컷 분할]이면 무엇에서 끊기는지(예: 숨이 끝나는 순간 컷), [이어짐]이면 카메라·몸이 어떻게 이어지는지. 초 단위 시각은 쓰지 마세요.`
                 : "") +
               (data.expressionSetup.scene.trim() ? ` '상황 설정·기초 대사'의 흐름(순서와 템포, 숨을 고르는 순간)을 따르세요.` : "") +
               `\n\n${ctx}${extra}`,

@@ -895,7 +895,7 @@ export function HiggsfieldVideo({
           return (
             <div key={j.id} className="rounded-lg border border-line bg-white p-4 space-y-3">
               <div className="font-semibold">생성 결과 · {jobLabel(j)}</div>
-              {a ? <video src={a.url} controls className="w-full max-h-96 bg-black rounded" /> : <p className="text-muted">불러오는 중…</p>}
+              {a ? <video src={a.url} controls preload="metadata" className="w-full max-h-96 bg-black rounded" /> : <p className="text-muted">불러오는 중…</p>}
               {isDraft && canEdit && (
                 <div className="flex flex-wrap gap-2">
                   <button className="btn btn-primary" disabled={h.busy || !!h.quote} onClick={() => h.askQuote({ target: "finalize", draftRowId: j.id })}>

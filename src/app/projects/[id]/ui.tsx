@@ -50,7 +50,7 @@ export function ImageSlot(props: {
       <div className={`rounded-xl border border-line checker overflow-hidden grid place-items-center ${props.tall ? "h-72" : "h-48"}`}>
         {asset ? (
           asset.mime.startsWith("video/") ? (
-            <video src={asset.url} controls className="max-h-full max-w-full" />
+            <video src={asset.url} controls preload="metadata" className="max-h-full max-w-full" />
           ) : (
             <button type="button" className="w-full h-full" onClick={() => setZoom(true)} aria-label={`${props.label} 크게 보기`}>
               <img src={asset.previewUrl} alt={asset.name} className="w-full h-full object-contain" />

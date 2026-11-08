@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createProjectData, setExpressionCount, type ProjectData } from "@/lib/domain/project";
 import { buildExpressionHandoffs, buildVideoHandoff } from "@/lib/domain/handoff";
-import { applyStoryboard } from "@/lib/domain/apply";
+import { applyActing, applyStoryboard } from "@/lib/domain/apply";
 import { englishStale } from "@/lib/domain/english";
 
 const board = (): ProjectData => {
@@ -59,5 +59,15 @@ describe("storyboard continuity (연결성)", () => {
     d.english = { language: { text: "", key: "" }, style: { text: "", key: "" }, continuity: { text: "", key: "" }, cast: [], beats: [] };
     d.expressionSetup.continuity = "1) 규칙";
     expect(englishStale(d)).toContain("연결 규칙");
+  });
+});
+
+describe("step 4 keeps the storyboard order", () => {
+  it("an AI timing that reorders panels only changes their lengths", () => {
+    const d = board();
+    const ids = d.expressions.map((e) => e.id);
+    const out = { segments: [4, 3, 2, 1].map((panel, k) => ({ panel, start: k * 2, end: k * 2 + 2, transition: "" })) } as Parameters<typeof applyActing>[1];
+    const next = applyActing(d, out);
+    expect(next.acting.segments.map((s) => s.expressionId)).toEqual(ids);
   });
 });

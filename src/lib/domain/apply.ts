@@ -237,6 +237,11 @@ export function applyActing(data: ProjectData, out: ActingOutT): ProjectData {
     .filter((s): s is typeof s & { id: string } => Boolean(s.id))
     .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
     .sort((a, b) => a.start - b.start);
+  // storyboard: the panel order is the design (cuts, continuity, the panel before each one) — only the times change
+  if (data.mode === "storyboard") {
+    const at = new Map(data.expressions.map((e, i) => [e.id, i]));
+    segs.sort((a, b) => (at.get(a.id) ?? 0) - (at.get(b.id) ?? 0));
+  }
   if (!segs.length) return data;
   const ids = segs.map((s) => s.id);
   const weights = segs.map((s) => Math.max(0.1, s.end - s.start));

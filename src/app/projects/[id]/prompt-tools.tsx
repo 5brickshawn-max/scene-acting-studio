@@ -56,17 +56,22 @@ export function useVideoPrompt(auto: boolean) {
     }
   }, [flush, load]);
 
+  // follows the saved version, but waits until saving settles (typing saves every ~1.5 s): one rebuild, not one per save
   useEffect(() => {
     if (!auto) return;
     let alive = true;
-    setLoading(true);
-    load()
-      .then((body) => alive && setH(body))
-      .catch(() => undefined)
-      .finally(() => alive && setLoading(false));
+    const t = setTimeout(() => {
+      setLoading(true);
+      load()
+        .then((body) => alive && setH(body))
+        .catch(() => undefined)
+        .finally(() => alive && setLoading(false));
+    }, h ? 1200 : 0);
     return () => {
       alive = false;
+      clearTimeout(t);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auto, load, doc.version]);
 
   return { h, loading, error, apply };

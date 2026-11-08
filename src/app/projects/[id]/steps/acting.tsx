@@ -68,7 +68,11 @@ export function ActingStep({ onNavigate }: { onNavigate: (s: StepIndex) => void 
     <StepFrame
       step={3}
       title="시간 분배를 정하세요"
-      intro={`전체 ${duration}초(2단계에서 정함) 안에서 표정 순서와 길이를 나눕니다. 여러 분배 안을 눌러 비교해 보세요.`}
+      intro={
+        data.mode === "storyboard"
+          ? `전체 ${duration}초(2단계에서 정함) 안에서 컷마다 길이를 나눕니다. 컷 순서는 2단계 콘티 순서 그대로입니다(순서를 바꾸면 컷 사이 연결이 깨지므로, 바꾸려면 2단계에서 설계를 고치세요).`
+          : `전체 ${duration}초(2단계에서 정함) 안에서 표정 순서와 길이를 나눕니다. 여러 분배 안을 눌러 비교해 보세요.`
+      }
       onNavigate={onNavigate}
     >
       <section className="space-y-3" aria-labelledby="plans-title">
@@ -153,7 +157,7 @@ export function ActingStep({ onNavigate }: { onNavigate: (s: StepIndex) => void 
                   <label className="text-[13px] font-semibold text-muted block mb-1" htmlFor={`end-${s.expressionId}`}>끝</label>
                   <EndField id={`end-${s.expressionId}`} value={s.end} disabled={!canEdit || i === segments.length - 1} onCommit={(v) => setEnd(i, v)} />
                 </div>
-                {canEdit && (
+                {canEdit && data.mode !== "storyboard" && (
                   <div className="flex gap-1">
                     <button className="btn btn-sm" onClick={() => move(i, -1)} disabled={i === 0} aria-label="앞으로">↑</button>
                     <button className="btn btn-sm" onClick={() => move(i, 1)} disabled={i === segments.length - 1} aria-label="뒤로">↓</button>

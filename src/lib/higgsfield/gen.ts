@@ -394,17 +394,36 @@ type Opened = Awaited<ReturnType<typeof openSession>>;
  * Pass `session` to reuse one MCP connection whose workspace the caller has
  * already selected (see pollUntilDone).
  */
-export async function poll(rowId: string, session?: Opened): Promise<"running" | "done" | "failed"> {
+/** Higgsfield's state of one row's job (the only part that needs the selected workspace). */
+async function askStatus(rowId: string, s: McpSession): Promise<Gen | null> {
+  const { data: row } = await supabaseAdmin().from("ai_jobs").select("status, output").eq("id", rowId).single();
+  const hfJobId = (row?.output as { hfJobId?: string } | null)?.hfJobId;
+  if (!row || row.status !== "running" || !hfJobId) return null;
+  const r = await s.call<{ generation?: Gen } & Gen>("job_status", { jobId: hfJobId, sync: true });
+  return r.generation ?? r;
+}
+
+/**
+ * One check of a row. `known` is a status already read inside the workspace lock (the server loop):
+ * downloading and storing the result then happens outside the lock, so other requests are not kept waiting.
+ */
+export async function poll(rowId: string, session?: Opened, known?: Gen | null): Promise<"running" | "done" | "failed"> {
   const sb = supabaseAdmin();
   const { data: row } = await sb.from("ai_jobs").select("*").eq("id", rowId).single();
   if (!row || row.status === "done" || row.status === "failed") return (row?.status as "done" | "failed") ?? "failed";
   const hfJobId = (row.output as { hfJobId?: string } | null)?.hfJobId;
   if (!hfJobId) return "running";
 
-  const { s, conn } = session ?? (await openSession(row.workspace_id));
-  const ask = () => s.call<{ generation?: Gen } & Gen>("job_status", { jobId: hfJobId, sync: true });
-  const r = session ? await ask() : await withWorkspace(s, conn, ask);
-  const g: Gen = r.generation ?? r;
+  let g: Gen;
+  if (known !== undefined) {
+    if (!known) return "running";
+    g = known;
+  } else {
+    const { s, conn } = session ?? (await openSession(row.workspace_id));
+    const ask = () => s.call<{ generation?: Gen } & Gen>("job_status", { jobId: hfJobId, sync: true });
+    const r = session ? await ask() : await withWorkspace(s, conn, ask);
+    g = r.generation ?? r;
+  }
   if (g.status && TERMINAL_FAIL.has(g.status)) {
     const reason = g.status === "nsfw" || g.status === "ip_detected" ? "Higgsfield 검수에서 걸렸습니다" : "Higgsfield 생성이 실패했습니다";
     await sb.from("ai_jobs").update({ status: "failed", error: `${reason} (${g.status}).`, finished_at: new Date().toISOString() }).eq("id", rowId);
@@ -505,9 +524,9 @@ export async function pollUntilDone(rowIds: string[], budgetMs = 280_000) {
         session = await openSession(row.workspace_id as string);
       }
       const opened: Opened = session;
-      const states = await withWorkspace(opened.s, opened.conn, () =>
-        Promise.all(left.map((id) => poll(id, opened).catch(() => "running" as const))),
-      );
+      // only the status calls run under the workspace lock; saving results (big files) happens after it
+      const gens = await withWorkspace(opened.s, opened.conn, () => Promise.all(left.map((id) => askStatus(id, opened.s).catch(() => null))));
+      const states = await Promise.all(left.map((id, i) => poll(id, opened, gens[i]).catch(() => "running" as const)));
       left = left.filter((_, i) => states[i] === "running");
     } catch {
       session = null; // transient (expired session, network): reconnect next round
