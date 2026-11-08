@@ -39,6 +39,8 @@ const jobLabel = (kind: string) =>
       ? "Higgsfield 영상"
       : kind === "hf_frame"
         ? "Higgsfield 프레임 그림"
+        : kind === "hf_sketch"
+          ? "Higgsfield 러프 콘티"
         : JOB_LABEL[kind as JobKind] ?? kind;
 
 function Media({ a, label, tall }: { a?: ReviewAsset; label: string; tall?: boolean }) {

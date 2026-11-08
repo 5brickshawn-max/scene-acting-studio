@@ -8,7 +8,7 @@
  */
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { FRAMING_LABEL, readProjectData, type Framing, type ProjectData } from "@/lib/domain/project";
-import { buildExpressionHandoffs, buildFrameHandoff, buildSceneImageHandoff, buildVideoHandoff } from "@/lib/domain/handoff";
+import { buildExpressionHandoffs, buildSketchHandoffs, buildFrameHandoff, buildSceneImageHandoff, buildVideoHandoff } from "@/lib/domain/handoff";
 import { findJobIds, getConnection, openSession, withWorkspace, type McpSession } from "./client";
 import sharp from "sharp";
 import { composeSideBySide, padToAspect, type VideoAspect } from "./pad";
@@ -20,6 +20,8 @@ const TERMINAL_FAIL = new Set(["failed", "nsfw", "canceled", "cancelled", "ip_de
 
 export type GenSpec =
   | { target: "expressions"; model: string; expressionIds?: string[] }
+  /** 러프 콘티: rough line sketches of storyboard panels (all, or the listed ones) */
+  | { target: "sketch"; model: string; expressionIds?: string[] }
   | { target: "video"; model: string; resolution: string }
   | { target: "finalize"; draftRowId: string }
   /** 첫 장면: the scene reference picture drawn from the scenario (step 1) */
@@ -30,7 +32,7 @@ export type GenSpec =
 type Media = { assetId: string; role: string };
 type Item = { params: Record<string, unknown>; medias: Media[]; label: string; meta: Record<string, unknown> };
 type Plan = {
-  kind: "hf_expr" | "hf_video" | "hf_frame" | "hf_scene";
+  kind: "hf_expr" | "hf_video" | "hf_frame" | "hf_scene" | "hf_sketch";
   step: number;
   tool: "generate_image_batch" | "generate_video_batch";
   single: "generate_image" | "generate_video";
@@ -71,6 +73,29 @@ async function plan(projectId: string, spec: GenSpec, data: ProjectData): Promis
     if (!items.length) throw new Error("생성할 표정이 없습니다.");
     if (items.length > 12) throw new Error("한 번에 12장까지 생성할 수 있습니다.");
     return { kind: "hf_expr", step: 1, tool: "generate_image_batch", single: "generate_image", items };
+  }
+
+  if (spec.target === "sketch") {
+    if (!isImageModel(spec.model)) throw new Error("지원하지 않는 이미지 모델입니다.");
+    if (data.mode !== "storyboard") throw new Error("러프 콘티는 스토리보드 방식에서만 생성합니다.");
+    const m = IMAGE_MODELS[spec.model];
+    const wanted = spec.expressionIds?.length ? new Set(spec.expressionIds) : null;
+    const items = buildSketchHandoffs(data)
+      .filter((h) => !wanted || wanted.has(h.expressionId))
+      .filter((h) => {
+        const e = data.expressions.find((x) => x.id === h.expressionId);
+        return Boolean(e?.action.trim() || e?.camera.trim());
+      })
+      .map((h) => ({
+        // a rough sketch needs no high rendering quality (cheaper)
+        params: { ...m.params, ...("quality" in m.params ? { quality: "low" } : {}), prompt: h.prompt, aspect_ratio: h.aspectRatio },
+        medias: h.references.map((r) => ({ assetId: r.assetId, role: "image_references" })),
+        label: `${h.index + 1}번 컷 러프 콘티 · ${m.label}`,
+        meta: { model: spec.model, expressionId: h.expressionId, index: h.index },
+      }));
+    if (!items.length) throw new Error("러프 콘티를 그릴 컷이 없습니다. 컷마다 장면 묘사나 카메라를 먼저 쓰세요.");
+    if (items.length > 12) throw new Error("한 번에 12장까지 생성할 수 있습니다.");
+    return { kind: "hf_sketch", step: 1, tool: "generate_image_batch", single: "generate_image", items };
   }
 
   if (spec.target === "scene") {
@@ -429,7 +454,7 @@ export async function poll(rowId: string, session?: Opened): Promise<"running" |
       id,
       workspace_id: row.workspace_id,
       project_id: row.project_id,
-      kind: isVideo ? "video" : row.kind === "hf_scene" ? "base" : "sheet",
+      kind: isVideo ? "video" : row.kind === "hf_scene" ? "base" : row.kind === "hf_sketch" ? "acting_ref" : "sheet",
       name: `${input.label ?? "Higgsfield"} ${when}.${extOf(mime)}`,
       storage_path: path,
       mime,

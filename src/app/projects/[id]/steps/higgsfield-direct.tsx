@@ -18,6 +18,7 @@ import { useEditor } from "../editor-context";
 type Quote = { credits: number | null; each?: number | null; count?: number; balance: number | null; workspace: string | null; model: string; references: number };
 type Spec =
   | { target: "expressions"; model: string; expressionIds?: string[] }
+  | { target: "sketch"; model: string; expressionIds?: string[] }
   | { target: "video"; model: string; resolution: string }
   | { target: "finalize"; draftRowId: string }
   | { target: "frame"; model: string; expressionId: string; shot: Framing; slot: "start" | "end" }
@@ -26,7 +27,7 @@ type Spec =
 const fmtCredits = (n: number | null) => (n === null ? "?" : Math.floor(n).toLocaleString("ko-KR"));
 
 /** Shared quote → generate → poll logic for one kind of Higgsfield job. */
-function useHfJobs(kind: "hf_expr" | "hf_video" | "hf_frame" | "hf_scene") {
+function useHfJobs(kind: "hf_expr" | "hf_video" | "hf_frame" | "hf_scene" | "hf_sketch") {
   const { projectId, doc, jobs, assets, addAsset } = useEditor();
   const [quote, setQuote] = useState<{ spec: Spec; q: Quote } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -228,6 +229,104 @@ export function SceneImageGenerator({ onUse }: { onUse: (assetId: string) => voi
         </ol>
       )}
     </section>
+  );
+}
+
+/* ───────────── Step 2 (storyboard): rough sketches ───────────── */
+
+/**
+ * 러프 콘티: simple black-line sketches on white for every panel in one go. Each result goes straight into
+ * its panel's 러프 스케치 slot (newest wins); a panel can then be redone alone or replaced by hand.
+ */
+export function SketchGenerator() {
+  const { doc, canEdit, jobs } = useEditor();
+  const h = useHfJobs("hf_sketch");
+  const [model, setModel] = useState<ImageModelKey>("gpt_image_2_6");
+  const exps = doc.data.expressions;
+  const ready = canEdit && !h.busy && !h.quote;
+  const drawable = exps.filter((e) => e.action.trim() || e.camera.trim());
+  const missing = drawable.filter((e) => !e.sketchAssetId).map((e) => e.id);
+  const ask = (ids?: string[]) => h.askQuote({ target: "sketch", model, expressionIds: ids });
+
+  // finished sketches go into their panels by themselves (oldest first, so the newest one stays)
+  const applied = useRef(new Set<string>());
+  const { markApplied } = jobs;
+  const version = doc.version;
+  useEffect(() => {
+    if (!canEdit) return;
+    const ready = [...h.pending].reverse().filter((j) => jobAssetId(j) && !applied.current.has(j.id));
+    if (!ready.length) return;
+    ready.forEach((j) => applied.current.add(j.id));
+    doc.edit(1, (x) => {
+      let expressions = x.expressions;
+      for (const j of ready) {
+        const id = (j.input as { expressionId?: string }).expressionId;
+        expressions = expressions.map((e) => (e.id === id ? { ...e, sketchAssetId: jobAssetId(j)! } : e));
+      }
+      return { ...x, expressions };
+    });
+    ready.forEach((j) => void markApplied(j.id, version));
+  }, [h.pending, canEdit, doc, markApplied, version]);
+
+  const runningFor = (id: string) => h.running.some((j) => (j.input as { expressionId?: string }).expressionId === id);
+
+  return (
+    <div className="rounded-lg border border-line bg-[#f7fbf5] p-4 space-y-3" aria-labelledby="hf-sketch">
+      <div>
+        <div id="hf-sketch" className="font-semibold">러프 콘티 바로 생성 (Higgsfield)</div>
+        <p className="field-help">
+          컷마다 장면 묘사·카메라대로 <strong>흰 배경에 단순한 선으로만</strong> 그린 러프 콘티를 한 번에 만들어 각 컷의 ‘러프 스케치’ 칸에 넣습니다. 마음에 안
+          드는 컷은 카드에서 그 컷만 다시 생성하거나 직접 그린 그림으로 바꾸세요. 컷 그림은 이 구도를 따릅니다. 구독 크레딧이 차감됩니다(품질 낮음으로 저렴하게).
+        </p>
+      </div>
+      <div role="group" aria-label="러프 콘티 모델" className="seg">
+        {(Object.keys(IMAGE_MODELS) as ImageModelKey[]).map((k) => (
+          <button key={k} aria-pressed={model === k} disabled={!canEdit || !!h.quote} onClick={() => setModel(k)}>
+            {IMAGE_MODELS[k].label.split(" · ")[0]}
+          </button>
+        ))}
+      </div>
+      {!h.quote && (
+        <div className="flex flex-wrap gap-2">
+          <button className="btn btn-dark" disabled={!ready || !drawable.length} onClick={() => ask(drawable.map((e) => e.id))}>
+            {h.busy ? "비용 확인 중…" : `러프 콘티 전부 생성 (${drawable.length}컷)`}
+          </button>
+          {missing.length > 0 && missing.length < drawable.length && (
+            <button className="btn btn-sm" disabled={!ready} onClick={() => ask(missing)}>
+              스케치 없는 컷만 ({missing.length}컷)
+            </button>
+          )}
+        </div>
+      )}
+      {!drawable.length && <p className="field-help">컷마다 장면 묘사나 카메라를 먼저 쓰세요(②의 AI 콘티 설계).</p>}
+      {drawable.length < exps.length && drawable.length > 0 && (
+        <p className="field-help">장면 묘사·카메라가 비어 있는 컷 {exps.length - drawable.length}개는 건너뜁니다.</p>
+      )}
+      <QuoteBox h={h} />
+      <Status h={h} typical="20초~1분" />
+      {h.running.length > 0 && <p className="field-help" aria-live="polite">생성 중: {exps.filter((e) => runningFor(e.id)).map((e) => `${exps.indexOf(e) + 1}번`).join(", ")} 컷</p>}
+    </div>
+  );
+}
+
+/** One panel's "redo this sketch" button (shares the sketch jobs with SketchGenerator). */
+export function SketchRedoButton({ expressionId, hasSketch }: { expressionId: string; hasSketch: boolean }) {
+  const { canEdit, doc } = useEditor();
+  const h = useHfJobs("hf_sketch");
+  const e = doc.data.expressions.find((x) => x.id === expressionId);
+  if (!canEdit || !e || !(e.action.trim() || e.camera.trim())) return null;
+  const running = h.running.some((j) => (j.input as { expressionId?: string }).expressionId === expressionId);
+  if (running) return <p className="text-[13px] text-muted" aria-live="polite">러프 콘티 생성 중…</p>;
+  return (
+    <div className="space-y-2">
+      {!h.quote && (
+        <button className="btn btn-sm" disabled={h.busy} onClick={() => h.askQuote({ target: "sketch", model: "gpt_image_2_6", expressionIds: [expressionId] })}>
+          {h.busy ? "비용 확인 중…" : hasSketch ? "러프 콘티 다시 생성" : "러프 콘티 생성"}
+        </button>
+      )}
+      <QuoteBox h={h} />
+      {h.error && <p className="notice notice-error">{h.error}</p>}
+    </div>
   );
 }
 

@@ -83,11 +83,18 @@ describe("step screens render for one and for several characters", () => {
     expect(s2).toContain("콘티를 만드세요");
     expect(s2).toContain("장면 묘사 (이 순간 화면 전체)");
     expect(s2).toContain("러프 스케치 (선택)");
+    expect(s2).toContain("러프 콘티 바로 생성");
+    expect(s2).toContain("러프 콘티 전부 생성 (0컷)");
     expect(s2).toContain("앞 컷과의 연결");
     expect(s2).toContain("✂ 컷 분할 (새 쇼트)");
     expect(s2).toContain("쇼트 1");
     expect(s2).toContain("말하는 인물 (이 컷에 대사가 있을 때)");
     expect(s2).not.toContain("중심 인물");
+    // with panels written, every panel offers its own sketch and the batch counts them
+    const w = { ...d, expressions: d.expressions.map((e) => ({ ...e, action: "x" })) };
+    const s3 = render(w, createElement(ExpressionStep, nav));
+    expect(s3).toContain(`러프 콘티 전부 생성 (${w.expressions.length}컷)`);
+    expect(s3.split("러프 콘티 생성").length - 1).toBe(w.expressions.length);
   });
 
   it("offers more named characters in storyboard mode than in character-by-character mode", () => {

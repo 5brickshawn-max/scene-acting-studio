@@ -250,6 +250,15 @@ function extraRefsEn(data: ProjectData, refs: ReferenceSlot[]): string[] {
 }
 
 /** Each character's own material, in cast order (after the scene picture). */
+/** Reference images one image request carries at most (scene picture, character material, extras, sketch, anchor). */
+export const MAX_IMAGE_REFERENCES = 12;
+
+/** The extra reference pictures that still fit after `used`, keeping `reserve` places (sketch, anchor). */
+function extraRefsFitting(data: ProjectData, used: { assetId: string }[], reserve: number): string[] {
+  const room = Math.max(0, MAX_IMAGE_REFERENCES - used.length - reserve);
+  return data.designRefAssetIds.filter((x) => !used.some((r) => r.assetId === x)).slice(0, room);
+}
+
 function castMaterialRefs(data: ProjectData, start: number): ReferenceSlot[] {
   return data.cast.flatMap((c, k) =>
     c.refAssetId && c.refAssetId !== data.baseAssetId
@@ -299,7 +308,7 @@ function identityRefs(data: ProjectData): ReferenceSlot[] {
   if (data.baseAssetId)
     refs.push({ role: "image reference 1", assetId: data.baseAssetId, why: multi ? "장면 기준 그림 — 출연진 전원의 정체성·크기·그림체" : "캐릭터 정체성·그림체의 기준" });
   for (const r of castMaterialRefs(data, refs.length)) refs.push({ ...r, role: `image reference ${refs.length + 1}` });
-  for (const id of data.designRefAssetIds.filter((x) => !refs.some((r) => r.assetId === x)))
+  for (const id of extraRefsFitting(data, refs, 2))
     refs.push({ role: `image reference ${refs.length + 1}`, assetId: id, why: "추가 참고 그림" });
   return refs;
 }
@@ -1181,7 +1190,7 @@ function storyboardRefs(data: ProjectData): ReferenceSlot[] {
   const refs: ReferenceSlot[] = [];
   if (data.baseAssetId) refs.push({ role: "image reference 1", assetId: data.baseAssetId, why: "장면 기준 그림 — 주요 인물·그림체·세계" });
   for (const r of castMaterialRefs(data, refs.length)) refs.push({ ...r, role: `image reference ${refs.length + 1}` });
-  for (const id of data.designRefAssetIds.filter((x) => !refs.some((r) => r.assetId === x)))
+  for (const id of extraRefsFitting(data, refs, 2))
     refs.push({ role: `image reference ${refs.length + 1}`, assetId: id, why: "추가 참고 그림" });
   return refs;
 }
@@ -1227,6 +1236,42 @@ function buildStoryboardHandoffs(data: ProjectData): ExpressionHandoff[] {
       data.expressionSetup.instruction && `Additional direction: ${clean(data.expressionSetup.instruction)}`,
       `Background: the world of the scene as in the references and the description (not an empty white background) unless the description says otherwise.`,
       `Hands drawn clearly with natural anatomy; faces of the named characters readable.`,
+    ]
+      .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+      .join("\n");
+    return { expressionId: e.id, index: i, emotion: t.title || `컷 ${i + 1}`, aspectRatio: aspect, references, prompt };
+  });
+}
+
+/**
+ * 러프 콘티: a quick rough storyboard sketch per panel — simple black lines on white, no colour or shading —
+ * drawn from the panel's moment and camera. The scene picture only tells who is who and where things stand.
+ * The team can redo any panel or replace it with their own drawing; the finished panel art then follows it.
+ */
+export function buildSketchHandoffs(data: ProjectData): ExpressionHandoff[] {
+  const aspect = data.video.aspectRatio;
+  const en = freshEnglish(data);
+  const n = data.expressions.length;
+  const who = data.cast
+    .filter((c) => c.name.trim())
+    .map((c) => {
+      const look = en.cast.get(c.id)?.look?.[0] ?? clean(c.locks).split(/[.\n]/)[0];
+      return look ? `${castName(data, c.id)} (${clip(look, 70) || look.slice(0, 70)})` : castName(data, c.id);
+    })
+    .join("; ");
+  return data.expressions.map((e, i) => {
+    const t = panelTexts(data, e, en);
+    const references: ReferenceSlot[] = data.baseAssetId
+      ? [{ role: "image reference 1", assetId: data.baseAssetId, why: "장면 기준 그림 — 누가 누구인지·배경 배치만 (색·그림체는 따르지 않음)" }]
+      : [];
+    const prompt = [
+      `Rough storyboard sketch, panel ${i + 1} of ${n}, ${aspect} frame: quick loose black pencil line drawing on a plain white background. Simple lines only — no colour, no shading, no grey fills, no texture, no rendering; simple gesture figures with readable poses, faces only as simple shapes and eye lines. Like a director's thumbnail for a film storyboard. No panel borders, no text, no arrows, no numbers.`,
+      data.baseAssetId &&
+        "Image reference 1 is the finished scene picture: use it ONLY to know who is who (silhouettes, hair shapes, sizes) and how the set is laid out. Do NOT copy its colours, shading, detail or art style — this must stay a rough line sketch.",
+      who && `Characters who may appear: ${who}. Draw only those this moment needs.`,
+      t.action ? `This moment: ${sentence(t.action)}` : "",
+      t.camera && `Camera and framing: ${sentence(t.camera)} Show this framing clearly (where the camera stands, how big the figures are in frame).`,
+      "Keep the composition clear: main figures large enough to read, background as a few simple lines (horizon, walls, door, big props).",
     ]
       .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
       .join("\n");
@@ -1448,7 +1493,7 @@ export function buildSceneImageHandoff(data: ProjectData): SceneImageHandoff {
   for (const c of data.cast)
     if (c.refAssetId)
       references.push({ role: `image reference ${references.length + 1}`, assetId: c.refAssetId, why: `${castLabel(data, c.id)} 참고 자료`, characterId: c.id });
-  for (const id of data.designRefAssetIds.filter((x) => !references.some((r) => r.assetId === x)))
+  for (const id of extraRefsFitting(data, references, 0))
     references.push({ role: `image reference ${references.length + 1}`, assetId: id, why: "추가 참고 그림" });
   const refOf = (id: string) => references.findIndex((r) => r.characterId === id) + 1;
   const style = en.style ?? clean(data.style);

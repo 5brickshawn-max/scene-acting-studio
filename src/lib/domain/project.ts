@@ -71,6 +71,8 @@ export const EXPRESSION_IMAGE_ASPECT = "3:4";
 
 export const MIN_CAST = 1;
 /** Character-by-character mode: every character's acting is set per beat, so the cast stays small. */
+/** Extra scene-wide reference pictures (backgrounds, props, mood) at most. */
+export const MAX_DESIGN_REFS = 5;
 export const MAX_CAST = 4;
 /** Storyboard mode: named characters are kept by name and features only, so more of them fit. */
 export const MAX_CAST_STORYBOARD = 8;

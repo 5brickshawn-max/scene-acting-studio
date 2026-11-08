@@ -5,6 +5,7 @@ import {
   castLabel,
   castLetter,
   maxCastFor,
+  MAX_DESIGN_REFS,
   POSITION_LABEL,
   POSITIONS,
   removeCastMember,
@@ -196,9 +197,9 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
                     }
                   />
                 ))}
-                {d.designRefAssetIds.length < 2 && (
+                {d.designRefAssetIds.length < MAX_DESIGN_REFS && (
                   <ImageSlot
-                    label={d.designRefAssetIds.length ? "참고 그림 더 추가" : "참고 그림"}
+                    label={d.designRefAssetIds.length ? `참고 그림 더 추가 (${d.designRefAssetIds.length}/${MAX_DESIGN_REFS})` : `참고 그림 (최대 ${MAX_DESIGN_REFS}장)`}
                     kind="design_ref"
                     assetId={null}
                     emptyText="배경·소품·분위기 참고처럼 장면 전체에 쓸 그림이 있으면 올리세요. 인물별 자료는 아래 인물 카드에 올립니다."

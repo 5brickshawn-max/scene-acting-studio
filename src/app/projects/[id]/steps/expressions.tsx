@@ -43,7 +43,7 @@ import type { AssetView } from "@/lib/types";
 import { AiAction, CopyButton, Field, ImageSlot, PanelCrop, Seg } from "../ui";
 import { PendingProposal } from "../proposals";
 import { StepFrame } from "./step-frame";
-import { HiggsfieldDirect } from "./higgsfield-direct";
+import { HiggsfieldDirect, SketchGenerator, SketchRedoButton } from "./higgsfield-direct";
 import { ExpressionPackButton } from "../packs";
 import { EnglishBar } from "../prompt-tools";
 
@@ -681,6 +681,7 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
       <section className="space-y-4">
         <h3 className="section-title">③ 컷 카드</h3>
         <ShotStrip />
+        <SketchGenerator />
         <ol className="grid xl:grid-cols-2 gap-4">
           {d.expressions.map((e, i) => (
             <PanelCard key={e.id} e={e} index={i} />
@@ -763,14 +764,17 @@ function PanelCard({ e, index }: { e: Expression; index: number }) {
         <span className="font-semibold truncate">{e.emotion || "제목 없음"}</span>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <ImageSlot
-          label="러프 스케치 (선택)"
-          kind="acting_ref"
-          assetId={e.sketchAssetId}
-          removable
-          emptyText="콘티 칸을 올리면 구도·자세·카메라를 따릅니다 (선 그림체는 따르지 않음)."
-          onChange={(id) => update({ sketchAssetId: id })}
-        />
+        <div className="space-y-2">
+          <ImageSlot
+            label="러프 스케치 (선택)"
+            kind="acting_ref"
+            assetId={e.sketchAssetId}
+            removable
+            emptyText="콘티 칸을 올리거나 위 ‘러프 콘티 바로 생성’으로 만들면 구도·자세·카메라를 따릅니다 (선 그림체는 따르지 않음)."
+            onChange={(id) => update({ sketchAssetId: id })}
+          />
+          <SketchRedoButton expressionId={e.id} hasSketch={Boolean(e.sketchAssetId)} />
+        </div>
         <figure>
           <div className="field-label">컷 그림</div>
           <div className="rounded-lg border border-line checker grid place-items-center overflow-hidden" style={{ aspectRatio: aspect }}>
