@@ -87,6 +87,16 @@ async function castImages(data: ProjectData): Promise<Content> {
   );
 }
 
+/** Each character's own design sheet, labelled so the model ties the picture to the name. */
+async function characterSheets(data: ProjectData): Promise<Content> {
+  return imageBlocks(
+    data.cast.map((c, i) => ({
+      assetId: c.refAssetId,
+      label: `[인물 ${i + 1} ${castLabel(data, c.id)}의 설정화 — 이 그림 속 인물이 ${c.name.trim() || `인물 ${i + 1}`}입니다. 머리·눈·피부·의상·장신구·체형의 기준]`,
+    })),
+  );
+}
+
 /** Each expression's own image, labelled with its number (falls back to the legacy single sheet). */
 async function expressionImages(data: ProjectData): Promise<Content> {
   const out = await imageBlocks(
@@ -176,9 +186,10 @@ async function buildRequest(job: JobRow, data: ProjectData) {
       if (!scenario && !data.baseAssetId) throw new Error("먼저 씬 시놉시스·시나리오를 쓰거나 장면 기준 그림을 올리세요.");
       const [base, refs, people] = await Promise.all([
         data.baseAssetId ? castImages(data) : Promise.resolve([] as Content),
-        imageBlocks(data.designRefAssetIds.map((id) => ({ assetId: id, label: "[추가 참고 그림]" }))),
-        imageBlocks(data.cast.map((c, i) => ({ assetId: c.refAssetId, label: `[인물 ${i + 1} ${castLabel(data, c.id)}의 참고 자료]` }))),
+        imageBlocks(data.designRefAssetIds.map((id) => ({ assetId: id, label: "[추가 참고 그림 — 배경·건축·소품·문양·분위기 참고]" }))),
+        characterSheets(data),
       ]);
+      const pictured = data.cast.flatMap((c, i) => (c.refAssetId ? [`인물 ${i + 1} ${castLabel(data, c.id)}`] : []));
       const max = maxCastFor(data.mode);
       const notes = data.cast
         .map((c, i) =>
@@ -191,15 +202,19 @@ async function buildRequest(job: JobRow, data: ProjectData) {
       return {
         schema: SceneComposeOut,
         content: [
+          ...people,
           ...base,
           ...refs,
-          ...people,
           {
             type: "text",
             text:
               `아래 씬 시놉시스·시나리오로 이 장면을 구성하세요. 결과는 그림·영상 생성의 기준이 됩니다.\n` +
               `- characters: 대사를 하거나 이름으로 불리는 주요 인물만, 최대 ${max}명(${data.mode === "storyboard" ? "스토리보드 방식" : "인물별 연기 방식"}). 그 밖의 사람들은 extras에 무리로 적으세요.\n` +
-              `- 인물마다 그림 모델이 같은 인물을 계속 그릴 수 있게 locks(구별되는 식별 요소부터), appearance, outfit을 구체적으로. 위에 참고 자료나 팀이 적은 메모가 있으면 그것을 따르고, 없는 부분은 시나리오의 시대·장소·분위기에 맞게 정하되 지어낸 핵심 결정은 questions에 '…로 정했습니다, 맞나요?'처럼 남기세요.\n` +
+              `- 인물마다 그림 모델이 같은 인물을 계속 그릴 수 있게 locks(구별되는 식별 요소부터), appearance, outfit을 구체적으로.\n` +
+              (pictured.length
+                ? `- ${pictured.join(", ")}은(는) 위에 설정화(참고 그림)가 있습니다. 이 인물들의 locks·appearance·outfit은 반드시 그 그림에 보이는 그대로 쓰세요: 머리 색·길이·모양, 눈 색, 피부, 의상의 색·모양·장신구, 체형. 아래 '팀이 적어 둔 인물 메모'가 그림과 다르면(이전 AI 제안이 남아 있을 수 있음) 메모를 버리고 그림을 따르고, 무엇을 고쳤는지 questions에 남기세요. 시나리오가 요구하는 이 장면만의 소품·상태(예: 건네받는 숄, 모래 묻은 머리)는 그림의 의상 위에 덧붙이세요.\n`
+                : "") +
+              `- 설정화가 없는 인물은 팀 메모를 따르고, 없는 부분은 시나리오의 시대·장소·분위기에 맞게 정하되 지어낸 핵심 결정은 questions에 '…로 정했습니다, 맞나요?'처럼 남기세요.\n` +
               `- style: ${data.baseAssetId || refs.length ? "참고 그림의 그림체를 따라" : "시나리오의 장르·분위기에 맞는 2D 애니메이션 그림체로"} 선·채색·명암·색감을 구체적으로.\n` +
               (data.mode === "storyboard"
                 ? `- shots: 시나리오를 쇼트(컷 분할)로 나누세요. 쇼트 사이는 컷으로 끊깁니다. 시나리오가 '세 컷이 1초씩', '완전 부감', '클로즈업으로' 처럼 화면을 바꾸면 새 쇼트, 한 쇼트 안에서 카메라가 움직여 구도가 바뀌면 그 쇼트의 패널을 늘리세요(머무는 쇼트는 패널 1개). 쇼트는 최대 ${MAX_SHOTS}개(컷 분할 최대 ${MAX_SHOTS - 1}곳)이고 패널 합계는 2~12개입니다 — 화면이 여러 번 바뀌는 시나리오면 비슷한 장소·시점의 화면을 한 쇼트로 묶고 그 안의 패널(카메라 이동)로 나누세요(예: 쇼트 4개에 패널 12개). seconds는 쇼트 길이, 합이 duration과 같게.\n`
@@ -218,24 +233,32 @@ async function buildRequest(job: JobRow, data: ProjectData) {
     }
     case "analyze_character": {
       // one analysis of the scene drawing describes every cast member and the shared style
-      const [base, refs] = await Promise.all([
+      const [base, refs, people] = await Promise.all([
         castImages(data),
-        imageBlocks(data.designRefAssetIds.map((id) => ({ assetId: id, label: "[추가 참고 그림]" }))),
+        imageBlocks(data.designRefAssetIds.map((id) => ({ assetId: id, label: "[추가 참고 그림 — 배경·건축·소품·문양·분위기 참고]" }))),
+        characterSheets(data),
       ]);
+      const sheetNote = data.cast.some((c) => c.refAssetId)
+        ? `인물 설정화(참고 그림)가 있는 인물은 그 설정화가 외형·머리·의상의 기준입니다. 장면 기준 그림과 설정화를 함께 보고, 설정화에 보이는 머리 색·모양, 눈, 의상 색·모양·장신구를 그대로 쓰세요. 현재 입력값이 설정화와 다르면 설정화를 따르세요.\n`
+        : "";
       return {
         schema: CharacterOut,
         content: [
+          ...people,
           ...base,
           ...refs,
           {
             type: "text",
             text:
               (multi
-                ? `장면 기준 그림에 출연진 ${data.cast.length}명이 함께 있습니다. 위 그림 설명의 이름과 화면 위치로 각 인물을 찾아, characters에 인물 번호(1~${data.cast.length})마다 하나씩 설명을 작성하세요. ` +
+                ? (data.baseAssetId
+                    ? `장면 기준 그림에 출연진 ${data.cast.length}명이 함께 있습니다. 위 그림 설명의 이름과 화면 위치(설정화가 있으면 설정화)로 각 인물을 찾아, characters에 인물 번호(1~${data.cast.length})마다 하나씩 설명을 작성하세요. `
+                    : `인물마다 위의 설정화를 보고, characters에 인물 번호(1~${data.cast.length})마다 하나씩 설명을 작성하세요. `) +
                   `인물마다 다른 인물과 구별해 주는 요소를 locks 앞쪽에 두고, 인물끼리의 키·체격 차이도 appearance에 적으세요. 위치나 이름으로 누가 누구인지 확신할 수 없으면 questions에 남기세요.\n`
-                : `기본 그림만 보고 캐릭터 설명을 작성하세요. characters에는 인물 1 하나만 씁니다.\n`) +
+                : `${data.baseAssetId ? "기본 그림" : "설정화"}${data.baseAssetId && data.cast[0]?.refAssetId ? "과 설정화" : ""}만 보고 캐릭터 설명을 작성하세요. characters에는 인물 1 하나만 씁니다.\n`) +
               `- locks: 표정이 바뀌어도 절대 변하면 안 되는 식별 요소를 번호 목록으로\n` +
               `- appearance: 얼굴 비율, 눈·코·입, 피부, 머리\n- outfit: 화면에 보이는 의상·장신구만\n- style: 장면 전체의 선, 채색, 명암, 색감\n` +
+              sheetNote +
               `보이지 않거나 확신할 수 없는 것은 지어내지 말고 questions에 확인 질문으로 남기세요.\n\n현재 입력값:\n${ctx}${extra}`,
           },
         ] as Content,

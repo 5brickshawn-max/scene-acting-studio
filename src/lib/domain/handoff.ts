@@ -238,7 +238,7 @@ function extraRefsEn(data: ProjectData, refs: ReferenceSlot[]): string[] {
   refs.forEach((r, i) => {
     if (r.why.startsWith("인물 자료") && r.characterId)
       lines.push(
-        `Image reference ${i + 1} is the design sheet of ${castName(data, r.characterId)}: match their face, hairstyle, costume and proportions from it; where this scene's description says otherwise (e.g. hair bleached by the sun), the description wins.`,
+        `Image reference ${i + 1} is the design sheet of ${castName(data, r.characterId)}: copy their face, hair colour and hairstyle, costume (colours, shapes, accessories) and proportions exactly from it — where the text describes them differently, the design sheet wins; the text only adds this scene's passing details (dirt, tears, wind, what they hold).`,
       );
   });
   const extra = refs.flatMap((r, i) => (r.why.startsWith("추가 참고") ? [i + 1] : []));
@@ -1504,7 +1504,7 @@ export function buildSceneImageHandoff(data: ProjectData): SceneImageHandoff {
     const look = f?.look ? f.look.join("; ") : [clean(c.locks), clean(c.appearance)].filter(Boolean).join(" ");
     const outfit = f?.outfit ?? clean(c.outfit);
     return `- ${castName(data, c.id)}${multi && !story ? ` (${POSITION_EN[c.position]})` : ""}: ${[look, outfit && `Outfit: ${outfit}`].filter(Boolean).join(". ")}${
-      n ? ` Match image reference ${n} (their design sheet) for this character's face, hairstyle, costume and proportions; where the scene description says otherwise, the description wins.` : ""
+      n ? ` Image reference ${n} is their design sheet: copy face, hair colour and hairstyle, costume colours and shapes, accessories and proportions exactly from it — where the text above differs, the design sheet wins; the text only adds this scene's passing details (dirt, tears, wind, props held).` : ""
     }`;
   });
   const prompt = [

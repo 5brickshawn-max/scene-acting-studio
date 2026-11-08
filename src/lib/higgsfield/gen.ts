@@ -219,45 +219,60 @@ async function importMedias(s: McpSession, assetIds: string[], padTo?: VideoAspe
       const { data: rows } = await sb.from("assets").select("id, storage_path").in("id", parts);
       const byId = new Map((rows ?? []).map((r) => [r.id as string, r.storage_path as string]));
       const paths = parts.map((p) => byId.get(p));
-      if (paths.some((p) => !p)) continue;
+      if (paths.some((p) => !p)) throw new Error("나란히 붙인 참고 그림을 만들지 못했습니다. 다시 시도하세요.");
       const aspect = padTo ?? "16:9";
       const hash = createHash("sha1").update(`${parts.join("+")}|${aspect}`).digest("hex").slice(0, 16);
       const combo = `${paths[0]!.replace(/\/[^/]*$/, "")}/combo_${hash}.png`;
       const { data: exists } = await sb.storage.from("assets").createSignedUrl(combo, 60);
       if (!exists?.signedUrl) {
         const files = await Promise.all(paths.map((p) => sb.storage.from("assets").download(p!)));
-        if (files.some((f) => !f.data)) continue;
+        if (files.some((f) => !f.data)) throw new Error("나란히 붙인 참고 그림을 만들지 못했습니다. 다시 시도하세요.");
         const out = await composeSideBySide(await Promise.all(files.map(async (f) => Buffer.from(await f.data!.arrayBuffer()))), aspect).catch(() => null);
-        if (!out) continue;
+        if (!out) throw new Error("나란히 붙인 참고 그림을 만들지 못했습니다. 다시 시도하세요.");
         const up = await sb.storage.from("assets").upload(combo, out, { contentType: "image/png", upsert: true });
-        if (up.error) continue;
+        if (up.error) throw new Error("나란히 붙인 참고 그림을 만들지 못했습니다. 다시 시도하세요.");
       }
       const { data: signed } = await sb.storage.from("assets").createSignedUrl(combo, 600);
-      if (!signed?.signedUrl) continue;
+      if (!signed?.signedUrl) throw new Error("나란히 붙인 참고 그림을 만들지 못했습니다. 다시 시도하세요.");
       const r = await s.call<{ media_id?: string }>("media_import_url", { url: signed.signedUrl, type: "image" });
-      if (r.media_id) map.set(id, r.media_id);
+      if (!r.media_id) throw new Error("나란히 붙인 참고 그림을 만들지 못했습니다. 다시 시도하세요.");
+      map.set(id, r.media_id);
       continue;
     }
-    const { data: a } = await sb.from("assets").select("storage_path, mime").eq("id", id).single();
-    if (!a) continue;
+    const { data: a } = await sb.from("assets").select("name, storage_path, mime, size_bytes, width, height").eq("id", id).single();
+    if (!a) throw new Error("참고 그림 하나를 찾을 수 없습니다(삭제됨). 그 칸의 그림을 다시 고르세요.");
     let path = a.storage_path as string;
-    if (padTo && String(a.mime).startsWith("image/")) {
-      const padded = `${path.replace(/\.[^./]+$/, "")}_pad${padTo.replace(":", "x")}.png`;
-      const { data: exists } = await sb.storage.from("assets").createSignedUrl(padded, 60);
-      if (exists?.signedUrl) path = padded;
+    const isImage = String(a.mime).startsWith("image/");
+    // big originals (print-size sheets) are sent as a 2560 px copy: imports of 10-30 MB files can fail
+    const big = isImage && ((a.size_bytes as number) > 6_000_000 || Math.max((a.width as number) ?? 0, (a.height as number) ?? 0) > 2560);
+    if (isImage && (padTo || big)) {
+      const variant = `${path.replace(/\.[^./]+$/, "")}${big ? "_ref2560" : ""}${padTo ? `_pad${padTo.replace(":", "x")}` : ""}.${big ? "jpg" : "png"}`;
+      const { data: exists } = await sb.storage.from("assets").createSignedUrl(variant, 60);
+      if (exists?.signedUrl) path = variant;
       else {
         const { data: file } = await sb.storage.from("assets").download(path);
-        const out = file ? await padToAspect(Buffer.from(await file.arrayBuffer()), padTo).catch(() => null) : null;
-        if (out) {
-          const up = await sb.storage.from("assets").upload(padded, out, { contentType: "image/png", upsert: true });
-          if (!up.error) path = padded;
+        let bytes: Buffer | null = file ? Buffer.from(await file.arrayBuffer()) : null;
+        if (bytes && big)
+          bytes = await sharp(bytes)
+            .rotate()
+            .flatten({ background: "#ffffff" })
+            .resize(2560, 2560, { fit: "inside", withoutEnlargement: true })
+            .png()
+            .toBuffer()
+            .catch(() => null);
+        if (bytes && padTo) bytes = (await padToAspect(bytes, padTo).catch(() => null)) ?? bytes;
+        if (bytes && big) bytes = await sharp(bytes).jpeg({ quality: 92 }).toBuffer().catch(() => null);
+        if (bytes) {
+          const up = await sb.storage.from("assets").upload(variant, bytes, { contentType: big ? "image/jpeg" : "image/png", upsert: true });
+          if (!up.error) path = variant;
         }
       }
     }
     const { data: signed } = await sb.storage.from("assets").createSignedUrl(path, 600);
-    if (!signed?.signedUrl) continue;
-    const r = await s.call<{ media_id?: string }>("media_import_url", { url: signed.signedUrl, type: "image" });
-    if (r.media_id) map.set(id, r.media_id);
+    const r = signed?.signedUrl ? await s.call<{ media_id?: string }>("media_import_url", { url: signed.signedUrl, type: "image" }).catch(() => ({}) as { media_id?: string }) : {};
+    // a missing reference would shift every "image reference N" in the prompt: stop instead
+    if (!r.media_id) throw new Error(`참고 그림 ‘${a.name}’을(를) Higgsfield에 올리지 못했습니다. 다시 시도하거나 더 작은 파일로 바꾸세요.`);
+    map.set(id, r.media_id);
   }
   return map;
 }
