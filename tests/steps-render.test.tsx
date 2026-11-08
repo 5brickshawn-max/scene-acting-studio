@@ -133,6 +133,6 @@ describe("step screens render for one and for several characters", () => {
     const uploaded = render(d, createElement(CharacterStep, nav), [asset("gen-1", "my-drawing.png")]);
     expect(uploaded).toMatch(/aria-pressed="true"[^>]*>그림 올리기/);
     const s2 = render(d, createElement(ExpressionStep, nav));
-    expect(s2).toContain("컷 6개·8초로 처음부터 다시 설계");
+    expect(s2).toContain("쇼트 1개·패널 6개·8초로 처음부터 다시 설계");
   });
 });

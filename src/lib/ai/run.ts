@@ -257,7 +257,7 @@ async function buildRequest(job: JobRow, data: ProjectData) {
             {
               type: "text",
               text:
-                `이 장면을 콘티처럼 컷 ${n}개로 나눠 설계하세요. panels 배열 길이는 정확히 ${n}개이고, 컷 1이 장면의 처음, 컷 ${n}이 끝입니다. 컷(콘티 칸)끼리는 카메라가 이어서 움직이거나(continuous), 컷 분할로 새 쇼트가 시작됩니다(cut) — link로 정하세요. 쇼트는 최대 ${MAX_SHOTS}개입니다: cut은 전체에서 최대 ${MAX_SHOTS - 1}번만 쓰고, 나머지 화면 변화는 같은 쇼트 안의 카메라 이동(continuous)으로 이으세요.\n` +
+                `이 장면을 콘티처럼 컷 ${n}개로 나눠 설계하세요. panels 배열 길이는 정확히 ${n}개이고, 컷 1이 장면의 처음, 컷 ${n}이 끝입니다. 컷(콘티 칸)끼리는 카메라가 이어서 움직이거나(continuous), 컷 분할로 새 쇼트가 시작됩니다(cut) — link로 정하세요. ${data.expressionSetup.shots !== null ? `팀이 정한 쇼트 수는 ${data.expressionSetup.shots}개입니다: cut을 정확히 ${data.expressionSetup.shots - 1}번 쓰고` : `쇼트는 최대 ${MAX_SHOTS}개입니다: cut은 전체에서 최대 ${MAX_SHOTS - 1}번만 쓰고`}, 나머지 화면 변화는 같은 쇼트 안의 카메라 이동(continuous)으로 이으세요. 어디서 끊을지는 시나리오에 맞게 정하세요.\n` +
                 `- 반드시 시나리오 전체(처음부터 끝까지, 모든 기초 대사 포함)를 이 컷 ${n}개·${data.acting.duration}초 안에 담으세요. 컷 수가 시나리오의 장면 전환보다 적으면 비슷한 순간을 합치고, 시나리오 뒷부분을 빼지 마세요.\n` +
                 (job.input.instruction?.includes("[처음부터 다시]")
                   ? `- 지금 있는 컷 제목·장면 묘사·연결은 무시하고 처음부터 다시 나누세요.\n`

@@ -42,3 +42,31 @@ describe(`storyboard shots (at most ${MAX_SHOTS})`, () => {
     expect(new Set(st.panels.map((p) => p.shot)).size).toBe(4);
   });
 });
+
+describe("shot count and panel count chosen separately", async () => {
+  const { evenShots, setPanelCount, syncChosenShots } = await import("@/lib/domain/project");
+  it("4 shots × 12 panels: three panels per shot, and the choice is kept", () => {
+    let d = setPanelCount(board(6, []), 12);
+    d = evenShots(d, 4);
+    expect(shotsOf(d).map((s) => s.length)).toEqual([3, 3, 3, 3]);
+    expect(d.expressionSetup.shots).toBe(4);
+    // changing the panel count keeps four shots, spread again
+    d = setPanelCount(d, 8);
+    expect(shotsOf(d).map((s) => s.length)).toEqual([2, 2, 2, 2]);
+  });
+  it("the AI keeps a chosen shot count, moving cuts where it wants", () => {
+    const d = evenShots(board(8, []), 2);
+    const out = { summary: "", panels: d.expressions.map((_, i) => ({ title: `p${i}`, action: "a", camera: "c", speaker: 0, link: [2, 5, 6].includes(i) ? ("cut" as const) : ("continuous" as const) })) };
+    const next = applyStoryboard(d, out);
+    expect(shotsOf(next)).toHaveLength(2);
+  });
+  it("without a chosen count the AI decides (up to four); a hand edit updates a chosen count", () => {
+    const d = board(8, []);
+    expect(d.expressionSetup.shots).toBeNull();
+    const out = { summary: "", panels: d.expressions.map((_, i) => ({ title: `p${i}`, action: "a", camera: "c", speaker: 0, link: i === 4 ? ("cut" as const) : ("continuous" as const) })) };
+    expect(shotsOf(applyStoryboard(d, out))).toHaveLength(2);
+    const chosen = evenShots(board(8, []), 2);
+    const edited = syncChosenShots({ ...chosen, expressions: chosen.expressions.map((e, i) => (i === 6 ? { ...e, link: "cut" as const } : e)) });
+    expect(edited.expressionSetup.shots).toBe(3);
+  });
+});

@@ -3,6 +3,7 @@
 import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, SceneComposeOutT, StoryboardOutT } from "@/lib/ai/schemas";
 import {
   capShots,
+  fitShots,
   MAX_SHOTS,
   MAX_EXPRESSIONS,
   MAX_VIDEO_SECONDS,
@@ -118,6 +119,8 @@ export function applyComposition(data: ProjectData, out: SceneComposeOutT, field
     next = {
       ...next,
       expressions,
+      // the proposed shot count becomes the team's choice (step 2 ① shows and keeps it)
+      expressionSetup: st.story ? { ...next.expressionSetup, shots: new Set(st.panels.map((p) => p.shot)).size } : next.expressionSetup,
       acting: { duration: st.duration, segments: weightedSegments(ids, st.panels.map((p) => p.weight), st.duration) },
     };
   }
@@ -193,8 +196,10 @@ export function applyStoryboard(data: ProjectData, out: StoryboardOutT, indexes?
     const speaker = data.cast[o.speaker - 1]?.id ?? prev.characterId;
     return withReactionsFor(data.cast, { ...prev, characterId: speaker, emotion: o.title, action: o.action, camera: o.camera, link: i === 0 ? "continuous" : o.link ?? prev.link });
   });
-  // at most MAX_SHOTS shots, whatever the AI proposed
-  return reopenFrom(capShots({ ...data, expressions }), 1);
+  // a shot count the team chose (step 2 ①) stays, keeping the AI's cut places where they fit; else at most MAX_SHOTS
+  const chosen = data.expressionSetup.shots;
+  const next = { ...data, expressions };
+  return reopenFrom(chosen !== null ? fitShots(next, chosen) : capShots(next), 1);
 }
 
 export function applyDialogue(data: ProjectData, out: DialogueOutT): ProjectData {
