@@ -51,6 +51,8 @@ import { StepFrame } from "./step-frame";
 import { HiggsfieldDirect, SketchGenerator, SketchRedoButton } from "./higgsfield-direct";
 import { ExpressionPackButton } from "../packs";
 import { EnglishBar } from "../prompt-tools";
+import { guideIssues } from "@/lib/domain/check";
+import { ACTION_ORDER_KO, HU_ITEMS_KO, MAX_PRINCIPLES, PRINCIPLES } from "@/lib/domain/principles";
 
 const FACING_SHORT: Record<Facing, string> = {
   left_profile: "◀ 옆",
@@ -246,6 +248,77 @@ function FramingPicker() {
   );
 }
 
+/** 2-3 priority animation principles for one beat (the team's field guide), as toggle chips. */
+function PrincipleChips({ e, onChange }: { e: Expression; onChange: (keys: string[]) => void }) {
+  const { canEdit } = useEditor();
+  const on = new Set(e.principles);
+  return (
+    <div role="group" aria-label="우선 원칙">
+      <div className="text-[13px] font-semibold mb-1 text-muted">우선 애니메이션 원칙 (2~3개 · 영상 프롬프트에 움직임으로 들어감)</div>
+      <div className="flex flex-wrap gap-1">
+        {PRINCIPLES.map((p) => {
+          const pressed = on.has(p.key);
+          return (
+            <button
+              key={p.key}
+              type="button"
+              className={`btn btn-sm ${pressed ? "btn-dark" : ""}`}
+              aria-pressed={pressed}
+              title={`${p.ko} — ${p.check}`}
+              disabled={!canEdit || (!pressed && on.size >= MAX_PRINCIPLES)}
+              onClick={() => onChange(pressed ? e.principles.filter((k) => k !== p.key) : [...e.principles, p.key])}
+            >
+              {p.short}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** The field guides' checks for this step (camera moves, vague words, hook-ups) and a short summary of the guides. */
+function GuidePanel() {
+  const { doc } = useEditor();
+  const items = guideIssues(doc.data);
+  return (
+    <div className="rounded-lg border border-line bg-white p-3 space-y-2" aria-label="가이드 점검">
+      <div className="font-semibold">애니메이션 원칙·연속성 점검</div>
+      {items.length ? (
+        <ul className="space-y-1 text-[14px]">
+          {items.map((i, k) => (
+            <li key={k} className="notice notice-warn">
+              <strong>{i.area}</strong> · {i.text}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[14px] text-ok">카메라 이동·표현·연결 상태에서 걸리는 곳이 없습니다.</p>
+      )}
+      <details>
+        <summary className="cursor-pointer text-[14px] font-semibold">가이드 요약 (8가지 원칙 · 연속성)</summary>
+        <div className="mt-2 space-y-2 text-[14px]">
+          <p>
+            한 컷에 <strong>핵심 행동 하나</strong>, 우선 원칙 <strong>2~3개</strong>. 동작은 <strong>{ACTION_ORDER_KO}</strong> 순서로 관찰할 수 있게 쓰고, 시선·얼굴·몸
+            방향은 따로, 좌우에는 기준(화면 기준 / 몸 기준)을 붙입니다. 카메라는 <strong>고정 또는 한 가지 이동</strong>, 시작·끝 구도를 적습니다.
+          </p>
+          <ul className="list-disc pl-5">
+            {PRINCIPLES.map((p) => (
+              <li key={p.key}>
+                <strong>{p.ko}</strong> — {p.check}
+              </li>
+            ))}
+          </ul>
+          <p>
+            <strong>연결 상태(HU)</strong>: 컷마다 ‘시작 / 끝’을 적고, 다음 컷의 시작 = 앞 컷의 끝. 기록할 것: {HU_ITEMS_KO}. 움직이는 중에 컷이 바뀌면 같은 동작의 다음
+            단계부터, 멈춘 상태면 같은 자세를 새 시점으로. 검토 순서: 방향과 위치 → 시선 → 접촉과 행동 단계 → 속도.
+          </p>
+        </div>
+      </details>
+    </div>
+  );
+}
+
 function ExpressionCard({ e, index }: { e: Expression; index: number }) {
   const { doc, assets } = useEditor();
   const s = doc.data.expressionSetup;
@@ -352,6 +425,7 @@ function ExpressionCard({ e, index }: { e: Expression; index: number }) {
               <Field label="메모" multiline rows={2} value={e.notes} onChange={(v) => update({ notes: v })} />
             </div>
           </details>
+          <PrincipleChips e={e} onChange={(principles) => update({ principles })} />
           <DirectionEditor
             e={e}
             warnings={warningsFor(`${index + 1}번 표정`)}
@@ -722,6 +796,7 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
       <section className="space-y-4">
         <h3 className="section-title">③ 컷 카드 (패널)</h3>
         <ShotStrip />
+        <GuidePanel />
         <SketchGenerator />
         <ol className="grid xl:grid-cols-2 gap-4">
           {d.expressions.map((e, i) => (
@@ -866,13 +941,14 @@ function PanelCard({ e, index }: { e: Expression; index: number }) {
         placeholder={e.link === "cut" && index > 0 ? "예: 입술 특대 클로즈업, 고정" : "예: 와이드 로우앵글에서 칼리엘라 쪽으로 천천히 다가감"}
       />
       <Field
-        label="연결 상태 (화면 위치·보는 방향·동선·의상/소품·빛)"
+        label="연결 상태 HU (시작 → 끝: 화면 위치·시선·몸 기준 손·발 접지·소품·동작 단계·감정·빛)"
         multiline
-        rows={2}
+        rows={3}
         value={e.continuity}
         onChange={(v) => update({ continuity: v })}
-        placeholder="예: 칼리엘라 화면 왼쪽에서 오른쪽을 봄, 브람 오른쪽 앞에서 왼쪽을 봄. 칼리엘라는 횃불을 오른손에 듦. 해는 화면 오른쪽 뒤."
+        placeholder={"예: 시작: 칼리엘라 화면 왼쪽, 오른쪽의 브람을 봄, 횃불은 인물의 오른손. / 끝: 칼리엘라가 한 걸음 다가서 멈춤, 횃불 그대로 오른손, 해는 화면 오른쪽 뒤.\n다음 컷의 시작은 이 컷의 끝과 같아야 합니다."}
       />
+      <PrincipleChips e={e} onChange={(principles) => update({ principles })} />
       {d.cast.length > 1 && (
         <div>
           <label className="field-label" htmlFor={`speaker-${e.id}`}>말하는 인물 (이 컷에 대사가 있을 때)</label>
@@ -1002,6 +1078,7 @@ function CastExpressionStep({ onNavigate }: { onNavigate: (s: StepIndex) => void
           <h3 className="section-title">③ 표정 카드 확인</h3>
           {unconfirmed > 0 && <span className="pill pill-warn">방향 확인 필요 {unconfirmed}개</span>}
         </div>
+        <GuidePanel />
         <div className="grid xl:grid-cols-2 gap-4">
           {doc.data.expressions.map((e, i) => <ExpressionCard key={e.id} e={e} index={i} />)}
         </div>

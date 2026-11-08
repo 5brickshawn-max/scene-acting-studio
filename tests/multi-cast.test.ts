@@ -243,7 +243,7 @@ describe("AI proposals and fixes for the cast", () => {
         character: 2,
         reactions: [{ character: 1, emotion: `kal${i}`, intensity: "strong" as const, brows: "", eyes: "", mouth: "", gesture: "팔짱", ...dir }],
         panel: null, emotion: `bram${i}`, intensity: "medium" as const, brows: "", eyes: "", mouth: "", notes: "", gesture: "",
-        ...dir, directionEvidence: "",
+        ...dir, directionEvidence: "", principles: [],
       })),
     });
     expect(ex.expressions.every((e) => e.characterId === d.cast[1].id)).toBe(true);

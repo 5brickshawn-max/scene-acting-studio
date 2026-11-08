@@ -164,6 +164,8 @@ export const ExpressionSchema = z.object({
    * where they are moving, costume and prop state, light direction — carried on from the previous panel
    */
   continuity: z.string().default(""),
+  /** this beat's 2-3 priority animation principles (keys of domain/principles PRINCIPLES) */
+  principles: z.array(z.string()).default([]),
   /** a rough storyboard sketch for this panel: composition, poses and camera are taken from it, not its drawing style */
   sketchAssetId: z.string().nullable().default(null),
   /**
@@ -401,6 +403,7 @@ export function blankExpression(panel: number | null = null, characterId = ""): 
     action: "",
     camera: "",
     continuity: "",
+    principles: [],
     sketchAssetId: null,
     link: "continuous",
     reactions: [],

@@ -11,6 +11,7 @@
  * shipped to the browser bundle.
  */
 import { comboId, MAX_COMBO_PARTS } from "@/lib/combo";
+import { MAX_PRINCIPLES, principleOf } from "./principles";
 import { constraintsFor, dropConstraintRepeats, directorAngle, directorBackground, directorRig, hasCameraMove, reconcile, type Adjustment } from "./constraints";
 import { freshEnglish } from "./english";
 import {
@@ -649,6 +650,14 @@ export function referenceTarget(refs: VideoReference[], expressionId: string): s
 export const shownBeats = (refs: VideoReference[]) =>
   new Set(refs.flatMap((r) => (r.parts ? r.parts.map((p) => p.expressionId) : r.role === "expression" && r.expressionId ? [r.expressionId] : [])));
 
+/** A beat's priority animation principles for the video model (the movement each asks for, or just the names). */
+export function principleLine(e: Pick<Expression, "principles"> | undefined, level: 0 | 1 | 2): string {
+  const list = (e?.principles ?? []).map(principleOf).filter((p): p is NonNullable<ReturnType<typeof principleOf>> => Boolean(p)).slice(0, MAX_PRINCIPLES);
+  if (!list.length || !level) return "";
+  const name = (k: string) => k.replace(/_/g, " ").replace("follow through", "follow-through").replace("slow in out", "slow in and out");
+  return level === 2 ? `Motion: ${list.map((p) => p.en).join("; ")}.` : `Motion priorities: ${list.map((p) => name(p.key)).join(", ")}.`;
+}
+
 /** Text length caps for each beat field in the video prompt (Infinity = full text, for the team's summary). */
 type Limits = { face: number; gesture: number; note: number; transition: number; delivery: number };
 const FULL: Limits = { face: Infinity, gesture: Infinity, note: Infinity, transition: Infinity, delivery: Infinity };
@@ -657,14 +666,15 @@ const FULL: Limits = { face: Infinity, gesture: Infinity, note: Infinity, transi
  * English beats (영어 정리) are short already: they only drop the pose line, then the body line;
  * the transition always stays.
  */
-type Budget = Limits & { style: number; voice: number; features: number; enPose: boolean; enBody: boolean };
+/** principles: 2 = the movement each priority principle asks for, 1 = names only, 0 = left out */
+type Budget = Limits & { style: number; voice: number; features: number; enPose: boolean; enBody: boolean; principles: 0 | 1 | 2 };
 const BUDGETS: Budget[] = [
-  { face: 60, gesture: 110, note: 60, transition: 100, delivery: 100, style: 160, voice: 160, features: 6, enPose: true, enBody: true },
-  { face: 30, gesture: 80, note: 0, transition: 80, delivery: 70, style: 140, voice: 140, features: 6, enPose: true, enBody: true },
+  { face: 60, gesture: 110, note: 60, transition: 100, delivery: 100, style: 160, voice: 160, features: 6, enPose: true, enBody: true, principles: 2 },
+  { face: 30, gesture: 80, note: 0, transition: 80, delivery: 70, style: 140, voice: 140, features: 6, enPose: true, enBody: true, principles: 1 },
   // the expression images show the face, then the gesture: drop that text first and keep the
   // transition (how one expression moves into the next — what keeps it from morphing)
-  { face: 0, gesture: 60, note: 0, transition: 70, delivery: 50, style: 80, voice: 80, features: 4, enPose: false, enBody: true },
-  { face: 0, gesture: 0, note: 0, transition: 60, delivery: 40, style: 50, voice: 50, features: 3, enPose: false, enBody: false },
+  { face: 0, gesture: 60, note: 0, transition: 70, delivery: 50, style: 80, voice: 80, features: 4, enPose: false, enBody: true, principles: 1 },
+  { face: 0, gesture: 0, note: 0, transition: 60, delivery: 40, style: 50, voice: 50, features: 3, enPose: false, enBody: false, principles: 0 },
 ];
 /** Video models follow prompts up to roughly this length well (constraints included); longer ones get diluted. */
 export const VIDEO_PROMPT_TARGET = 3500;
@@ -993,6 +1003,7 @@ export function buildVideoHandoff(
           `${time}: ${who ? `${who} — ` : ""}${eb.emotion || original.emotion || "expression"}`,
           target,
           `${who ? `${who} acts` : "Acting"} (${INTENSITY_EN[original.intensity]}): ${acting.join(" ")}`,
+          principleLine(original, "principles" in L ? L.principles : 2),
           ...reactionLines(L),
           l?.line ? `${says(l.line)}${eb.delivery ? ` — ${eb.delivery}` : ""}` : "No dialogue in this beat.",
         ]
@@ -1009,6 +1020,7 @@ export function buildVideoHandoff(
         `${time}: ${who ? `${who} — ` : ""}${e?.emotion || "expression"}`,
         target,
         `${who ? `${who} acts` : "Acting"}: ${acting}${move ? ` 다음 표정으로: ${move}.` : ""}`,
+        principleLine(original, "principles" in L ? L.principles : 2),
         ...reactionLines(L),
         l?.line ? `${says(l.line)}${how ? ` — ${how}` : ""}` : "No dialogue in this beat.",
       ]
@@ -1099,7 +1111,7 @@ export function buildVideoHandoff(
               .join("; ")}. Speak only the exact dialogue below; never read direction text aloud.`
           : `Voice: ${((s) => (s ? `${sentence(s)} ` : ""))(clip(voices[0].text, voices[0].fresh ? Math.max(B.voice, 160) : B.voice))}Speak only the exact dialogue below; never read direction text aloud.`),
       lang === "Old English" && OLD_ENGLISH_HINT,
-      `Stay alive between and during the lines (breathing, blinks, small head and shoulder accents). Each expression change is acted, not morphed: it rides on a physical action (a blink, a breath, a small head turn or a hand passing the face) and steps through in-between poses; the face never melts, warps or blends from one expression into the next.`,
+      `Stay alive between and during the lines (breathing, blinks, small head and shoulder accents). Each expression change is acted, not morphed: it rides on a physical action (a blink, a breath, a small head turn or a hand passing the face) and steps through in-between poses; the face never melts, warps or blends from one expression into the next. Eyes react first, then head, then body.`,
     ]
       .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
       .join("\n");
@@ -1255,7 +1267,7 @@ function buildStoryboardHandoffs(data: ProjectData): ExpressionHandoff[] {
       line && `${castName(data, beatActor(data, e).id)} is speaking in this moment (mouth open mid-word); everyone else keeps their mouth closed.`,
       data.expressionSetup.instruction && `Additional direction: ${clean(data.expressionSetup.instruction)}`,
       `Background: the world of the scene as in the references and the description (not an empty white background) unless the description says otherwise.`,
-      `Hands drawn clearly with natural anatomy; faces of the named characters readable.`,
+      `Staging: the faces, the hands and what they act on are clearly readable and not hidden behind bodies or props; hands drawn clearly with natural anatomy.`,
     ]
       .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
       .join("\n");
@@ -1325,10 +1337,10 @@ function buildStoryboardFrame(data: ProjectData, expressionId: string, shot: Fra
 
 /** Caps per panel field, tried in order until the prompt fits (the last is used regardless). */
 const STORY_BUDGETS = [
-  { action: Infinity, camera: Infinity, state: Infinity, rules: 600, transition: 140, delivery: 100, features: 4 },
-  { action: 400, camera: 200, state: 200, rules: 450, transition: 100, delivery: 80, features: 4 },
-  { action: 250, camera: 140, state: 140, rules: 300, transition: 70, delivery: 50, features: 3 },
-  { action: 150, camera: 80, state: 90, rules: 200, transition: 0, delivery: 40, features: 2 },
+  { action: Infinity, camera: Infinity, state: Infinity, rules: 600, transition: 140, delivery: 100, features: 4, principles: 2 as const },
+  { action: 400, camera: 200, state: 200, rules: 450, transition: 100, delivery: 80, features: 4, principles: 2 as const },
+  { action: 250, camera: 140, state: 140, rules: 300, transition: 70, delivery: 50, features: 3, principles: 1 as const },
+  { action: 150, camera: 80, state: 90, rules: 200, transition: 0, delivery: 40, features: 2, principles: 0 as const },
 ];
 
 function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "references", opts: { endFrame?: boolean }): VideoHandoff {
@@ -1412,6 +1424,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         cut(action, B.action) && `Action: ${sentence(cut(action, B.action))}`,
         cut(camera, B.camera) && `Camera: ${sentence(cut(camera, B.camera))}`,
         cut(fixed ? p?.state ?? "" : e?.continuity ?? "", B.state) && `Continuity: ${sentence(cut(fixed ? p?.state ?? "" : e?.continuity ?? "", B.state))}`,
+        principleLine(e, B.principles),
         !last && B.transition && cut(transition, B.transition) && `Into the next panel: ${sentence(cut(transition, B.transition))}`,
         l?.line.trim()
           ? `${e ? castName(data, beatActor(data, e).id) : "The speaker"} ${isVoiceOver(l) ? "is heard in voice-over (the speaker is not seen saying it, no lip-sync)" : "says exactly"} (${lang}): "${l.line}"${
@@ -1464,7 +1477,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
       speaking && data.extras.trim() && "Crowd sound only as quiet natural ambience, never words.",
       voices.length &&
         `Voices: ${voices.map((v) => `${castName(data, v.id)} — ${noEndDot(clip(v.text, 160) || clean(v.text).slice(0, 80))}`).join("; ")}. Speak only the exact dialogue below; never read direction text aloud.`,
-      `Everyone stays alive between the panels (breathing, blinks, small weight shifts); every change ${multiShot ? "inside a shot " : ""}is acted through a physical action and in-between poses, never morphed.${
+      `Everyone stays alive between the panels (breathing, blinks, small weight shifts); every change ${multiShot ? "inside a shot " : ""}is acted through a physical action and in-between poses, never morphed. Each action reads in order: look, prepare, act, contact, settle; the result pose holds long enough to read.${
         multiShot ? " Across a cut, the characters, costumes, world and light stay the same." : ""
       }`,
     ]

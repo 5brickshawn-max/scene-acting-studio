@@ -61,7 +61,7 @@ describe("directions", () => {
       expressions: d.expressions.map((_, i) => ({
         character: 1, reactions: [], panel: i + 1, emotion: `감정${i}`, intensity: "medium", brows: "", eyes: "", mouth: "", notes: "", gesture: i === 0 ? "손을 가슴에" : "",
         facing: i < 2 ? "left_3q" : "right_3q", pitch: "level", tilt: "none", gaze: "camera", body: i < 2 ? "left_3q" : "right_3q",
-        directionEvidence: "",
+        directionEvidence: "", principles: [],
       })),
     });
     expect(d.expressions[0].direction.facing).toBe("left_3q");
@@ -354,7 +354,7 @@ describe("framing and gestures", () => {
       expressions: d.expressions.map((_, i) => ({
         character: 1, reactions: [], panel: null, emotion: `감정${i}`, intensity: "medium" as const, brows: "", eyes: "", mouth: "", notes: "",
         gesture: "손을 허리에", facing: "front" as const, pitch: "level" as const, tilt: "none" as const, gaze: "camera" as const,
-        body: "front" as const, directionEvidence: "",
+        body: "front" as const, directionEvidence: "", principles: [],
       })),
     };
     expect(applyExpressions(d, out).expressions[0].gesture).toBe("손을 허리에");

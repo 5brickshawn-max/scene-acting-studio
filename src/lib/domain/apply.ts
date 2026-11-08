@@ -1,5 +1,6 @@
 /** Pure functions that merge an AI proposal into project data. Applying is
  * always an explicit user action; fields can be picked individually. */
+import { MAX_PRINCIPLES, principleOf } from "./principles";
 import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, SceneComposeOutT, StoryboardOutT } from "@/lib/ai/schemas";
 import {
   capShots,
@@ -173,6 +174,7 @@ export function applyExpressions(data: ProjectData, out: ExpressionsOutT, indexe
       gesture: o.gesture ?? prev.gesture,
       direction: { facing: o.facing, pitch: o.pitch, tilt: o.tilt, gaze: o.gaze, body: o.body },
       directionStatus: "ai",
+      principles: validPrinciples(o.principles) ?? prev.principles,
     });
   });
   return reopenFrom(
@@ -186,6 +188,12 @@ export function applyExpressions(data: ProjectData, out: ExpressionsOutT, indexe
 }
 
 /** Storyboard mode: the AI's panels (picked ones) become the beats; the speaker names who talks in that panel. */
+/** The AI's principle keys that the app knows, at most MAX_PRINCIPLES (undefined when it gave none). */
+function validPrinciples(list: string[] | undefined): string[] | undefined {
+  const ok = (list ?? []).filter((k, i, a) => principleOf(k) && a.indexOf(k) === i).slice(0, MAX_PRINCIPLES);
+  return ok.length ? ok : undefined;
+}
+
 export function applyStoryboard(data: ProjectData, out: StoryboardOutT, indexes?: number[]): ProjectData {
   const count = data.expressionSetup.count;
   const pick = new Set(indexes ?? out.panels.map((_, i) => i));
@@ -201,6 +209,7 @@ export function applyStoryboard(data: ProjectData, out: StoryboardOutT, indexes?
       action: o.action,
       camera: o.camera,
       continuity: o.state ?? prev.continuity,
+      principles: validPrinciples(o.principles) ?? prev.principles,
       link: i === 0 ? "continuous" : o.link ?? prev.link,
     });
   });

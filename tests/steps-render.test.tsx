@@ -85,7 +85,9 @@ describe("step screens render for one and for several characters", () => {
     expect(s2).toContain("러프 스케치 (선택)");
     expect(s2).toContain("러프 콘티 바로 생성");
     expect(s2).toContain("장면 연결 규칙");
-    expect(s2).toContain("연결 상태 (화면 위치·보는 방향·동선·의상/소품·빛)");
+    expect(s2).toContain("연결 상태 HU (시작 → 끝");
+    expect(s2).toContain("우선 애니메이션 원칙 (2~3개");
+    expect(s2).toContain("애니메이션 원칙·연속성 점검");
     expect(s2).toContain("연결성 우선: 앞 컷부터 한 장씩 차례로 생성");
     // step 4 of a storyboard: lengths only, the panel order is fixed
     const acting = render(d, createElement(ActingStep, nav));

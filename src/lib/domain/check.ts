@@ -10,6 +10,21 @@ import { castLabel, continuityAnchor, imageAspectFor, imageIsStale, MAX_SHOTS, s
 import { estimateSpeechSeconds } from "./speech";
 import { retime, timingMismatch } from "./timing";
 import { englishStale } from "./english";
+import { VAGUE_WORDS } from "./principles";
+
+/** The kinds of camera move a camera text asks for (the guide: fixed, or one clear move per shot). */
+const MOVE_KINDS: [string, RegExp][] = [
+  ["팬", /팬(?!티)|패닝|\bpan(s|ning)?\b/i],
+  ["틸트", /틸트|\btilt/i],
+  ["트랙", /트랙|트래킹|돌리|달리|푸시\s*인|풀\s*백|풀백|밀고\s*들어|다가가|뒤로\s*빠|\btrack|\bdolly|push[- ]?in|pull[- ]?back/i],
+  ["줌", /줌|\bzoom/i],
+  ["오빗", /오빗|돌며|돌아\s*들어|호를\s*그리|축으로\s*.{0,12}돌|회전하며|\borbit|arc(s|ing)?\s+around/i],
+  ["크레인", /크레인|붐\s*(업|다운)|\bcrane/i],
+];
+export function cameraMoveKinds(text: string): string[] {
+  if (!text.trim()) return [];
+  return MOVE_KINDS.filter(([, re]) => re.test(text)).map(([k]) => k);
+}
 
 /** What a warning's button does (run in the browser on the current document). */
 export type CheckFix =
@@ -196,6 +211,8 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
     const u = data.mode === "storyboard" ? "컷" : "표정";
     add("warn", `${u}당 시간`, `${u}당 ${r1(duration / n)}초로 짧아 전환이 급해질 수 있습니다.`, { kind: "goto", step: 1, label: `2단계 길이·${u} 수로` });
   }
+  items.push(...guideIssues(data));
+
   // a storyboard cut of about a second cannot hold a camera move plus several actions
   if (data.mode === "storyboard") {
     const crowded = data.acting.segments.flatMap((seg) => {
@@ -218,6 +235,46 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
   const allLines = data.dialogue.lines.map((l) => l.line).join(" ");
   if (/[가-힣]/.test(allLines) && /영어|english/i.test(data.dialogue.language))
     add("warn", "대사 언어", `대사 언어는 ${data.dialogue.language}인데 대사에 한글이 있습니다.`, { kind: "goto", step: 2, label: "3단계 대사로" });
+
+  return items;
+}
+
+/**
+ * The team's field guides (8 animation principles, storyboard continuity): one clear camera move per panel,
+ * observable wording instead of vague words, hook-ups recorded. Shown in step 2 and in the render check.
+ */
+export function guideIssues(data: ProjectData): CheckItem[] {
+  const items: CheckItem[] = [];
+  const add = (level: CheckItem["level"], area: string, text: string, fix?: CheckFix) =>
+    items.push(fix ? { level, area, text, fix } : { level, area, text });
+  // ── the field guides: one clear camera move per panel, observable wording, hook-ups recorded ──
+  {
+    const unit = data.mode === "storyboard" ? "컷" : "표정";
+    const no = (id: string) => data.expressions.findIndex((e) => e.id === id) + 1;
+    const mixed = data.expressions.filter((e) => cameraMoveKinds(e.camera).length > 1);
+    if (mixed.length)
+      add(
+        "warn",
+        "카메라 이동",
+        `${mixed.map((e) => `${no(e.id)}번 ${unit}(${cameraMoveKinds(e.camera).join("+")})`).join(", ")}: 한 ${unit}에 카메라 이동이 여러 가지 섞여 있습니다. 영상 모델이 연기를 놓치기 쉬우니 고정이나 한 가지 이동으로 줄이고, 시작·끝 구도를 적으세요(팀 가이드: 카메라는 고정 또는 하나의 명확한 이동).`,
+        { kind: "goto", step: 1, label: "2단계 카메라로" },
+      );
+    const vague = data.expressions.filter((e) => [e.action, e.camera, e.gesture, e.notes].some((t) => VAGUE_WORDS.test(t)));
+    const vagueSeg = data.acting.segments.filter((sg) => VAGUE_WORDS.test(sg.transition));
+    if (vague.length || vagueSeg.length)
+      add(
+        "warn",
+        "모호한 표현",
+        `${[...new Set([...vague.map((e) => no(e.id)), ...vagueSeg.map((sg) => no(sg.expressionId))])].sort((a, b) => a - b).map((n) => `${n}번`).join(", ")} ${unit}에 ‘자연스럽게·생동감 있게·역동적으로’ 같은 말이 있습니다. 어느 부위가 어떤 순서로 움직이는지(시선 → 준비 → 행동 → 접촉 → 정착)로 바꾸면 영상 모델이 더 정확히 따릅니다.`,
+      );
+    if (data.mode === "storyboard" && data.expressions.length > 1) {
+      const noHu = data.expressions.filter((e) => !e.continuity.trim());
+      if (noHu.length === data.expressions.length || !data.expressionSetup.continuity.trim())
+        add("warn", "연결 상태(HU)", "장면 연결 규칙이나 컷마다의 연결 상태(시작/끝)가 비어 있습니다. 2단계 ‘처음부터 다시 설계’로 채우면 컷 사이 좌우·위치·소품·시선이 이어지게 그리고 지시합니다.", { kind: "goto", step: 1, label: "2단계 설계로" });
+      else if (noHu.length)
+        add("warn", "연결 상태(HU)", `${noHu.map((e) => `${no(e.id)}번`).join(", ")} 컷의 연결 상태(시작/끝)가 비어 있습니다.`, { kind: "goto", step: 1, label: "2단계 컷 카드로" });
+    }
+  }
 
   return items;
 }

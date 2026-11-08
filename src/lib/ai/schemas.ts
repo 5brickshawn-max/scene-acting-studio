@@ -1,6 +1,14 @@
 import { z } from "zod";
 import { FACING, GAZE, INTENSITY, PITCH, TILT } from "@/lib/domain/project";
 import { AI_FIX_TARGETS, type CheckTextFix } from "@/lib/domain/fixes";
+import { PRINCIPLE_KEYS } from "@/lib/domain/principles";
+
+/** 2-3 priority animation principles for one beat (the field guide's rule: not all eight). */
+const Principles = z
+  .array(z.enum(PRINCIPLE_KEYS))
+  .describe(
+    "이 컷(표정)에서 가장 중요한 애니메이션 원칙 2~3개: squash_stretch(눌림·늘어남), anticipation(준비 동작), pose_to_pose(핵심 포즈 연결), follow_through(후속·시차 동작), slow_in_out(가속·감속), arcs(호 궤적), timing(시간 배분·홀드), staging(얼굴·손·목표물이 보이게)",
+  );
 
 /* Output schemas for each AI job. Panels are referenced by 1-based number so
  * the model never has to invent ids; the app maps numbers back to expressions
@@ -94,6 +102,7 @@ export const ExpressionOutItem = z.object({
   gaze: z.enum(GAZE),
   body: z.enum(FACING),
   directionEvidence: z.string().describe("방향을 판단한 시각적 근거 (예: 오른쪽 귀가 보임, 코끝이 화면 왼쪽을 향함)"),
+  principles: Principles,
 });
 
 export const ExpressionsOut = z.object({
@@ -121,9 +130,10 @@ export const StoryboardOut = z.object({
       state: z
         .string()
         .describe(
-          "이 컷의 연결 상태 (한두 문장): 보이는 주요 인물마다 화면 위치(왼쪽·가운데·오른쪽, 앞·뒤)와 보는 방향, 이동 중이면 어디로, 의상·소품 상태(누가 무엇을 들었는지), 빛이 오는 쪽. 앞 컷의 끝 상태에서 이어지게",
+          "이 컷의 연결 상태(HU), '시작: … / 끝: …' 두 부분으로. 보이는 주요 인물마다 화면 위치(화면 기준 왼쪽·가운데·오른쪽, 앞·뒤)·몸과 시선 방향, 손(몸 기준 오른손·왼손)에 든 것, 발 접지, 동작 단계와 운동 방향, 감정·호흡, 빛이 오는 쪽. 시작은 바로 앞 컷의 끝과 같아야 함(첫 컷 제외)",
         ),
       speaker: z.number().int().describe("대사가 있으면 말하는 주요 인물 번호(1부터), 없으면 0"),
+      principles: Principles,
       link: z
         .enum(["continuous", "cut"])
         .describe("앞 컷과의 연결: continuous = 같은 쇼트에서 카메라가 이어서 움직여 이 컷이 됨, cut = 컷 분할(장면이 끊기고 새 쇼트, 장면 전체에서 최대 3번). 첫 컷은 continuous"),

@@ -18,7 +18,7 @@ describe("storyboard continuity (연결성)", () => {
     const out = {
       summary: "",
       continuity: "1) 아스파샤 화면 왼쪽, 샤르휘나 오른쪽 2) 성문은 왼쪽",
-      panels: d.expressions.map((_, i) => ({ title: `p${i}`, action: "a", camera: "c", state: `상태 ${i + 1}`, speaker: 0, link: "continuous" as const })),
+      panels: d.expressions.map((_, i) => ({ title: `p${i}`, action: "a", camera: "c", state: `상태 ${i + 1}`, principles: [], speaker: 0, link: "continuous" as const })),
     };
     const next = applyStoryboard(d, out);
     expect(next.expressionSetup.continuity).toContain("화면 왼쪽");
