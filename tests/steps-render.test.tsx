@@ -88,9 +88,9 @@ describe("step screens render for one and for several characters", () => {
     expect(s2).toContain("연결 상태 (화면 위치·보는 방향·동선·의상/소품·빛)");
     expect(s2).toContain("연결성 우선: 앞 컷부터 한 장씩 차례로 생성");
     // step 4 of a storyboard: lengths only, the panel order is fixed
-    const s4 = render(d, createElement(ActingStep, nav));
-    expect(s4).toContain("컷 순서는 2단계 콘티 순서 그대로입니다");
-    expect(s4).not.toContain('aria-label="앞으로"');
+    const acting = render(d, createElement(ActingStep, nav));
+    expect(acting).toContain("컷 순서는 2단계 콘티 순서 그대로입니다");
+    expect(acting).not.toContain('aria-label="앞으로"');
     expect(s2).toContain("러프 콘티 전부 생성 (0컷)");
     expect(s2).toContain("앞 컷과의 연결");
     expect(s2).toContain("✂ 컷 분할 (새 쇼트)");
