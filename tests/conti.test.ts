@@ -51,3 +51,18 @@ describe("콘티 방식 (storyboard video from sheets, places and rough sketches
     expect(checks.some((i) => i.area === "표정 그림")).toBe(false);
   });
 });
+
+describe("3D & 2.5D, never 2D", async () => {
+  const { studioStyle } = await import("@/lib/domain/handoff");
+  it("a style that says 2D is read as 3D & 2.5D everywhere in the prompts", () => {
+    expect(studioStyle("설정화를 따른 회화풍 2D. 수채 질감")).toBe("설정화를 따른 회화풍 3D & 2.5D. 수채 질감");
+    expect(studioStyle("Painterly 2D animation, soft cel shading")).toBe("Painterly 3D & 2.5D animation, soft cel shading");
+    expect(studioStyle("2.5D & 3D painterly")).toBe("2.5D & 3D painterly");
+    const d = board();
+    d.style = "회화풍 2D, 붓자국 채색";
+    const p = buildVideoHandoff(d).prompt;
+    expect(p).toContain("회화풍 3D & 2.5D");
+    expect(p).not.toMatch(/(^|[^\d.])2D(?![\w.])/);
+    expect(p).toContain("3D & 2.5D animation style; never photorealistic");
+  });
+});

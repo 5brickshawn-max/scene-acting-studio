@@ -104,16 +104,16 @@ describe("hook-up in words and review corrections", async () => {
   });
 });
 
-describe("storyboard panel limit (6)", async () => {
+describe("storyboard panel limit (8)", async () => {
   const { MAX_PANELS_STORYBOARD, maxPanelsFor, stepIssues } = await import("@/lib/domain/project");
-  it("storyboard scenes take at most six panels; character scenes keep eight", () => {
-    expect(MAX_PANELS_STORYBOARD).toBe(6);
+  it("storyboard and character scenes take at most eight panels", () => {
+    expect(MAX_PANELS_STORYBOARD).toBe(8);
     expect(maxPanelsFor("cast")).toBe(8);
-    expect(setExpressionCount(createProjectData("x", 1, "storyboard"), 8).expressions).toHaveLength(6);
+    expect(setExpressionCount(createProjectData("x", 1, "storyboard"), 10).expressions).toHaveLength(8);
     expect(setExpressionCount(createProjectData("x", 1, "cast"), 8).expressions).toHaveLength(8);
     const d = createProjectData("x", 1, "storyboard");
-    const seven = { ...d, expressions: Array.from({ length: 7 }, (_, i) => ({ ...d.expressions[0], id: `p${i}` })) };
-    expect(stepIssues(seven, 1).some((i) => i.level === "block" && i.message.includes("최대 6개"))).toBe(true);
+    const seven = { ...d, expressions: Array.from({ length: 9 }, (_, i) => ({ ...d.expressions[0], id: `p${i}` })) };
+    expect(stepIssues(seven, 1).some((i) => i.level === "block" && i.message.includes("최대 8개"))).toBe(true);
   });
 });
 

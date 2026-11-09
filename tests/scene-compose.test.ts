@@ -124,12 +124,12 @@ describe("쇼트 구성 (shots and panels proposed by the scene composition)", (
     expect(d.acting.duration).toBe(16);
   });
 
-  it("caps at 6 storyboard panels and 60 seconds, and leaves the structure alone when not picked", () => {
+  it("caps at 8 storyboard panels and 60 seconds, and leaves the structure alone when not picked", () => {
     const big = { ...OUT, duration: 90, shots: Array.from({ length: 5 }, (_, k) => ({ title: `s${k}`, seconds: 18, panels: ["a", "b", "c"] })) };
     const st = composeStructure({ mode: "storyboard" }, big);
     // no limit on shots: five proposed shots stay five
-    expect(st).toMatchObject({ shots: 2, total: 15, clipped: true, duration: 60 }); // the first 6 panels cover two shots
-    expect(st.panels).toHaveLength(6);
+    expect(st).toMatchObject({ shots: 3, total: 15, clipped: true, duration: 60 }); // the first 8 panels cover three shots
+    expect(st.panels).toHaveLength(8);
     const before = createProjectData("x", 1, "storyboard");
     expect(applyComposition(before, OUT, ["style"]).expressionSetup.count).toBe(before.expressionSetup.count);
   });

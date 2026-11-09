@@ -162,15 +162,15 @@ describe("영어 정리 (English for the prompts)", () => {
     expect(item().text).toContain("목소리");
   });
 
-  it("keeps the character 2D when the director asks for a real-world background", () => {
+  it("keeps the character in 3D & 2.5D animation when the director asks for a real-world background", () => {
     let d = project();
     for (const s of [0, 1, 2, 3] as const) d = approve(d, s);
     d.video.extraDirection = "배경은 사막 (낮, 완만한 모래 언덕, 실사 스타일)";
     const h = buildVideoHandoff(d);
-    expect(h.prompt).toContain("Keep the character in this 2D style (never photorealistic or 3D); only the background follows the DIRECTOR'S DIRECTION.");
+    expect(h.prompt).toContain("Keep the character in this 3D & 2.5D animation style (never photorealistic); only the background follows the DIRECTOR'S DIRECTION.");
     expect(h.overrides.join(" ")).toContain("배경만 추가 연출의 실사 스타일");
     d.video.extraDirection = "배경은 사막";
-    expect(buildVideoHandoff(d).prompt).toContain("Stay in this 2D style; never photorealistic or 3D.");
+    expect(buildVideoHandoff(d).prompt).toContain("Stay in this 3D & 2.5D animation style; never photorealistic.");
   });
 
   it("the AI output schema takes the English sheet", () => {

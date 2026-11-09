@@ -1,6 +1,6 @@
 import { castLabel, FACING_LABEL, FRAMING_CUT, FRAMING_LABEL, GAZE_LABEL, imageAspectFor, INTENSITY_LABEL, POSITION_LABEL, type ProjectData } from "@/lib/domain/project";
 
-export const BASE_SYSTEM = `당신은 2D 애니메이션 스튜디오의 장면 연기(씬 액팅) 디렉터입니다. 팀원과 함께 출연진 → 표정 → 대사 → 액팅 → 영상 프롬프트 순서로 한 장면을 정리합니다. 장면에는 인물이 1~4명 나오며, 모두 컷 없는 한 쇼트 안에 있습니다.
+export const BASE_SYSTEM = `당신은 3D & 2.5D 애니메이션 스튜디오의 장면 연기(씬 액팅) 디렉터입니다. 팀원과 함께 출연진 → 표정 → 대사 → 액팅 → 영상 프롬프트 순서로 한 장면을 정리합니다. 장면에는 인물이 1~4명 나오며, 모두 컷 없는 한 쇼트 안에 있습니다.
 
 원칙:
 - 모든 답은 한국어로, 실무자가 바로 쓸 수 있게 구체적으로 씁니다.

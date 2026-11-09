@@ -483,7 +483,7 @@ export const MIN_EXPRESSIONS = 2;
 /** beats per scene (one Higgsfield batch holds 12 images) */
 export const MAX_EXPRESSIONS = 8;
 /** Storyboard scenes keep fewer panels (each one is a whole picture with its own continuity). */
-export const MAX_PANELS_STORYBOARD = 6;
+export const MAX_PANELS_STORYBOARD = 8;
 export const maxPanelsFor = (mode: SceneMode) => (mode === "storyboard" ? MAX_PANELS_STORYBOARD : MAX_EXPRESSIONS);
 export const MAX_VIDEO_SECONDS = 60;
 
