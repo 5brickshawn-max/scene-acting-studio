@@ -34,7 +34,8 @@ describe("콘티 방식 (storyboard video from sheets, places and rough sketches
     // line art kept to as few pictures as possible (three to an image) so the coloured references lead the look
     expect(h.prompt).toContain("5. panels 1, 2, 3 side by side, left to right — rough storyboard sketches");
     expect(h.prompt).toContain("6. panel 4 — rough storyboard sketch");
-    expect(h.prompt).toContain("LOOK (most important): every frame is a finished, fully coloured picture");
+    expect(h.prompt).toContain("LOOK (most important): every frame is a finished, fully coloured picture with the colour grading, light, atmosphere");
+    expect(h.prompt).toContain("follow the scene's description and the scene picture, not the sheet's colours");
     expect(h.prompt).toContain("take from them only each panel's composition, where everyone stands, their poses and the camera framing");
     expect(h.prompt).toContain("never as line art");
     expect(h.prompt).toContain("Composition, blocking and camera: as in reference image 5 (right frame) (rough sketch).");
