@@ -602,7 +602,9 @@ function contiReferences(data: ProjectData): VideoReference[] {
     const e = data.expressions.find((x) => x.id === seg.expressionId);
     if (e?.sketchAssetId && !sketchBeats.some((id) => data.expressions.find((x) => x.id === id)?.sketchAssetId === e.sketchAssetId)) sketchBeats.push(e.id);
   }
-  const forSketches = Math.min(sketchBeats.length, 3);
+  // the rough sketches are line art: joined three to an image they stay a layout guide and do not outweigh
+  // the coloured references (four separate sketches made a Seedance test come out as flat line art)
+  const forSketches = Math.ceil(sketchBeats.length / MAX_COMBO_PARTS);
   const room = MAX_VIDEO_REFERENCES - forSketches;
   for (const c of data.cast)
     if (c.refAssetId && !has(c.refAssetId) && refs.length < room)
@@ -617,7 +619,7 @@ function contiReferences(data: ProjectData): VideoReference[] {
       role: "world",
     });
   }
-  const max = Math.max(1, MAX_VIDEO_REFERENCES - refs.length);
+  const max = Math.max(1, Math.min(MAX_VIDEO_REFERENCES - refs.length, forSketches));
   let beats = sketchBeats;
   if (beats.length > max * MAX_COMBO_PARTS) {
     const keep = pickReferences(data, beats, max * MAX_COMBO_PARTS);
@@ -634,7 +636,7 @@ function contiReferences(data: ProjectData): VideoReference[] {
     const parts = g.map((id) => ({ assetId: sketchOf(id), expressionId: id }));
     refs.push({
       assetId: comboId(parts.map((p) => p.assetId)),
-      label: `${g.map(numOf).join("·")}번 컷 러프 콘티 (나란히 ${g.length}장) — storyboard sketches, left to right`,
+      label: `${g.map(numOf).join("·")}번 컷 러프 콘티 (나란히 ${g.length}장) — layout guide, left to right`,
       role: "expression",
       expressionId: g[0],
       parts,
@@ -1559,7 +1561,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
       ...storyboardCastEn(data, en, B.features, B.features * 50),
       (en.style || data.style.trim()) && `Art style: ${sentence(clip(en.style ?? data.style, 200) || clean(en.style ?? data.style).slice(0, 200))} Stay in this 2D style; never photorealistic or 3D.`,
       conti
-        ? `Match the character design sheets for every named character's face, hair, body and costume design, and the scene picture and background references for the world, the light and the drawing style; nobody's proportions change and no character is duplicated.`
+        ? `LOOK (most important): every frame is a finished, fully coloured picture in the art style of the scene picture and the character design sheets — their colour, light, brushwork and line quality. The storyboard sketches are black-and-white layout guides only; nothing in the video looks like a sketch. Match the design sheets for every named character's face, hair, body and costume design, and the scene picture and background references for the world and the light; nobody's proportions change and no character is duplicated.`
         : `Match the reference images exactly: the named characters' faces, hair, colors and costumes, the world, the lighting and the drawing style; nobody's proportions change and no character is duplicated.`,
       continuityRules(data, en) &&
         `Continuity rules (keep them in every shot): ${clip(continuityRules(data, en), B.rules) || continuityRules(data, en).slice(0, B.rules)}${multiShot ? " Across each HARD CUT the screen sides, eyelines, costumes, props and light carry on." : ""}`,

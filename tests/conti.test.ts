@@ -27,15 +27,17 @@ describe("콘티 방식 (storyboard video from sheets, places and rough sketches
 
   it("attaches 1) character sheets 2) scene picture and backgrounds 3) the sketches, and says what each is for", () => {
     const h = buildVideoHandoff(board());
-    expect(h.references.map((r) => r.assetId)).toEqual(["sheet-1", "sheet-2", "scene-1", "bg-1", "sk-1", "combo:sk-2+sk-3", "sk-4"]);
+    expect(h.references.map((r) => r.assetId)).toEqual(["sheet-1", "sheet-2", "scene-1", "bg-1", "combo:sk-1+sk-2+sk-3", "sk-4"]);
     expect(h.prompt).toContain("1. character design sheet of 아스파샤 — face, hair, body and costume design only");
     expect(h.prompt).toContain("3. scene picture — the world, its light and the finished art style; not the composition");
     expect(h.prompt).toContain("4. background / asset reference — the place, props and architecture");
-    expect(h.prompt).toContain("5. panel 1 — rough storyboard sketch");
-    expect(h.prompt).toContain("6. panels 2, 3 side by side, left to right — rough storyboard sketches");
+    // line art kept to as few pictures as possible (three to an image) so the coloured references lead the look
+    expect(h.prompt).toContain("5. panels 1, 2, 3 side by side, left to right — rough storyboard sketches");
+    expect(h.prompt).toContain("6. panel 4 — rough storyboard sketch");
+    expect(h.prompt).toContain("LOOK (most important): every frame is a finished, fully coloured picture");
     expect(h.prompt).toContain("take from them only each panel's composition, where everyone stands, their poses and the camera framing");
     expect(h.prompt).toContain("never as line art");
-    expect(h.prompt).toContain("Composition, blocking and camera: as in reference image 6 (right frame) (rough sketch).");
+    expect(h.prompt).toContain("Composition, blocking and camera: as in reference image 5 (right frame) (rough sketch).");
     expect(h.startFrame).toContain("① 캐릭터 시트 ② 장면 그림·배경·에셋 ③ 러프 콘티");
   });
 
