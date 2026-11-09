@@ -693,6 +693,12 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
     >
       <section className="space-y-4">
         <h3 className="section-title">① 컷 수·영상 길이·화면 비율</h3>
+        {d.expressions.length > MAX_EXPRESSIONS && (
+          <p className="notice notice-warn">
+            지금 컷이 {d.expressions.length}개입니다. 한 장면은 최대 {MAX_EXPRESSIONS}개라 줄여야 합니다. 아래에서 컷 수를 고르면 뒤쪽 컷부터 빠지니, 그다음 ‘처음부터 다시
+            설계’로 시나리오 전체를 새 컷 수에 맞춰 나누세요.
+          </p>
+        )}
         <div>
           <div className="field-label">컷 수</div>
           <div className="seg">

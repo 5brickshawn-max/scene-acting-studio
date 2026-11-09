@@ -85,7 +85,7 @@ describe("expression count & timeline", () => {
     const d = setExpressionCount(createProjectData(), 6);
     expect(d.expressions).toHaveLength(6);
     expect(timelineIssues(d)).toEqual([]);
-    expect(setExpressionCount(d, 20).expressions).toHaveLength(12);
+    expect(setExpressionCount(d, 20).expressions).toHaveLength(8);
   });
 
   it("detects gaps and overruns", () => {
@@ -753,5 +753,15 @@ describe("pre-render check (충돌 점검)", () => {
     expect(text("warn")).not.toContain("상황 설정");
     d.video.extraDirection = "";
     expect(preRenderCheck(d, buildVideoHandoff(d)).some((i) => i.area === "상황 설정" && i.level === "warn")).toBe(true);
+  });
+});
+
+describe("panel limit (8)", () => {
+  it("an older scene with more than eight panels must be cut down before step 2 is approved", async () => {
+    const { stepIssues, MAX_EXPRESSIONS } = await import("@/lib/domain/project");
+    expect(MAX_EXPRESSIONS).toBe(8);
+    const d = createProjectData("많은 컷", 1, "storyboard");
+    const many = { ...d, expressions: Array.from({ length: 11 }, (_, i) => ({ ...d.expressions[0], id: `p${i}` })) };
+    expect(stepIssues(many, 1).some((i) => i.level === "block" && i.message.includes("최대 8개"))).toBe(true);
   });
 });

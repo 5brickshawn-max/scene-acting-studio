@@ -3,7 +3,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { z } from "zod";
 import sharp from "sharp";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { readProjectData, castLabel, effectiveText, maxCastFor, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
+import { readProjectData, castLabel, effectiveText, maxCastFor, MAX_EXPRESSIONS, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
 import {
   ActingOut,
   CharacterOut,
@@ -119,27 +119,44 @@ async function callClaude<S extends z.ZodType>(
   messages: Anthropic.Beta.BetaMessageParam[],
   effort: "low" | "medium" | "high" = "high",
 ) {
-  const res = await client.beta.messages.parse(
-    {
-      model: MODEL,
-      // reasoning counts toward this: a 12-panel storyboard with continuity states needs room
-      max_tokens: 32000,
-      system,
-      messages,
-      output_config: { effort, format: betaZodOutputFormat(schema) },
-      // If a safety classifier declines, retry on Anthropic's recommended fallback model.
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-    },
-    // an explicit timeout (within the route's 800 s) lets a non-streaming request use the larger budget
-    { timeout: 12 * 60 * 1000 },
-  );
+  const started = Date.now();
+  const once = (eff: "low" | "medium" | "high", maxTokens: number, timeout = 12 * 60 * 1000) =>
+    client.beta.messages.parse(
+      {
+        model: MODEL,
+        // reasoning counts toward this: a 12-panel storyboard with continuity states needs room
+        max_tokens: maxTokens,
+        system,
+        messages,
+        output_config: { effort: eff, format: betaZodOutputFormat(schema) },
+        // If a safety classifier declines, retry on Anthropic's recommended fallback model.
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+      },
+      // an explicit timeout (within the route's 800 s) lets a non-streaming request use the larger budget
+      { timeout },
+    );
+  // An answer cut off at the budget comes back as unfinished JSON (the SDK fails to parse it, or reports max_tokens).
+  const cutOff = (e: unknown) => e instanceof Error && /Failed to parse structured output|Unterminated string|Unexpected end of JSON/i.test(e.message);
+  const TOO_LONG = "응답이 너무 길어 중간에 끊겼습니다. 컷 수를 줄이거나 시나리오를 나눠 다시 시도해주세요.";
+  let res: Awaited<ReturnType<typeof once>>;
+  try {
+    res = await once(effort, 40000);
+    if (res.stop_reason === "max_tokens") throw new Error("Failed to parse structured output: max_tokens");
+  } catch (e) {
+    // one more try with less reasoning (more of the budget left for the answer), while there is time left
+    if (!cutOff(e) || Date.now() - started > 5 * 60_000) throw cutOff(e) ? new Error(TOO_LONG) : e;
+    try {
+      // the retry must finish inside the route's 800 s
+      res = await once(effort === "high" ? "medium" : "low", 40000, Math.max(60_000, 780_000 - (Date.now() - started)));
+    } catch (e2) {
+      throw cutOff(e2) ? new Error(TOO_LONG) : e2;
+    }
+  }
   if (res.stop_reason === "refusal") {
     throw new Error("AI가 이 요청을 처리하지 않았습니다. 요청 내용을 바꿔 다시 시도해주세요.");
   }
-  if (res.stop_reason === "max_tokens") {
-    throw new Error("응답이 너무 길어 중간에 끊겼습니다. 컷(패널) 수를 줄이거나 시나리오를 나눠 다시 시도해주세요.");
-  }
+  if (res.stop_reason === "max_tokens") throw new Error(TOO_LONG);
   if (!res.parsed_output) throw new Error("AI 응답 형식을 읽지 못했습니다. 다시 시도해주세요.");
   // input_tokens is only the part not served from the cache; keep the whole prompt size as "input".
   const cacheRead = res.usage.cache_read_input_tokens ?? 0;
@@ -234,8 +251,8 @@ async function buildRequest(job: JobRow, data: ProjectData) {
               `- 설정화가 없는 인물은 팀 메모를 따르고, 없는 부분은 시나리오의 시대·장소·분위기에 맞게 정하되 지어낸 핵심 결정은 questions에 '…로 정했습니다, 맞나요?'처럼 남기세요.\n` +
               `- style: ${data.baseAssetId || refs.length ? "참고 그림의 그림체를 따라" : "시나리오의 장르·분위기에 맞는 2D 애니메이션 그림체로"} 선·채색·명암·색감을 구체적으로.\n` +
               (data.mode === "storyboard"
-                ? `- shots: 시나리오를 쇼트(컷 분할)로 나누세요. 쇼트 사이는 컷으로 끊깁니다. 시나리오가 '세 컷이 1초씩', '완전 부감', '클로즈업으로' 처럼 화면을 바꾸면 새 쇼트, 한 쇼트 안에서 카메라가 움직여 구도가 바뀌면 그 쇼트의 패널을 늘리세요(머무는 쇼트는 패널 1개). 패널 합계는 2~12개입니다. seconds는 쇼트 길이, 합이 duration과 같게.\n`
-                : `- shots: 인물별 연기 방식은 컷 없는 한 쇼트입니다. 쇼트 1개에 표정 비트(감정이 바뀌는 순간)를 패널로 2~12개 적으세요.\n`) +
+                ? `- shots: 시나리오를 쇼트(컷 분할)로 나누세요. 쇼트 사이는 컷으로 끊깁니다. 시나리오가 '세 컷이 1초씩', '완전 부감', '클로즈업으로' 처럼 화면을 바꾸면 새 쇼트, 한 쇼트 안에서 카메라가 움직여 구도가 바뀌면 그 쇼트의 패널을 늘리세요(머무는 쇼트는 패널 1개). 패널 합계는 2~${MAX_EXPRESSIONS}개입니다. seconds는 쇼트 길이, 합이 duration과 같게.\n`
+                : `- shots: 인물별 연기 방식은 컷 없는 한 쇼트입니다. 쇼트 1개에 표정 비트(감정이 바뀌는 순간)를 패널로 2~${MAX_EXPRESSIONS}개 적으세요.\n`) +
               `- duration: 장면 길이(초). 시나리오에 타임코드(예: 02:02~02:18)가 있으면 그 길이로, 60초를 넘기지 마세요.\n` +
               `- extras: 이름 없는 사람들(군중·행인·병사 등)만. 사람이 없으면 빈 문자열로 두고, 배경·풍경은 opening에 쓰세요.\n` +
               `- opening: 이 장면의 첫 순간을 한 장의 그림으로 그릴 묘사. 모든 주요 인물이 얼굴이 보이게 화면에 들어가야 합니다(이 그림이 이후 모든 컷의 인물 기준이 됨). 장소·시간·빛·군중·소품 포함.\n\n` +
@@ -308,16 +325,16 @@ async function buildRequest(job: JobRow, data: ProjectData) {
                   ? `- 지금 있는 컷 제목·장면 묘사·연결은 무시하고 처음부터 다시 나누세요.\n`
                   : `- 현재 입력값의 컷 제목과 연결([컷 분할]/[이어짐])이 시나리오 전체를 담는 구성이면 따르고 내용만 채우세요. 시나리오 일부만 담고 있으면(예: 컷 수를 줄인 뒤 뒤쪽 컷이 잘림) 무시하고 다시 나누세요.\n`) +
                 `- 장면 묘사·카메라에 '약 3초'처럼 초 단위 시간을 쓰지 마세요. 시간은 4단계 타임라인이 정합니다.\n` +
-                `- action: 그 순간 화면 전체에서 일어나는 일을 2~4문장으로. 주요 인물은 이름으로, 군중·배경 인물은 무리로(예: "뒤쪽 군중이 놀라 물러선다"). 컷마다 핵심 행동은 하나로 정하고, 그 행동을 '${ACTION_ORDER_KO}' 순서로 관찰할 수 있는 몸의 움직임으로 쓰세요(예: "목표를 본다 → 무릎을 굽힌다 → 바닥을 밀어 뛴다 → 발부터 닿는다 → 무릎으로 충격을 받고 멈춘다"). 시선·얼굴·몸의 방향은 따로 적고, 좌우에는 기준을 붙이세요(화면 기준 '화면 왼쪽', 몸 기준 '인물의 오른손'). '자연스럽게', '생동감 있게', '역동적으로' 같은 모호한 말 대신 어느 부위가 어떻게 움직이는지 쓰세요. 시간이 짧은 컷은 행동 수를 줄이세요.\n` +
+                `- action: 그 순간 화면 전체에서 일어나는 일을 2~3문장(250자 안팎)으로. 주요 인물은 이름으로, 군중·배경 인물은 무리로(예: "뒤쪽 군중이 놀라 물러선다"). 컷마다 핵심 행동은 하나로 정하고, 그 행동을 '${ACTION_ORDER_KO}' 순서로 관찰할 수 있는 몸의 움직임으로 쓰세요(예: "목표를 본다 → 무릎을 굽힌다 → 바닥을 밀어 뛴다 → 발부터 닿는다 → 무릎으로 충격을 받고 멈춘다"). 시선·얼굴·몸의 방향은 따로 적고, 좌우에는 기준을 붙이세요(화면 기준 '화면 왼쪽', 몸 기준 '인물의 오른손'). '자연스럽게', '생동감 있게', '역동적으로' 같은 모호한 말 대신 어느 부위가 어떻게 움직이는지 쓰세요. 시간이 짧은 컷은 행동 수를 줄이세요.\n` +
                 `- camera: 고정이거나 한 가지 분명한 이동(팬·틸트·트랙(이동 촬영)·줌·오빗 중 하나)만, 시작 구도와 끝 구도(샷 크기·높이·바라보는 방향)를 한 문장으로. 여러 이동을 섞지 마세요(예: '돌며 트랙인하고 틸트업' 금지). 인물 손끝의 호와 카메라 오빗을 한 문장에 섞지 마세요. 같은 쇼트 안에서는 앞 컷 카메라가 끝난 위치·구도에서 시작하세요.\n` +
                 `- principles: 이 컷에서 가장 중요한 애니메이션 원칙 2~3개(8개를 한꺼번에 넣지 않음). 고른 원칙은 action에 실제 움직임으로 드러나게 쓰세요(예: anticipation이면 준비 동작, follow_through면 몸통이 먼저 멈추고 머리카락·천이 늦게 정착).\n` +
-                `★ 이 설계의 핵심은 컷과 컷, 쇼트와 쇼트 사이의 **연결성**입니다. 먼저 continuity(장면 전체의 연결 규칙)를 정하고, 모든 컷이 그것을 지키게 설계하세요:\n` +
+                `★ 이 설계의 핵심은 컷과 컷, 쇼트와 쇼트 사이의 **연결성**입니다. 먼저 continuity(장면 전체의 연결 규칙, 항목마다 한두 문장으로 짧게)를 정하고, 모든 컷이 그것을 지키게 설계하세요:\n` +
                 `  · 180도 축: 주요 인물의 화면 좌우와 서로 보는 방향을 장면 내내 유지(축을 넘는 컷은 쓰지 말고, 꼭 넘어야 하면 카메라가 화면 안에서 축을 건너가는 움직임을 보여 주는 컷을 두세요). 역방향(반대편에서 찍는) 쇼트를 쓰면 인물의 좌우가 바뀐다는 것을 state에 정확히 적으세요.\n` +
                 `  · 지리(위에서 본 공간 배치): 문·벽·출구·해·큰 소품의 세계 속 위치와 각 인물의 바닥 위치를 한 번 정하면 모든 컷에서 유지(카메라가 바뀌면 화면 좌우는 달라져도 세계 속 위치는 같음). 지나간 배경 물체가 이유 없이 다시 나오지 않게.\n` +
                 `  · 의상·소품: 인물의 의상은 설정 그대로, 바뀌는 소품(건네는 물건, 벗는 옷 등)은 바뀌는 컷과 그 뒤 상태를 정하고 그 뒤 컷에서 계속 유지.\n` +
                 `  · 동선: 인물이 어디서 어디로 움직이는지 컷마다 이어서(앞 컷 끝 위치 = 다음 컷 시작 위치). 컷 분할 뒤에도 같은 순간이 이어지면 같은 자세·같은 위치에서 시작(동작 연결 컷).\n` +
                 `  · 시선 연결: A가 화면 오른쪽 위를 올려다보면 다음 컷의 B는 화면 왼쪽 아래를 내려다보는 식으로 시선 방향을 맞추세요.\n` +
-                `- state: 컷마다 연결 상태(HU, 훅업)를 '시작: … / 끝: …'으로. 기록할 것: ${HU_ITEMS_KO}, 빛 방향. 각 컷의 '시작'은 바로 앞 컷의 '끝'과 같아야 합니다. 움직이는 중에 컷이 바뀌면 뒤 컷은 같은 동작의 다음 단계부터 이어 가고(준비 자세부터 다시 시작하거나 같은 동작을 두 번 보여 주지 않음), 멈춘 상태에서 바뀌면 같은 자세를 새 카메라 시점으로 다시 보여 주세요. 소품을 든 손(몸 기준)은 바꾸는 행동이 없으면 그대로.\n` +
+                `- state: 컷마다 연결 상태(HU, 훅업)를 '시작: … / 끝: …'으로, 각각 한두 문장(합쳐 200자 안팎)으로 짧게. 기록할 것(바뀌는 것 위주로): ${HU_ITEMS_KO}, 빛 방향. 각 컷의 '시작'은 바로 앞 컷의 '끝'과 같아야 합니다. 움직이는 중에 컷이 바뀌면 뒤 컷은 같은 동작의 다음 단계부터 이어 가고(준비 자세부터 다시 시작하거나 같은 동작을 두 번 보여 주지 않음), 멈춘 상태에서 바뀌면 같은 자세를 새 카메라 시점으로 다시 보여 주세요. 소품을 든 손(몸 기준)은 바꾸는 행동이 없으면 그대로.\n` +
                 `  피할 연결 오류: 진행 방향 반전, 대화축 무단 횡단(좌우 교환), 인물 순간 이동, 시선 높이 불일치(아이를 보는데 눈은 위), 포즈 리셋, 잡은 손 바뀜, 동작 중복, 접촉 단계 누락(손이 닿기 전에 물건이 움직임), 소품 상태 복구(건넨 물건이 다시 원래 사람에게), 감정 리셋, 빛·바람 방향 반전, 같은 거리인데 인물이 커지거나 키 순서가 바뀜.\n` +
                 `- speaker: 이 컷에서 대사를 말하는 주요 인물 번호(1~${data.cast.length}), 대사가 없으면 0.\n` +
                 `- link: 앞 컷과의 연결. 시나리오가 화면을 끊어 새 쇼트로 넘어가면(예: '특대 클로즈업 세 컷이 1초씩', '완전 부감으로', 장소·시점이 크게 바뀜) cut, 같은 쇼트에서 카메라가 이어서 움직여 다음 구도가 되면 continuous. 첫 컷은 continuous. cut이면 camera에는 그 쇼트의 구도만 쓰고, 앞 컷에서 이어지는 움직임은 쓰지 마세요.\n` +

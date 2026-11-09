@@ -474,7 +474,7 @@ export const round3 = (v: number) => Math.round(v * 1000) / 1000;
 
 export const MIN_EXPRESSIONS = 2;
 /** beats per scene (one Higgsfield batch holds 12 images) */
-export const MAX_EXPRESSIONS = 12;
+export const MAX_EXPRESSIONS = 8;
 export const MAX_VIDEO_SECONDS = 60;
 
 /** Contiguous segments for `ids` (in order) sized by `weights`, snapped to 0.1s, ending exactly at `duration`. */
@@ -797,6 +797,8 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
     if (!isStoryboard(data) && data.cast.length > 1 && new Set(pos).size !== pos.length) warn("두 인물의 화면 위치가 같습니다. 겹쳐 서는 연출이 아니라면 위치를 나누세요.");
   }
 
+  if (step === 1 && data.expressions.length > MAX_EXPRESSIONS)
+    block(`${isStoryboard(data) ? "컷" : "표정"}이 ${data.expressions.length}개입니다. 한 장면은 최대 ${MAX_EXPRESSIONS}개입니다. 2단계 ①에서 ${MAX_EXPRESSIONS}개 이하로 줄이세요(뒤쪽부터 빠지니, 줄인 뒤 ‘처음부터 다시 설계’를 권장).`);
   if (step === 1 && isStoryboard(data)) {
     // storyboard: each panel is described as a whole; no per-character acting or direction checks
     if (data.expressions.length !== data.expressionSetup.count) block("컷 수가 설정과 다릅니다.");
