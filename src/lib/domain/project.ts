@@ -355,6 +355,11 @@ export const ProjectDataSchema = z.object({
     mergeLegacyCamera,
     z.object({
       aspectRatio: z.enum(["16:9", "9:16"]),
+      /**
+       * storyboard: what the video gets as pictures — "conti" = character sheets + background/assets + the rough
+       * sketches (콘티 방식), "panels" = the finished panel images; "auto" = conti when every panel has a sketch
+       */
+      refMode: z.enum(["auto", "conti", "panels"]).default("auto"),
       /** how heavy movement reads in the video (실제 무게 / 무겁게 / 과장: 중력 2배) */
       weight: z.enum(["natural", "heavy", "extra"]).default("heavy"),
       /** the director's direction (추가 연출): camera, light, background … kept whole in the video prompt */
@@ -457,7 +462,7 @@ export function createProjectData(title = "새 장면", castCount = 1, mode: Sce
     expressions,
     dialogue: { language: "한국어", lines: [] },
     acting: { duration: 8, segments: evenSegments(expressions.map((e) => e.id), 8) },
-    video: { aspectRatio: "16:9", weight: "heavy", extraDirection: "", promptFixes: [], startFrameAssetId: null, endFrameAssetId: null, resultAssetIds: [] },
+    video: { aspectRatio: "16:9", refMode: "auto", weight: "heavy", extraDirection: "", promptFixes: [], startFrameAssetId: null, endFrameAssetId: null, resultAssetIds: [] },
     english: null,
   };
 }
@@ -638,6 +643,17 @@ export function cutBefore(data: Pick<ProjectData, "mode" | "expressions" | "acti
   const order = data.acting.segments.map((s) => s.expressionId);
   const byId = new Map(data.expressions.map((e) => [e.id, e]));
   return new Map(order.map((id, k) => [id, data.mode === "storyboard" && k > 0 && byId.get(id)?.link === "cut"]));
+}
+
+/**
+ * 콘티 방식: the storyboard video is made from the character sheets, the background/assets and the rough
+ * sketches (no finished panel images needed). "auto" picks it when every panel has a sketch.
+ */
+export function usesConti(data: Pick<ProjectData, "mode" | "expressions" | "video">): boolean {
+  if (data.mode !== "storyboard") return false;
+  if (data.video.refMode === "conti") return true;
+  if (data.video.refMode === "panels") return false;
+  return data.expressions.length > 0 && data.expressions.every((e) => e.sketchAssetId);
 }
 
 /** Shots of a storyboard scene: runs of panels joined by continuous camera moves (one shot when nothing is cut). */

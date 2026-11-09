@@ -18,6 +18,7 @@ import {
   isVoiceOver,
   cutBefore,
   shotsOf,
+  usesConti,
   isStoryboard,
   beatActor,
   performancesOf,
@@ -495,7 +496,10 @@ export function buildFrameHandoff(data: ProjectData, expressionId: string, shot:
 export type VideoReference = {
   assetId: string;
   label: string;
-  role: "identity" | "expression";
+  /** identity = who (scene picture or a character sheet), world = place/assets/style, expression = a beat's picture (a sketch in 콘티 방식) */
+  role: "identity" | "expression" | "world";
+  /** 콘티 방식: this beat picture is a rough sketch */
+  sketch?: boolean;
   expressionId?: string;
   characterId?: string;
   /** a combined image: consecutive beats side by side, left to right (assetId is the combo id) */
@@ -585,7 +589,63 @@ export type VideoHandoff = {
  * (side by side, left to right), so every beat still has its picture; only past
  * MAX_COMBO_PARTS per image are the least useful beats left out.
  */
+/**
+ * 콘티 방식 references, in upload order: 1) each named character's design sheet, 2) the place — the scene
+ * picture and the extra background/asset pictures, 3) the rough sketches in timeline order (joined side by side
+ * past the cap). Sheets and places together keep at least three slots for the sketches.
+ */
+function contiReferences(data: ProjectData): VideoReference[] {
+  const refs: VideoReference[] = [];
+  const has = (id: string) => refs.some((r) => r.assetId === id);
+  const sketchBeats: string[] = [];
+  for (const seg of data.acting.segments) {
+    const e = data.expressions.find((x) => x.id === seg.expressionId);
+    if (e?.sketchAssetId && !sketchBeats.some((id) => data.expressions.find((x) => x.id === id)?.sketchAssetId === e.sketchAssetId)) sketchBeats.push(e.id);
+  }
+  const forSketches = Math.min(sketchBeats.length, 3);
+  const room = MAX_VIDEO_REFERENCES - forSketches;
+  for (const c of data.cast)
+    if (c.refAssetId && !has(c.refAssetId) && refs.length < room)
+      refs.push({ assetId: c.refAssetId, label: `${castName(data, c.id)} 캐릭터 시트 — character design sheet`, role: "identity", characterId: c.id });
+  if (!refs.length && data.baseAssetId) refs.push({ assetId: data.baseAssetId, label: "장면 기준 그림 — characters, world and style", role: "identity" });
+  const places = [data.baseAssetId, ...data.designRefAssetIds].filter((x): x is string => Boolean(x) && !has(x!));
+  for (const id of places) {
+    if (refs.length >= room) break;
+    refs.push({
+      assetId: id,
+      label: id === data.baseAssetId ? "장면 기준 그림 — world, light and art style" : "배경·에셋 참고 — place, props, architecture",
+      role: "world",
+    });
+  }
+  const max = Math.max(1, MAX_VIDEO_REFERENCES - refs.length);
+  let beats = sketchBeats;
+  if (beats.length > max * MAX_COMBO_PARTS) {
+    const keep = pickReferences(data, beats, max * MAX_COMBO_PARTS);
+    beats = beats.filter((id) => keep.has(id));
+  }
+  const groups = beats.length > max ? groupBeats(beats, max, cutBefore(data)) : beats.map((id) => [id]);
+  const numOf = (id: string) => data.expressions.findIndex((e) => e.id === id) + 1;
+  const sketchOf = (id: string) => data.expressions.find((e) => e.id === id)!.sketchAssetId!;
+  for (const g of groups) {
+    if (g.length === 1) {
+      refs.push({ assetId: sketchOf(g[0]), label: `${numOf(g[0])}번 컷 러프 콘티 — storyboard sketch`, role: "expression", expressionId: g[0], sketch: true });
+      continue;
+    }
+    const parts = g.map((id) => ({ assetId: sketchOf(id), expressionId: id }));
+    refs.push({
+      assetId: comboId(parts.map((p) => p.assetId)),
+      label: `${g.map(numOf).join("·")}번 컷 러프 콘티 (나란히 ${g.length}장) — storyboard sketches, left to right`,
+      role: "expression",
+      expressionId: g[0],
+      parts,
+      sketch: true,
+    });
+  }
+  return refs;
+}
+
 export function videoReferences(data: ProjectData, maxExpressions = MAX_VIDEO_REFERENCES - 1): VideoReference[] {
+  if (usesConti(data)) return contiReferences(data);
   const refs: VideoReference[] = [];
   const multi = isMultiCast(data);
   const story = isStoryboard(data);
