@@ -150,6 +150,8 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
             description={`시나리오와 인물 자료(있으면 그림까지)로 주요 인물(최대 ${maxCastFor(d.mode)}명)·외형·의상·그림체${story ? "·군중" : ""}·첫 장면을 구성합니다.`}
           />
           <PendingProposal step={0} kinds={["compose_scene"]} />
+          {/* other step-1 proposals (AI와 상의, picture analysis) show whichever tab is open below */}
+          <PendingProposal step={0} except={["compose_scene"]} />
         </section>
 
         <section className="space-y-3" aria-labelledby="base-title">
@@ -236,7 +238,6 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
                         : "인물 설명(특징·외형·의상)과 그림체 초안, 확인 질문을 제안합니다."
                     }
                   />
-                  <PendingProposal step={0} except={["compose_scene"]} />
                 </>
               )}
             </div>

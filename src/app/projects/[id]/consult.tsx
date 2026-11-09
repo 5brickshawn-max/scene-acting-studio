@@ -59,7 +59,21 @@ export function ConsultPanel({ step, onClose }: { step: number; onClose: () => v
                 {(j.status === "queued" || j.status === "running") && <p className="text-muted">생각하는 중… 창을 닫아도 계속됩니다.</p>}
                 {j.status === "failed" && <p className="text-err">{j.error}</p>}
                 {j.status === "done" && out?.proposal ? (
-                  <p className="mt-2 pill pill-accent">수정 제안을 단계 화면에 올렸습니다</p>
+                  j.applied_version !== null ? (
+                    <p className="mt-2 pill pill-ok">제안을 적용했거나 닫았습니다</p>
+                  ) : (
+                    <button
+                      type="button"
+                      className="mt-2 btn btn-sm btn-primary"
+                      onClick={() => {
+                        const el = document.getElementById(`proposal-${j.id}`);
+                        onClose();
+                        setTimeout(() => el?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                      }}
+                    >
+                      단계 화면의 제안 보기 → 골라서 적용
+                    </button>
+                  )
                 ) : null}
               </div>
             </div>

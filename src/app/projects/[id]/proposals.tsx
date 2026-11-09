@@ -37,7 +37,7 @@ function ProposalShell(props: {
   const [busy, setBusy] = useState(false);
   const stale = props.job.based_on_version < doc.version;
   return (
-    <section className="rounded-xl border-2 border-[#f3c9ae] bg-[#fffaf5] p-5 space-y-4" aria-label="AI 제안">
+    <section id={`proposal-${props.job.id}`} className="rounded-xl border-2 border-[#f3c9ae] bg-[#fffaf5] p-5 space-y-4 scroll-mt-24" aria-label="AI 제안">
       <div className="flex flex-wrap items-center gap-2">
         <span className="pill pill-accent">AI 제안 · 검토 대기</span>
         <h3 className="section-title">{props.title}</h3>
