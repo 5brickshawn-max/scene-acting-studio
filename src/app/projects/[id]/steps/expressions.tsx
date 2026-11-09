@@ -829,6 +829,7 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
         <ShotStrip />
         <GuidePanel />
         <SketchGenerator />
+        {conti && <PendingProposal step={1} kinds={["check_sheet"]} />}
         <ol className="grid xl:grid-cols-2 gap-4">
           {d.expressions.map((e, i) => (
             <PanelCard key={e.id} e={e} index={i} />
@@ -867,7 +868,11 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
               : "장면 묘사대로인지, 주요 인물이 섞이지 않았는지, 컷끼리 한 쇼트처럼 이어지는지 확인합니다."
           }
         />
-        <PendingProposal step={1} kinds={["check_sheet"]} />
+        {conti ? (
+          <p className="field-help">검사 결과(글 보정 제안)는 ③ 러프 콘티 생성 바로 아래에 뜹니다.</p>
+        ) : (
+          <PendingProposal step={1} kinds={["check_sheet"]} />
+        )}
       </section>
     </StepFrame>
   );

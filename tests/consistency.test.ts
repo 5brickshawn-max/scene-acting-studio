@@ -160,3 +160,20 @@ describe("prompt wording fixes", () => {
     expect(keepPainted("pink clay")).toBe("");
   });
 });
+
+describe("conti check: text corrections", () => {
+  it("rewrites only the named fields of existing panels and keeps every invariant", async () => {
+    const { applyTextFixes } = await import("@/lib/domain/apply");
+    const d = setExpressionCount(createProjectData("콘티", 1, "storyboard"), 3);
+    const x = applyTextFixes(d, [
+      { panel: 2, field: "action", text: "모래를 움켜쥔 주먹" },
+      { panel: 3, field: "continuity", text: "시작: 엎드림 / 끝: 일어서서 한 걸음" },
+      { panel: 9, field: "camera", text: "없는 컷" },
+    ]);
+    expect(x.expressions[1].action).toBe("모래를 움켜쥔 주먹");
+    expect(x.expressions[2].continuity).toBe("시작: 엎드림 / 끝: 일어서서 한 걸음");
+    expect(x.expressions[0]).toEqual(d.expressions[0]);
+    expect(x.expressions.length).toBe(3);
+    invariants(x, "after text fixes");
+  });
+});

@@ -2,10 +2,11 @@
 import { useState } from "react";
 import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, SceneComposeOutT, SheetCheckOutT, StoryboardOutT } from "@/lib/ai/schemas";
 import { JOB_LABEL, type JobKind } from "@/lib/ai/schemas";
-import { composeStructure, applyActing, applyCharacter, applyComposition, applyDialogue, applyExpressions, applyStoryboard, type CharacterField, type ComposeField } from "@/lib/domain/apply";
+import { composeStructure, applyActing, applyCharacter, applyComposition, applyDialogue, applyExpressions, applyStoryboard, applyTextFixes, type CharacterField, type ComposeField } from "@/lib/domain/apply";
 import { castLabel, FACING_LABEL, GAZE_LABEL, INTENSITY_LABEL, maxCastFor, type ProjectData } from "@/lib/domain/project";
 import type { JobView } from "@/lib/types";
 import { useEditor } from "./editor-context";
+import { SketchRedoButton } from "./steps/higgsfield-direct";
 
 /** The newest AI result for this step that nobody has applied or dismissed yet (optionally of some kinds only). */
 export function usePendingProposal(step: number, show: (kind: string) => boolean = () => true): { job: JobView; proposal: unknown } | null {
@@ -417,9 +418,24 @@ export function StoryboardProposal({ job, out }: { job: JobView; out: Storyboard
   );
 }
 
+const FIX_FIELD_LABEL = { action: "장면 묘사", camera: "카메라", continuity: "연결 상태" } as const;
+
 export function SheetCheckResult({ job, out }: { job: JobView; out: SheetCheckOutT }) {
+  const { doc, canEdit } = useEditor();
+  const apply = useApply(job);
+  const conti = doc.data.mode === "storyboard" && doc.data.expressions.some((e) => e.sketchAssetId);
+  // older results have no text corrections; a correction that already matches the text is done
+  const fixes = (out.textFixes ?? []).filter((f) => doc.data.expressions[f.panel - 1]);
+  const open = fixes.filter((f) => doc.data.expressions[f.panel - 1][f.field].trim() !== f.text.trim());
+  const redraw = [...new Set(out.issues.filter((i) => i.severity === "high" && i.panel).map((i) => i.panel!))];
   return (
-    <ProposalShell job={job} title="표정 시트 검사 결과" summary={out.summary}>
+    <ProposalShell
+      job={job}
+      title={conti ? "러프 콘티 검사 결과" : "표정 시트 검사 결과"}
+      summary={out.summary}
+      onApply={open.length ? () => apply(applyTextFixes(doc.data, open), "콘티 검사: 글을 그림에 맞춤") : undefined}
+      applyLabel={`글 보정 ${open.length}건 모두 수정 적용`}
+    >
       {!out.panelCountMatches && <p className="notice notice-error">칸 수가 표정 개수와 다릅니다.</p>}
       {out.issues.length === 0 ? (
         <p className="notice notice-ok">문제를 찾지 못했습니다.</p>
@@ -432,6 +448,52 @@ export function SheetCheckResult({ job, out }: { job: JobView; out: SheetCheckOu
             </li>
           ))}
         </ul>
+      )}
+      {conti && canEdit && redraw.length > 0 && (
+        <div className="space-y-2">
+          <div className="font-semibold">그림이 장면과 어긋난 컷 — 러프 콘티 다시 그리기</div>
+          <ul className="flex flex-wrap gap-3">
+            {redraw.map((p) => {
+              const e = doc.data.expressions[p - 1];
+              return e ? (
+                <li key={p} className="flex items-center gap-2">
+                  <span className="text-[14px]">{p}번 컷</span>
+                  <SketchRedoButton expressionId={e.id} hasSketch={Boolean(e.sketchAssetId)} />
+                </li>
+              ) : null;
+            })}
+          </ul>
+        </div>
+      )}
+      {fixes.length > 0 && (
+        <div className="space-y-2">
+          <div className="font-semibold">글 보정 제안 — 글이 그림과 달라 영상이 한쪽을 무시할 수 있는 곳</div>
+          <ol className="space-y-2">
+            {fixes.map((f, n) => {
+              const current = doc.data.expressions[f.panel - 1][f.field];
+              const done = current.trim() === f.text.trim();
+              return (
+                <li key={n} className="rounded-lg bg-white border border-line p-3 space-y-1">
+                  <div className="font-semibold">
+                    {f.panel}번 컷 · {FIX_FIELD_LABEL[f.field]}
+                    {done && <span className="pill pill-ok ml-2">적용됨</span>}
+                  </div>
+                  <p className="text-[14px] text-muted">{f.reason}</p>
+                  {!done && <p className="text-[14px] line-through text-muted">{current || "(비어 있음)"}</p>}
+                  <p className="text-[14px]">{f.text}</p>
+                  {canEdit && !done && (
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => doc.edit(1, (d) => applyTextFixes(d, [f]))}
+                    >
+                      이 수정 적용
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </div>
       )}
     </ProposalShell>
   );

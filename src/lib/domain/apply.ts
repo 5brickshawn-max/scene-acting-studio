@@ -255,3 +255,15 @@ export function applyActing(data: ProjectData, out: ActingOutT): ProjectData {
   const segments = weightedSegments(ids, weights, duration, transitions);
   return reopenFrom({ ...data, acting: { duration, segments } }, 3);
 }
+
+/** A check's text correction: one field of one panel rewritten to match its picture (panel counts from 1). */
+export type PanelTextFix = { panel: number; field: "action" | "camera" | "continuity"; text: string };
+
+/** Applies the corrections that still point to an existing panel; the rest of the data stays as it is. */
+export function applyTextFixes(data: ProjectData, fixes: PanelTextFix[]): ProjectData {
+  const expressions = data.expressions.map((e, i) => {
+    const mine = fixes.filter((f) => f.panel === i + 1 && f.text.trim());
+    return mine.length ? mine.reduce((x, f) => ({ ...x, [f.field]: f.text.trim() }), e) : e;
+  });
+  return { ...data, expressions };
+}

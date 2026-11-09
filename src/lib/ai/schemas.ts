@@ -156,6 +156,16 @@ export const SheetCheckOut = z.object({
       message: z.string(),
     }),
   ),
+  textFixes: z
+    .array(
+      z.object({
+        panel: z.number().int().describe("컷 번호 (1부터)"),
+        field: z.enum(["action", "camera", "continuity"]).describe("고칠 칸: action=장면 묘사, camera=카메라, continuity=연결 상태"),
+        text: z.string().describe("그 칸의 새 전체 내용 (한국어, 기존 글의 형식과 나머지 내용은 살림)"),
+        reason: z.string().describe("그림과 글이 어떻게 달랐는지 한 문장"),
+      }),
+    )
+    .describe("스토리보드 방식에서만: 그림이 장면에 맞는데 글이 그림과 다를 때, 글을 그림에 맞추는 수정. 그 밖에는 빈 배열"),
 });
 
 export const DialogueOut = z.object({

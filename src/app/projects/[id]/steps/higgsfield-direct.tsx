@@ -13,7 +13,7 @@ import {
 } from "@/lib/higgsfield/models";
 import type { AssetView, JobView } from "@/lib/types";
 import { AssetPicker } from "../ui";
-import { FRAMING_LABEL, ratioLabel, castLabel, continuityAnchor, imageAspectFor, imageIsStale, timelineOrder, type Framing } from "@/lib/domain/project";
+import { FRAMING_LABEL, ratioLabel, castLabel, continuityAnchor, imageAspectFor, imageIsStale, timelineOrder, usesConti, type Framing } from "@/lib/domain/project";
 import { useEditor } from "../editor-context";
 
 type Quote = { credits: number | null; each?: number | null; count?: number; balance: number | null; workspace: string | null; model: string; references: number };
@@ -268,7 +268,7 @@ export function SceneImageGenerator({ onUse }: { onUse: (assetId: string) => voi
  * its panel's 러프 스케치 slot (newest wins); a panel can then be redone alone or replaced by hand.
  */
 export function SketchGenerator() {
-  const { doc, canEdit, jobs } = useEditor();
+  const { doc, canEdit, jobs, assets, askAi } = useEditor();
   const h = useHfJobs("hf_sketch");
   const [model, setModel] = useState<ImageModelKey>("gpt_image_2_6");
   const exps = doc.data.expressions;
@@ -298,6 +298,31 @@ export function SketchGenerator() {
   }, [h.pending, canEdit, doc, markApplied, version]);
 
   const runningFor = (id: string) => h.running.some((j) => (j.input as { expressionId?: string }).expressionId === id);
+
+  // Once every cut has its sketch (nothing generating), the AI conti check runs by itself once per set:
+  // it compares each sketch with its cut's text and proposes text corrections where they differ.
+  const lastCheck = jobs.jobs.find((j) => j.kind === "check_sheet");
+  const sketches = drawable.map((e) => (e.sketchAssetId ? assets.get(e.sketchAssetId) : undefined));
+  const newestSketch = Math.max(0, ...sketches.map((a) => (a ? Date.parse(a.createdAt) : 0)));
+  const sketchKey = drawable.map((e) => e.sketchAssetId ?? "").join(",");
+  const checkDue =
+    canEdit &&
+    usesConti(doc.data) &&
+    drawable.length > 0 &&
+    sketches.every(Boolean) &&
+    !h.running.length &&
+    !h.pending.length &&
+    !h.quote &&
+    lastCheck?.status !== "queued" &&
+    lastCheck?.status !== "running" &&
+    (!lastCheck || Date.parse(lastCheck.created_at) < newestSketch);
+  const autoChecked = useRef(new Set<string>());
+  useEffect(() => {
+    if (!checkDue || autoChecked.current.has(sketchKey)) return;
+    autoChecked.current.add(sketchKey);
+    void askAi("check_sheet", 1);
+  }, [checkDue, sketchKey, askAi]);
+  const checking = lastCheck && (lastCheck.status === "queued" || lastCheck.status === "running");
 
   return (
     <div className="rounded-lg border border-line bg-[#f7fbf5] p-4 space-y-3" aria-labelledby="hf-sketch">
@@ -334,6 +359,13 @@ export function SketchGenerator() {
       <QuoteBox h={h} />
       <Status h={h} typical="20초~1분" />
       {h.running.length > 0 && <p className="field-help" aria-live="polite">생성 중: {exps.filter((e) => runningFor(e.id)).map((e) => `${exps.indexOf(e) + 1}번`).join(", ")} 컷</p>}
+      {usesConti(doc.data) && (
+        <p className="field-help" aria-live="polite">
+          {checking
+            ? "AI가 러프 콘티와 컷 글을 비교하는 중… 끝나면 아래에 글 보정 제안이 뜹니다."
+            : "러프 콘티가 모두 생기면 AI가 그림과 컷 글(장면 묘사·카메라·연결 상태)을 자동으로 비교해, 다른 곳을 글 보정 제안으로 띄웁니다."}
+        </p>
+      )}
     </div>
   );
 }
