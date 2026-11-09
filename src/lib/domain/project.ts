@@ -475,6 +475,9 @@ export const round3 = (v: number) => Math.round(v * 1000) / 1000;
 export const MIN_EXPRESSIONS = 2;
 /** beats per scene (one Higgsfield batch holds 12 images) */
 export const MAX_EXPRESSIONS = 8;
+/** Storyboard scenes keep fewer panels (each one is a whole picture with its own continuity). */
+export const MAX_PANELS_STORYBOARD = 6;
+export const maxPanelsFor = (mode: SceneMode) => (mode === "storyboard" ? MAX_PANELS_STORYBOARD : MAX_EXPRESSIONS);
 export const MAX_VIDEO_SECONDS = 60;
 
 /** Contiguous segments for `ids` (in order) sized by `weights`, snapped to 0.1s, ending exactly at `duration`. */
@@ -554,7 +557,7 @@ export const sameTiming = (a: ProjectData["acting"]["segments"], b: ProjectData[
 
 /** Resize the expression list to `count`, keeping existing entries. */
 export function setExpressionCount(data: ProjectData, count: number): ProjectData {
-  const c = Math.min(MAX_EXPRESSIONS, Math.max(MIN_EXPRESSIONS, Math.round(count)));
+  const c = Math.min(maxPanelsFor(data.mode), Math.max(MIN_EXPRESSIONS, Math.round(count)));
   const expressions = Array.from(
     { length: c },
     (_, i) => data.expressions[i] ?? withReactionsFor(data.cast, blankExpression(i + 1, data.cast[i % data.cast.length]?.id ?? "")),
@@ -797,8 +800,8 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
     if (!isStoryboard(data) && data.cast.length > 1 && new Set(pos).size !== pos.length) warn("두 인물의 화면 위치가 같습니다. 겹쳐 서는 연출이 아니라면 위치를 나누세요.");
   }
 
-  if (step === 1 && data.expressions.length > MAX_EXPRESSIONS)
-    block(`${isStoryboard(data) ? "컷" : "표정"}이 ${data.expressions.length}개입니다. 한 장면은 최대 ${MAX_EXPRESSIONS}개입니다. 2단계 ①에서 ${MAX_EXPRESSIONS}개 이하로 줄이세요(뒤쪽부터 빠지니, 줄인 뒤 ‘처음부터 다시 설계’를 권장).`);
+  if (step === 1 && data.expressions.length > maxPanelsFor(data.mode))
+    block(`${isStoryboard(data) ? "컷" : "표정"}이 ${data.expressions.length}개입니다. ${isStoryboard(data) ? "스토리보드" : "한"} 장면은 최대 ${maxPanelsFor(data.mode)}개입니다. 2단계 ①에서 ${maxPanelsFor(data.mode)}개 이하로 줄이세요(뒤쪽부터 빠지니, 줄인 뒤 ‘처음부터 다시 설계’를 권장).`);
   if (step === 1 && isStoryboard(data)) {
     // storyboard: each panel is described as a whole; no per-character acting or direction checks
     if (data.expressions.length !== data.expressionSetup.count) block("컷 수가 설정과 다릅니다.");

@@ -19,7 +19,8 @@ import { IMAGE_MODELS, VIDEO_MODELS, isImageModel, isVideoModel, videoDuration }
 const TERMINAL_FAIL = new Set(["failed", "nsfw", "canceled", "cancelled", "ip_detected", "error"]);
 
 export type GenSpec =
-  | { target: "expressions"; model: string; expressionIds?: string[] }
+  /** fixes: per panel, the AI picture review's notes to correct in the redraw */
+  | { target: "expressions"; model: string; expressionIds?: string[]; fixes?: Record<string, string> }
   /** 러프 콘티: rough line sketches of storyboard panels (all, or the listed ones) */
   | { target: "sketch"; model: string; expressionIds?: string[] }
   | { target: "video"; model: string; resolution: string }
@@ -61,7 +62,7 @@ async function plan(projectId: string, spec: GenSpec, data: ProjectData): Promis
     if (!data.baseAssetId) throw new Error(data.cast.length > 1 ? "1단계에서 장면 기준 그림을 먼저 올리세요." : "1단계에서 기본 그림을 먼저 올리세요.");
     const m = IMAGE_MODELS[spec.model];
     const wanted = spec.expressionIds?.length ? new Set(spec.expressionIds) : null;
-    const items = buildExpressionHandoffs(data)
+    const items = buildExpressionHandoffs(data, spec.fixes ?? {})
       .filter((h) => !wanted || wanted.has(h.expressionId))
       .map((h) => ({
         params: { ...m.params, prompt: h.prompt, aspect_ratio: h.aspectRatio },

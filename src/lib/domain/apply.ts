@@ -4,6 +4,7 @@ import { MAX_PRINCIPLES, principleOf } from "./principles";
 import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, SceneComposeOutT, StoryboardOutT } from "@/lib/ai/schemas";
 import {
   MAX_EXPRESSIONS,
+  MAX_PANELS_STORYBOARD,
   MAX_VIDEO_SECONDS,
   MIN_EXPRESSIONS,
   round3,
@@ -53,9 +54,10 @@ export function composeStructure(data: Pick<ProjectData, "mode">, out: Pick<Scen
   const panels: { title: string; shot: number; weight: number }[] = [];
   shots.forEach((s, k) => s.panels.forEach((t) => panels.push({ title: t, shot: k, weight: Math.max(0.2, s.seconds || 1) / s.panels.length })));
   const total = panels.length;
-  const kept = panels.slice(0, MAX_EXPRESSIONS);
+  const max = story ? MAX_PANELS_STORYBOARD : MAX_EXPRESSIONS;
+  const kept = panels.slice(0, max);
   const duration = round3(Math.min(MAX_VIDEO_SECONDS, Math.max(1, out.duration || kept.reduce((a, p) => a + p.weight, 0))));
-  return { story, shots: shots.length, panels: kept, total, clipped: total > MAX_EXPRESSIONS, tooFew: kept.length < MIN_EXPRESSIONS, duration };
+  return { story, shots: new Set(kept.map((p) => p.shot)).size, panels: kept, total, clipped: total > max, max, tooFew: kept.length < MIN_EXPRESSIONS, duration };
 }
 
 /**

@@ -16,7 +16,12 @@ async function guard(projectId: string) {
 }
 
 const Spec = z.discriminatedUnion("target", [
-  z.object({ target: z.literal("expressions"), model: z.string().max(64), expressionIds: z.array(z.string().max(64)).max(12).optional() }),
+  z.object({
+    target: z.literal("expressions"),
+    model: z.string().max(64),
+    expressionIds: z.array(z.string().max(64)).max(12).optional(),
+    fixes: z.record(z.string().max(64), z.string().max(3000)).optional(),
+  }),
   z.object({ target: z.literal("sketch"), model: z.string().max(64), expressionIds: z.array(z.string().max(64)).max(12).optional() }),
   z.object({ target: z.literal("video"), model: z.string().max(64), resolution: z.string().max(16) }),
   z.object({ target: z.literal("finalize"), draftRowId: z.string().uuid() }),

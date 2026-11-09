@@ -3,7 +3,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { z } from "zod";
 import sharp from "sharp";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { readProjectData, castLabel, effectiveText, maxCastFor, MAX_EXPRESSIONS, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
+import { readProjectData, castLabel, effectiveText, maxCastFor, MAX_EXPRESSIONS, MAX_PANELS_STORYBOARD, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
 import {
   ActingOut,
   CharacterOut,
@@ -251,7 +251,7 @@ async function buildRequest(job: JobRow, data: ProjectData) {
               `- 설정화가 없는 인물은 팀 메모를 따르고, 없는 부분은 시나리오의 시대·장소·분위기에 맞게 정하되 지어낸 핵심 결정은 questions에 '…로 정했습니다, 맞나요?'처럼 남기세요.\n` +
               `- style: ${data.baseAssetId || refs.length ? "참고 그림의 그림체를 따라" : "시나리오의 장르·분위기에 맞는 2D 애니메이션 그림체로"} 선·채색·명암·색감을 구체적으로.\n` +
               (data.mode === "storyboard"
-                ? `- shots: 시나리오를 쇼트(컷 분할)로 나누세요. 쇼트 사이는 컷으로 끊깁니다. 시나리오가 '세 컷이 1초씩', '완전 부감', '클로즈업으로' 처럼 화면을 바꾸면 새 쇼트, 한 쇼트 안에서 카메라가 움직여 구도가 바뀌면 그 쇼트의 패널을 늘리세요(머무는 쇼트는 패널 1개). 패널 합계는 2~${MAX_EXPRESSIONS}개입니다. seconds는 쇼트 길이, 합이 duration과 같게.\n`
+                ? `- shots: 시나리오를 쇼트(컷 분할)로 나누세요. 쇼트 사이는 컷으로 끊깁니다. 시나리오가 '세 컷이 1초씩', '완전 부감', '클로즈업으로' 처럼 화면을 바꾸면 새 쇼트, 한 쇼트 안에서 카메라가 움직여 구도가 바뀌면 그 쇼트의 패널을 늘리세요(머무는 쇼트는 패널 1개). 패널 합계는 2~${MAX_PANELS_STORYBOARD}개입니다(스토리보드는 최대 ${MAX_PANELS_STORYBOARD}컷 — 시나리오가 길면 비슷한 순간을 한 컷으로 묶으세요). seconds는 쇼트 길이, 합이 duration과 같게.\n`
                 : `- shots: 인물별 연기 방식은 컷 없는 한 쇼트입니다. 쇼트 1개에 표정 비트(감정이 바뀌는 순간)를 패널로 2~${MAX_EXPRESSIONS}개 적으세요.\n`) +
               `- duration: 장면 길이(초). 시나리오에 타임코드(예: 02:02~02:18)가 있으면 그 길이로, 60초를 넘기지 마세요.\n` +
               `- extras: 이름 없는 사람들(군중·행인·병사 등)만. 사람이 없으면 빈 문자열로 두고, 배경·풍경은 opening에 쓰세요.\n` +

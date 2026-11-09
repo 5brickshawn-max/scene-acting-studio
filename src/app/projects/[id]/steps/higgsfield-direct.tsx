@@ -17,7 +17,7 @@ import { useEditor } from "../editor-context";
 
 type Quote = { credits: number | null; each?: number | null; count?: number; balance: number | null; workspace: string | null; model: string; references: number };
 type Spec =
-  | { target: "expressions"; model: string; expressionIds?: string[] }
+  | { target: "expressions"; model: string; expressionIds?: string[]; fixes?: Record<string, string> }
   | { target: "sketch"; model: string; expressionIds?: string[] }
   | { target: "video"; model: string; resolution: string }
   | { target: "finalize"; draftRowId: string }
@@ -389,6 +389,27 @@ export function HiggsfieldDirect({
   const runningFor = (id: string) => h.running.some((j) => (j.input as { expressionId?: string }).expressionId === id);
   const stale = exps.filter((e) => imageIsStale(e, framing, aspect)).length;
 
+  // the newest AI picture review: its notes per panel, for panels whose image has not been redrawn since
+  const review = jobs.jobs.find((j) => j.kind === "check_sheet" && j.status === "done");
+  const reviewFix = (() => {
+    const out = review?.output as { issues?: { panel: number | null; severity: "high" | "low"; message: string }[] } | null;
+    const by = new Map<string, { text: string[]; high: boolean }>();
+    for (const i of out?.issues ?? []) {
+      const e = i.panel ? exps[i.panel - 1] : undefined;
+      if (!e) continue;
+      const img = e.imageAssetId ? assets.get(e.imageAssetId) : undefined;
+      if (img && review && Date.parse(img.createdAt) > Date.parse(review.created_at)) continue;
+      const cur = by.get(e.id) ?? { text: [], high: false };
+      cur.text.push(i.message);
+      cur.high ||= i.severity === "high";
+      by.set(e.id, cur);
+    }
+    const list = exps.filter((e) => by.has(e.id)).map((e) => ({ id: e.id, text: by.get(e.id)!.text.join(" / "), high: by.get(e.id)!.high }));
+    return { list, ids: list.map((r) => r.id), high: list.filter((r) => r.high).map((r) => r.id), fixes: Object.fromEntries(list.map((r) => [r.id, r.text])) };
+  })();
+  const askFix = (ids: string[]) =>
+    h.askQuote({ target: "expressions", model, expressionIds: ids, fixes: Object.fromEntries(ids.map((id) => [id, reviewFix.fixes[id]])) });
+
   // 연결성 우선 (storyboard): panels drawn one at a time in timeline order, each seeing the panel before it
   const story = data.mode === "storyboard";
   const order = data.acting.segments.map((sg) => sg.expressionId).filter((id) => exps.some((e) => e.id === id));
@@ -536,6 +557,34 @@ export function HiggsfieldDirect({
         </div>
       </div>
 
+      {canEdit && !h.quote && !seq && reviewFix.ids.length > 0 && (
+        <div className="rounded-lg border-2 border-[#f3c9ae] bg-[#fffaf5] p-3 space-y-2">
+          <div className="font-semibold">AI 그림 검사에서 지적된 {data.mode === "storyboard" ? "컷" : "표정"}을 지적 내용대로 다시 생성</div>
+          <ul className="text-[14px] space-y-1">
+            {reviewFix.list.map((r) => (
+              <li key={r.id}>
+                <strong>{numberOf(r.id)}번</strong>
+                {r.high ? <span className="pill pill-warn ml-1">심각</span> : null} {r.text.slice(0, 160)}
+                {r.text.length > 160 ? "…" : ""}
+              </li>
+            ))}
+          </ul>
+          <p className="field-help">
+            검사 내용이 그 {data.mode === "storyboard" ? "컷" : "표정"}의 프롬프트에 ‘고칠 점’으로 들어가고, 바로 앞 컷 그림과 연결 상태를 보고 다시 그립니다. 결과는 카드에서 골라 사용하세요.
+            검사 뒤에 이미 다시 만든 그림은 빠집니다.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {reviewFix.high.length > 0 && (
+              <button className="btn btn-dark" disabled={!ready} onClick={() => askFix(reviewFix.high)}>
+                {h.busy ? "비용 확인 중…" : `심각한 지적만 다시 생성 (${reviewFix.high.length}장)`}
+              </button>
+            )}
+            <button className={reviewFix.high.length ? "btn btn-sm" : "btn btn-dark"} disabled={!ready} onClick={() => askFix(reviewFix.ids)}>
+              지적된 것 모두 다시 생성 ({reviewFix.ids.length}장)
+            </button>
+          </div>
+        </div>
+      )}
       {story && !h.quote && !seq && order.length > 1 && (
         <div className="rounded-lg border border-line bg-white p-3 space-y-2">
           <div className="font-semibold">연결성 우선: 앞 컷부터 한 장씩 차례로 생성</div>

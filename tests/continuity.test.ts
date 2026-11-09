@@ -88,3 +88,31 @@ describe("panel references follow the shot (no night picture in a dawn shot)", (
     expect(hs[2].prompt).toContain("except what this moment changes (a hood taken off, hands let go");
   });
 });
+
+describe("hook-up in words and review corrections", async () => {
+  const { endState } = await import("@/lib/domain/handoff");
+  it("each panel starts from the previous panel's end state, and review notes go into a redraw", () => {
+    expect(endState("시작: 왼쪽에 섬 / 끝: 오른쪽으로 한 걸음, 후드를 벗음")).toBe("오른쪽으로 한 걸음, 후드를 벗음");
+    expect(endState("Start: left / End: hood off, hands let go")).toBe("hood off, hands let go");
+    expect(endState("둘이 마주 봄")).toBe("둘이 마주 봄");
+    const d = board();
+    d.expressions[0].continuity = "시작: 손을 잡고 달림 / 끝: 손을 놓고 멈춤";
+    const hs = buildExpressionHandoffs(d, { [d.expressions[1].id]: "후드가 다시 씌워져 있음 — 어깨에 걸친 상태로" });
+    expect(hs[1].prompt).toContain("The previous panel (panel 1) ended like this — start this moment from it: 손을 놓고 멈춤.");
+    expect(hs[1].prompt).toContain("Corrections from the review of the previous version of this panel (fix all of these; keep everything else): 후드가 다시 씌워져 있음");
+    expect(hs[0].prompt).not.toContain("Corrections from the review");
+  });
+});
+
+describe("storyboard panel limit (6)", async () => {
+  const { MAX_PANELS_STORYBOARD, maxPanelsFor, stepIssues } = await import("@/lib/domain/project");
+  it("storyboard scenes take at most six panels; character scenes keep eight", () => {
+    expect(MAX_PANELS_STORYBOARD).toBe(6);
+    expect(maxPanelsFor("cast")).toBe(8);
+    expect(setExpressionCount(createProjectData("x", 1, "storyboard"), 8).expressions).toHaveLength(6);
+    expect(setExpressionCount(createProjectData("x", 1, "cast"), 8).expressions).toHaveLength(8);
+    const d = createProjectData("x", 1, "storyboard");
+    const seven = { ...d, expressions: Array.from({ length: 7 }, (_, i) => ({ ...d.expressions[0], id: `p${i}` })) };
+    expect(stepIssues(seven, 1).some((i) => i.level === "block" && i.message.includes("최대 6개"))).toBe(true);
+  });
+});

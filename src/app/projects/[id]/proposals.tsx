@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, SceneComposeOutT, SheetCheckOutT, StoryboardOutT } from "@/lib/ai/schemas";
 import { JOB_LABEL, type JobKind } from "@/lib/ai/schemas";
 import { composeStructure, applyActing, applyCharacter, applyComposition, applyDialogue, applyExpressions, applyStoryboard, type CharacterField, type ComposeField } from "@/lib/domain/apply";
-import { castLabel, FACING_LABEL, GAZE_LABEL, INTENSITY_LABEL, MAX_EXPRESSIONS, maxCastFor, type ProjectData } from "@/lib/domain/project";
+import { castLabel, FACING_LABEL, GAZE_LABEL, INTENSITY_LABEL, maxCastFor, type ProjectData } from "@/lib/domain/project";
 import type { JobView } from "@/lib/types";
 import { useEditor } from "./editor-context";
 
@@ -270,7 +270,7 @@ export function ComposeProposal({ job, out }: { job: JobView; out: SceneComposeO
                 ))}
               </ol>
             )}
-            {st.clipped && <span className="block notice notice-warn">패널이 {st.total}개라 앞의 {MAX_EXPRESSIONS}개만 들어갑니다(한 장면 최대 {MAX_EXPRESSIONS}개). 장면을 둘로 나누는 것도 방법입니다.</span>}
+            {st.clipped && <span className="block notice notice-warn">패널이 {st.total}개라 앞의 {st.max}개만 들어갑니다(한 장면 최대 {st.max}개). 장면을 둘로 나누는 것도 방법입니다.</span>}
             {st.duration > 30 && <span className="block notice notice-warn">{st.duration}초는 영상 모델 한도(Kling·Seedance 30초, Gemini Omni·MiniMax 15초)를 넘습니다. 생성할 때 모델 한도로 잘립니다.</span>}
           </ComposeRow>
         )}

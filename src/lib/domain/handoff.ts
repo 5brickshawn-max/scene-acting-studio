@@ -331,8 +331,8 @@ export type ExpressionHandoff = {
  * Several: a scene frame of the whole cast at the video's aspect ratio, in fixed screen positions;
  * the beat's actor performs, the others react.
  */
-export function buildExpressionHandoffs(data: ProjectData): ExpressionHandoff[] {
-  if (isStoryboard(data)) return buildStoryboardHandoffs(data);
+export function buildExpressionHandoffs(data: ProjectData, fixes: Record<string, string> = {}): ExpressionHandoff[] {
+  if (isStoryboard(data)) return buildStoryboardHandoffs(data, fixes);
   const s = data.expressionSetup;
   const framing = s.framing;
   const hands = showsHands(framing);
@@ -396,6 +396,7 @@ export function buildExpressionHandoffs(data: ProjectData): ExpressionHandoff[] 
           hands ? ", arms and hands" : ""
         } change.`,
         `No text, no labels, no borders.`,
+        fixes[e.id]?.trim() && `Corrections from the review of the previous version of this image (fix all of these; keep everything else): ${sentence(clean(fixes[e.id]).slice(0, 900))}`,
       ]
         .filter(Boolean)
         .join("\n");
@@ -434,6 +435,7 @@ export function buildExpressionHandoffs(data: ProjectData): ExpressionHandoff[] 
         hands ? ", arms and hands" : ""
       } change.`,
       `No text, no labels, no name tags, no borders.`,
+      fixes[e.id]?.trim() && `Corrections from the review of the previous version of this image (fix all of these; keep everything else): ${sentence(clean(fixes[e.id]).slice(0, 900))}`,
     ]
       .filter(Boolean)
       .join("\n");
@@ -1200,6 +1202,12 @@ function panelTexts(data: ProjectData, e: Expression, en: ReturnType<typeof fres
   };
 }
 
+/** The "끝 / End" part of a hook-up state ("시작: … / 끝: …"), or the whole text when it has no such parts. */
+export function endState(state: string): string {
+  const m = state.split(/(?:끝|End|end)\s*[:：]/);
+  return clean(m.length > 1 ? m[m.length - 1] : state);
+}
+
 /** The scene's continuity rules (연결 규칙), English where fresh. */
 const continuityRules = (data: ProjectData, en: ReturnType<typeof freshEnglish>) => en.continuity ?? clean(data.expressionSetup.continuity);
 
@@ -1212,7 +1220,7 @@ function storyboardRefs(data: ProjectData): ReferenceSlot[] {
   return refs;
 }
 
-function buildStoryboardHandoffs(data: ProjectData): ExpressionHandoff[] {
+function buildStoryboardHandoffs(data: ProjectData, fixes: Record<string, string> = {}): ExpressionHandoff[] {
   const aspect = data.video.aspectRatio;
   const en = freshEnglish(data);
   const style = en.style ?? clean(data.style);
@@ -1250,6 +1258,9 @@ function buildStoryboardHandoffs(data: ProjectData): ExpressionHandoff[] {
       });
     if (usesPrev) references.push({ role: `image reference ${references.length + 1}`, assetId: prev!.imageAssetId!, why: `바로 앞: ${prevNo}번 컷 그림 (연결성)` });
     const prevRef = usesPrev ? references.length : 0;
+    // the hook-up in words: where the previous panel left everyone (this panel starts from it)
+    const prevEnd = prev ? endState(panelTexts(data, prev, en).state) : "";
+    const fix = clean(fixes[e.id] ?? "");
     const rules = continuityRules(data, en);
     const line = data.dialogue.lines.find((l) => l.expressionId === e.id)?.line.trim();
     const prompt = [
@@ -1277,6 +1288,8 @@ function buildStoryboardHandoffs(data: ProjectData): ExpressionHandoff[] {
             ? ". This panel opens a new shot after a hard cut: a NEW camera position and framing — do not repeat that picture's composition, framing or background view"
             : ". This panel is in the same shot: the camera has moved on to this panel's own framing, so the picture must look clearly different from that one (closer, wider or from another angle as described) — not the same composition again"
         }.`,
+      prevEnd && `The previous panel (panel ${prevNo}) ended like this — start this moment from it: ${sentence(prevEnd)}`,
+      fix && `Corrections from the review of the previous version of this panel (fix all of these; keep everything else): ${sentence(fix.slice(0, 900))}`,
       (usesAnchor || usesPrev) &&
         "When a reference picture disagrees with this moment's description or continuity (an earlier costume or prop state, another place or time of day), the description and continuity win; faces, hair and costume designs always come from the design sheets.",
       rules && `Continuity rules of this scene (every panel keeps them): ${clip(rules, 600) || rules.slice(0, 600)}`,
