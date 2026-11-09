@@ -11,8 +11,9 @@ import {
   type ImageModelKey,
   type VideoModelKey,
 } from "@/lib/higgsfield/models";
-import type { JobView } from "@/lib/types";
-import { FRAMING_LABEL, castLabel, continuityAnchor, imageAspectFor, imageIsStale, timelineOrder, type Framing } from "@/lib/domain/project";
+import type { AssetView, JobView } from "@/lib/types";
+import { AssetPicker } from "../ui";
+import { FRAMING_LABEL, ratioLabel, castLabel, continuityAnchor, imageAspectFor, imageIsStale, timelineOrder, type Framing } from "@/lib/domain/project";
 import { useEditor } from "../editor-context";
 
 type Quote = { credits: number | null; each?: number | null; count?: number; balance: number | null; workspace: string | null; model: string; references: number };
@@ -365,7 +366,7 @@ export function HiggsfieldDirect({
 }: {
   onUse: (expressionId: string, assetId: string, framing: Framing | null, aspect: string | null) => void;
 }) {
-  const { doc, canEdit, assets, jobs, askAi } = useEditor();
+  const { doc, canEdit, assets, addAsset, jobs, askAi } = useEditor();
   const h = useHfJobs("hf_expr");
   const [model, setModel] = useState<ImageModelKey>("nano_banana_2_1");
   // ① → ②: once the anchor image is chosen, the cost check for the rest opens by itself
@@ -378,6 +379,29 @@ export function HiggsfieldDirect({
   const aspectCss = aspect.replace(":", "/");
   // The continuity anchor (연결 기준 그림): every other expression is drawn to match it.
   const anchor = continuityAnchor(data);
+  // 기존 자료에서 선택 / 연결 해제 on each card
+  const [picking, setPicking] = useState<string | null>(null);
+  const setOwnImage = (id: string, assetId: string | null, aspectOf: string | null) =>
+    doc.edit(1, (d) => ({
+      ...d,
+      expressions: d.expressions.map((x) =>
+        x.id === id
+          ? { ...x, imageAssetId: assetId, imageFraming: assetId ? d.expressionSetup.framing : null, imageAspect: assetId ? aspectOf : null }
+          : x,
+      ),
+    }));
+  const pick = (id: string, a: AssetView) => {
+    const known = a.width && a.height ? ratioLabel(a.width, a.height) : null;
+    setOwnImage(id, a.id, known);
+    // No stored size: read it from the image itself.
+    if (!known && a.previewUrl) {
+      const img = new Image();
+      img.onload = () => {
+        if (img.naturalWidth && img.naturalHeight) setOwnImage(id, a.id, ratioLabel(img.naturalWidth, img.naturalHeight));
+      };
+      img.src = a.previewUrl;
+    }
+  };
   const first = timelineOrder(data)[0];
   const numberOf = (id: string) => exps.findIndex((e) => e.id === id) + 1;
   // To (re)make next to the anchor: no image yet, or made at another shot size / aspect ratio.
@@ -727,10 +751,33 @@ export function HiggsfieldDirect({
                   {current ? "이 표정만 다시 생성" : "이 표정만 생성"}
                 </button>
               )}
+              {canEdit && (
+                <div className="flex gap-2">
+                  <button className="btn btn-sm flex-1" onClick={() => setPicking(e.id)}>
+                    기존 자료에서 선택
+                  </button>
+                  {current && (
+                    <button className="btn btn-sm btn-ghost" onClick={() => setOwnImage(e.id, null, null)}>
+                      연결 해제
+                    </button>
+                  )}
+                </div>
+              )}
             </li>
           );
         })}
       </ol>
+      {picking && (
+        <AssetPicker
+          kinds={["sheet", "expression_ref", "acting_ref", "design_ref", "base"]}
+          onClose={() => setPicking(null)}
+          onPick={(a) => {
+            addAsset(a);
+            pick(picking, a);
+            setPicking(null);
+          }}
+        />
+      )}
       <p className="field-help">사용하지 않은 결과도 자료함에 남습니다. 모델을 바꿔 같은 표정을 다시 생성해 비교할 수 있습니다.</p>
     </section>
   );
