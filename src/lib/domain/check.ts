@@ -157,8 +157,9 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
     add(
       "warn",
       "상황 설정",
-      "상황 설정에 카메라 움직임이 있지만 영상 프롬프트에는 들어가지 않습니다. 영상에 넣으려면 추가 연출에 적으세요.",
-      moves ? { kind: "append_direction", text: moves, label: "추가 연출로 옮기기" } : undefined,
+      "상황 설정에 카메라 움직임이 있지만 영상 프롬프트에는 들어가지 않습니다. 영상에 넣으려면 2단계 컷 카드의 카메라 칸에 적으세요.",
+      // the director's field is gone: the move belongs in the panels' camera text
+      moves ? { kind: "goto", step: 1, label: "2단계 카메라로" } : undefined,
     );
   }
 

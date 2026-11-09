@@ -101,13 +101,14 @@ describe("render check fixes", () => {
     expect(preRenderCheck(fixed, buildVideoHandoff(fixed)).some((i) => i.area === "추가 연출 시간")).toBe(false);
   });
 
-  it("moves the scene's camera sentences into 추가 연출", () => {
+  it("points the scene's camera sentences to the panels' camera text (the director's field is gone)", () => {
     const d = project();
     d.video.extraDirection = "배경은 사막";
     d.expressionSetup.scene = "반투명 베일 너머로 보이는 스와르다의 이목구비. 베일이 숨결에 미세하게 흔들린다. 천천히 트랙아웃(클로즈업에서 바스트쇼트로)\n스와르다 : “사람들은 나의 아름다움을 축복이라 불렀다.”";
     expect(sceneCameraSentences(d.expressionSetup.scene)).toBe("천천히 트랙아웃(클로즈업에서 바스트쇼트로)");
     const item = preRenderCheck(d, buildVideoHandoff(d)).find((i) => i.area === "상황 설정");
-    expect(item?.fix).toEqual({ kind: "append_direction", text: "천천히 트랙아웃(클로즈업에서 바스트쇼트로)", label: "추가 연출로 옮기기" });
+    expect(item?.fix).toEqual({ kind: "goto", step: 1, label: "2단계 카메라로" });
+    expect(item?.text).toContain("2단계 컷 카드의 카메라 칸에 적으세요");
     const moved = appendDirection(d, "천천히 트랙아웃(클로즈업에서 바스트쇼트로)");
     expect(moved.video.extraDirection).toBe("배경은 사막\n\n천천히 트랙아웃(클로즈업에서 바스트쇼트로)");
     expect(preRenderCheck(moved, buildVideoHandoff(moved)).some((i) => i.area === "상황 설정")).toBe(false);

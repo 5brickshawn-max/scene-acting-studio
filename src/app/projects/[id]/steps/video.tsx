@@ -5,7 +5,7 @@ import { usesConti, type ProjectData, type StepIndex } from "@/lib/domain/projec
 import type { CheckFix, CheckItem } from "@/lib/domain/check";
 import { appendDirection, applyRetime, applyTextFix, fixState, fixWhere, promptFixRows, removePromptFix, type CheckTextFix } from "@/lib/domain/fixes";
 import { useEditor } from "../editor-context";
-import { AiAction, CopyButton, Field, ImageSlot, Seg } from "../ui";
+import { AiAction, CopyButton, ImageSlot, Seg } from "../ui";
 import { StepFrame } from "./step-frame";
 import { FrameMaker, HiggsfieldVideo } from "./higgsfield-direct";
 import { uploadAsset } from "@/lib/upload";
@@ -408,15 +408,20 @@ export function VideoStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }
               안팎)은 4단계 시간 분배에서 짧게 주고, 나머지 시간은 다른 동작으로 채우세요.
             </p>
           </div>
-          <Field
-            label="추가 연출 (선택) · 감독 지시"
-            multiline
-            rows={6}
-            value={data.video.extraDirection}
-            onChange={(v) => setVideo({ extraDirection: v })}
-            placeholder={"예:\nCAMERA\nContinuous single take. Eye-level Steadicam, physically traveling straight backward.\n0–3s: close-up on the face. 3–8s: eases back to a bust shot.\nLIGHT\nWarm key from screen-left, golden rim light."}
-            help="프롬프트에 줄이지 않고 그대로 들어갑니다(줄바꿈 유지). 카메라 장비·움직임·각도·배경은 앱의 기본 문장보다 우선합니다. 카메라 시간(예: 0–3s)은 영상 길이에 맞춰 쓰세요."
-          />
+          {/* the director's field was removed; a text left from before still goes into the prompt, so it stays visible and removable */}
+          {data.video.extraDirection.trim() && (
+            <div className="notice notice-warn space-y-2">
+              <p>
+                예전에 적어 둔 <strong>추가 연출</strong>이 남아 있어 영상 프롬프트에 들어가고 있습니다(이 칸은 없어졌습니다). 필요 없으면 비우세요.
+              </p>
+              <pre className="whitespace-pre-wrap text-[13px] max-h-32 overflow-y-auto">{data.video.extraDirection}</pre>
+              {canEdit && (
+                <button type="button" className="btn btn-sm" onClick={() => setVideo({ extraDirection: "" })}>
+                  추가 연출 비우기
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <PromptApplyBar vp={vp} />
         <EnglishBar />
