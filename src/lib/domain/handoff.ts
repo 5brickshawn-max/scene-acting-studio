@@ -1217,7 +1217,6 @@ function buildStoryboardHandoffs(data: ProjectData): ExpressionHandoff[] {
   const en = freshEnglish(data);
   const style = en.style ?? clean(data.style);
   const anchor = continuityAnchor(data);
-  const anchorNo = anchor ? data.expressions.findIndex((x) => x.id === anchor.id) + 1 : 0;
   const n = data.expressions.length;
   const shots = shotsOf(data);
   const cuts = cutBefore(data);
@@ -1228,43 +1227,64 @@ function buildStoryboardHandoffs(data: ProjectData): ExpressionHandoff[] {
     const references = storyboardRefs(data);
     const sketchNo = e.sketchAssetId ? references.length + 1 : 0;
     if (e.sketchAssetId) references.push({ role: `image reference ${sketchNo}`, assetId: e.sketchAssetId, why: `${i + 1}번 컷 러프 스케치 — 구도·자세·카메라만` });
-    const usesAnchor = Boolean(anchor?.imageAssetId && anchor.id !== e.id);
-    if (usesAnchor) references.push({ role: `image reference ${references.length + 1}`, assetId: anchor!.imageAssetId!, why: `연결 기준: ${anchorNo}번 컷 그림 (같은 쇼트의 다른 순간)` });
     // the panel just before this one in the timeline (when drawn): costumes, props, positions and light carry on from it
     const order = data.acting.segments.map((sg) => sg.expressionId);
     const prevId = order[order.indexOf(e.id) - 1];
     const prev = prevId ? data.expressions.find((x) => x.id === prevId) : undefined;
     const prevNo = prev ? data.expressions.indexOf(prev) + 1 : 0;
-    const usesPrev = Boolean(prev?.imageAssetId && prev.imageAssetId !== anchor?.imageAssetId);
+    // an earlier drawn panel of the SAME shot (its world and light still hold); a panel from another shot
+    // (another place or time of day) would drag its states in, so it is only used for designs when nothing else is drawn
+    const shot = shots.find((sh) => sh.includes(e.id)) ?? [];
+    const before = shot.slice(0, shot.indexOf(e.id)).map((id) => data.expressions.find((x) => x.id === id));
+    const shotAnchor = before.find((x) => x?.imageAssetId && x.id !== prev?.id);
+    const usesPrev = Boolean(prev?.imageAssetId);
+    const idAnchor = !shotAnchor && !usesPrev && anchor?.imageAssetId && anchor.id !== e.id ? anchor : undefined;
+    const anchorPanel = shotAnchor ?? idAnchor;
+    const anchorNoHere = anchorPanel ? data.expressions.indexOf(anchorPanel) + 1 : 0;
+    const usesAnchor = Boolean(anchorPanel);
+    if (anchorPanel)
+      references.push({
+        role: `image reference ${references.length + 1}`,
+        assetId: anchorPanel.imageAssetId!,
+        why: shotAnchor ? `연결 기준: ${anchorNoHere}번 컷 그림 (같은 쇼트의 앞 순간)` : `연결 기준: ${anchorNoHere}번 컷 그림 (다른 쇼트 — 인물 디자인·그림체만)`,
+      });
     if (usesPrev) references.push({ role: `image reference ${references.length + 1}`, assetId: prev!.imageAssetId!, why: `바로 앞: ${prevNo}번 컷 그림 (연결성)` });
-    const prevRef = usesPrev ? references.length : usesAnchor && prev?.id === anchor?.id ? references.length : 0;
+    const prevRef = usesPrev ? references.length : 0;
     const rules = continuityRules(data, en);
     const line = data.dialogue.lines.find((l) => l.expressionId === e.id)?.line.trim();
     const prompt = [
       `One finished ${aspect} frame of the animation (moment ${i + 1} of ${n} in this scene): ONE single image of ONE moment that fills the whole frame — never a storyboard sheet, a grid, a contact sheet, a comic page or a sequence of small frames; exactly one camera view. Not a rough sketch; no borders, no text, no speech bubbles.`,
       `The description below may list several steps of an action (look → prepare → act → contact → settle) and a camera move from a start to an end framing: draw only the single key moment of the main action, in one framing — do not draw each step or each framing as a separate picture.`,
+      // the framing first: reference pictures pull toward their own composition (the scene picture is often this same moment)
+      t.camera && `FRAMING OF THIS PANEL (follow it over every reference picture): ${sentence(t.camera)}`,
       multiShot
         ? `All panels belong to ONE scene of ${shots.length} shots: the same world, lighting, characters and art style. This panel is in shot ${shotNo}${
             cuts.get(e.id) ? " and opens it with a hard cut — its own camera position and framing" : ""
           }.`
         : `All panels are successive moments of ONE continuous shot: the same world, lighting, characters and art style; only the moment and the camera framing change.`,
       data.baseAssetId &&
-        `Image reference 1 is the scene reference drawing: it sets the look of the named characters, their relative sizes, the art style, the colors and the world of this scene.`,
+        `Image reference 1 is the scene reference drawing: use it for the look of the named characters, their relative sizes, the art style, the colors and the world of this scene — NOT for its composition, camera angle, framing or poses. This panel must not be a copy of that picture: frame it as described for this panel.`,
       ...storyboardCastEn(data, en),
       ...extraRefsEn(data, references),
       style && `Art style: ${style.replace(/[.。]+$/, "")}. Keep this style for everyone in the frame; never photorealistic or 3D.`,
       usesAnchor &&
-        `Image reference ${references.findIndex((r) => r.why.startsWith("연결 기준")) + 1} is panel ${anchorNo} of this same ${multiShot ? "scene" : "shot"}: keep its world, lighting, line quality and character designs exactly; follow this panel's own composition and camera below.`,
+        (shotAnchor
+          ? `Image reference ${references.findIndex((r) => r.why.startsWith("연결 기준")) + 1} is panel ${anchorNoHere}, earlier in this same shot: keep its world, lighting, line quality and character designs; follow this panel's own composition, camera and the states below.`
+          : `Image reference ${references.findIndex((r) => r.why.startsWith("연결 기준")) + 1} is panel ${anchorNoHere} from another part of this scene: use it ONLY for the characters' designs and the drawing style — not its place, light, time of day, composition, costume state or props.`),
       prevRef &&
-        `Image reference ${prevRef} is the panel just before this one (panel ${prevNo}). Continuity with it is essential: the same costumes and props in the same state (unless this moment changes them), everyone on the same side of the screen and facing the same way (180° rule), positions carried on from where they were, the same light direction${
-          cuts.get(e.id) ? "; this panel opens a new shot after a hard cut, so the camera position changes but the screen sides, eyelines and states continue" : "; this panel is in the same shot, so the camera moves on from that framing"
+        `Image reference ${prevRef} is the panel just before this one (panel ${prevNo}). Continue from it: the same costumes and props, everyone on the same side of the screen and facing the same way (180° rule), positions carried on, the same light direction — except what this moment changes (a hood taken off, hands let go, a prop handed over, further along the path), which follows the continuity below, not that picture${
+          cuts.get(e.id)
+            ? ". This panel opens a new shot after a hard cut: a NEW camera position and framing — do not repeat that picture's composition, framing or background view"
+            : ". This panel is in the same shot: the camera has moved on to this panel's own framing, so the picture must look clearly different from that one (closer, wider or from another angle as described) — not the same composition again"
         }.`,
+      (usesAnchor || usesPrev) &&
+        "When a reference picture disagrees with this moment's description or continuity (an earlier costume or prop state, another place or time of day), the description and continuity win; faces, hair and costume designs always come from the design sheets.",
       rules && `Continuity rules of this scene (every panel keeps them): ${clip(rules, 600) || rules.slice(0, 600)}`,
       t.state && `Continuity (the states this moment sits between — positions, props and light to keep; still one single frame): ${sentence(t.state)}`,
       sketchNo &&
         `Image reference ${sketchNo} is a rough storyboard sketch of this panel: follow its composition, character placement, poses and camera angle; do NOT copy its rough lines or missing details — render it fully in the art style above.`,
       t.action ? `This moment: ${sentence(t.action)}` : sketchNo ? "This moment: exactly as in the sketch." : "",
-      t.camera && `Camera: ${sentence(t.camera)}`,
+      t.camera && `Camera (again, this panel's own framing): ${sentence(t.camera)}`,
       line && `${castName(data, beatActor(data, e).id)} is speaking in this moment (mouth open mid-word); everyone else keeps their mouth closed.`,
       data.expressionSetup.instruction && `Additional direction: ${clean(data.expressionSetup.instruction)}`,
       `Background: the world of the scene as in the references and the description (not an empty white background) unless the description says otherwise.`,

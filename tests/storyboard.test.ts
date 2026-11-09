@@ -69,12 +69,13 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     expect(first.prompt).toContain("Named characters (each keeps their identity exactly as in the scene reference; never mix features between them): 칼리엘라 — 진홍색 꼬임 머리, 엘프 귀; 브람 — 은발 단발, 검은 갑옷.");
     expect(first.prompt).toContain("Crowd and background people (unnamed): 횃불을 든 상인과 구경꾼 수십 명.");
     expect(first.prompt).toContain("This moment: 횃불을 든 군중이 좌우로 갈라진다.");
-    expect(first.prompt).toContain("Camera: 와이드 하이앵글.");
+    expect(first.prompt).toContain("FRAMING OF THIS PANEL (follow it over every reference picture): 와이드 하이앵글.");
+    expect(first.prompt).toContain("NOT for its composition, camera angle, framing or poses");
     expect(first.prompt).not.toContain("is speaking");
     expect(first.prompt).not.toMatch(/screen-left|Blocking/);
     expect(second.references.map((r) => r.assetId)).toEqual(["scene-1", "sketch-2", "panel-0"]);
     expect(second.prompt).toContain("Image reference 2 is a rough storyboard sketch of this panel: follow its composition");
-    expect(second.prompt).toContain("Image reference 3 is panel 1 of this same shot");
+    expect(second.prompt).toContain("Image reference 3 is the panel just before this one (panel 1)");
     expect(second.prompt).toContain("칼리엘라 is speaking in this moment");
   });
 

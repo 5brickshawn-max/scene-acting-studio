@@ -71,3 +71,20 @@ describe("step 4 keeps the storyboard order", () => {
     expect(next.acting.segments.map((s) => s.expressionId)).toEqual(ids);
   });
 });
+
+describe("panel references follow the shot (no night picture in a dawn shot)", () => {
+  it("a panel in a later shot is not given a picture from an earlier shot as its anchor, and states beat pictures", () => {
+    const d = board(); // panels 1-2 shot 1, panels 3-4 shot 2 (cut before panel 3)
+    d.expressions.forEach((e, i) => { e.imageAssetId = `img-${i + 1}`; e.imageAspect = "16:9"; });
+    const hs = buildExpressionHandoffs(d);
+    // panel 4: earlier panel of its own shot is panel 3, which is also the panel before → only that one, no panel-1 anchor
+    expect(hs[3].references.map((r) => r.assetId)).not.toContain("img-1");
+    expect(hs[3].references.map((r) => r.assetId)).toContain("img-3");
+    // panel 3 opens a new shot: a new camera, not a copy of panel 2's composition
+    expect(hs[2].prompt).toContain("a NEW camera position and framing — do not repeat that picture's composition");
+    expect(hs[2].prompt).toContain("the description and continuity win");
+    // a later panel of the same shot must not repeat the previous composition
+    expect(hs[3].prompt).toContain("must look clearly different from that one");
+    expect(hs[2].prompt).toContain("except what this moment changes (a hood taken off, hands let go");
+  });
+});
