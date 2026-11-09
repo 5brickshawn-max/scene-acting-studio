@@ -19,7 +19,7 @@
  * results (fast drops, short airtime, hard contacts, planted feet), not from numbers.
  */
 const MOTION =
-  "[MOTION] 2.5D & 3D animation. Only the timing is stop-motion: stepped cadence, 24fps, animated on ones — a new held pose every frame, moving in crisp frame-by-frame steps, with painterly & line boil. Every character, creature and moving object travels pose to pose. Shapes stay solid and constant from frame to frame.";
+  "[MOTION] 2.5D & 3D animation. Only the timing is stop-motion: stepped cadence, 24fps, animated on ones — a new held pose every frame, moving in crisp frame-by-frame steps, with painterly & line boil. Every character, creature and moving object travels pose to pose. Shapes keep their volume and design from frame to frame (a squash on impact recovers to the same shape).";
 
 /** How heavy movement reads: real weight, heavy, or exaggerated (as if gravity were twice as strong). */
 export const WEIGHT_LEVELS = ["natural", "heavy", "extra"] as const;

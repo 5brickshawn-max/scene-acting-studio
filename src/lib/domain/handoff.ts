@@ -1125,7 +1125,7 @@ export function buildVideoHandoff(
       multi && `Cast (exactly these ${data.cast.length} characters, always in these screen positions; nobody else): ${blockingEn(data)}.`,
       lookFor(B).length && `Keep visible${multi ? " — " : ": "}${lookFor(B).join(multi ? " | " : "; ")}.`,
       styleText.trim() &&
-        `Art style: ${((s) => (s ? `${sentence(s)} ` : ""))(en.style ? clip(en.style, Math.max(B.style, 160)) : clip(data.style, B.style))}${
+        `Art style: ${((s) => (s ? `${sentence(s)} ` : ""))(en.style ? clip(studioStyle(en.style), Math.max(B.style, 160)) : clip(studioStyle(data.style), B.style))}${
           realBackground
             ? "Keep the character in this 3D & 2.5D animation style (never photorealistic); only the background follows the DIRECTOR'S DIRECTION."
             : "Stay in this 3D & 2.5D animation style; never photorealistic."

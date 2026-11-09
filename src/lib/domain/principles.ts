@@ -29,7 +29,7 @@ export const PRINCIPLES = [
     key: "follow_through",
     ko: "팔로우 스루와 오버래핑",
     short: "후속·시차 동작",
-    en: "the parts settle at different times: the torso stops first, then the arms; hair and cloth carry on, swing back once with a smaller swing and settle",
+    en: "the parts settle at different times: the torso stops first, then the arms; hair and cloth carry on briefly, swing back once and settle",
     check: "무엇이 먼저 멈추고 무엇이 늦게 멈추는지 읽히는가?",
   },
   {
