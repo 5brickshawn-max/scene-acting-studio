@@ -64,7 +64,8 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     d.expressions[1].sketchAssetId = "sketch-2";
     const [first, second] = buildExpressionHandoffs(d);
     expect(first.aspectRatio).toBe("16:9");
-    expect(first.prompt).toContain("Storyboard panel 1 of 4, drawn as a finished 16:9 frame");
+    expect(first.prompt).toContain("One finished 16:9 frame of the animation (moment 1 of 4 in this scene)");
+    expect(first.prompt).toContain("never a storyboard sheet, a grid");
     expect(first.prompt).toContain("Named characters (each keeps their identity exactly as in the scene reference; never mix features between them): 칼리엘라 — 진홍색 꼬임 머리, 엘프 귀; 브람 — 은발 단발, 검은 갑옷.");
     expect(first.prompt).toContain("Crowd and background people (unnamed): 횃불을 든 상인과 구경꾼 수십 명.");
     expect(first.prompt).toContain("This moment: 횃불을 든 군중이 좌우로 갈라진다.");

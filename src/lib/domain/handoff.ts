@@ -1241,7 +1241,8 @@ function buildStoryboardHandoffs(data: ProjectData): ExpressionHandoff[] {
     const rules = continuityRules(data, en);
     const line = data.dialogue.lines.find((l) => l.expressionId === e.id)?.line.trim();
     const prompt = [
-      `Storyboard panel ${i + 1} of ${n}, drawn as a finished ${aspect} frame of the animation — not a rough sketch, not a comic page; no panel borders, no text, no speech bubbles.`,
+      `One finished ${aspect} frame of the animation (moment ${i + 1} of ${n} in this scene): ONE single image of ONE moment that fills the whole frame — never a storyboard sheet, a grid, a contact sheet, a comic page or a sequence of small frames; exactly one camera view. Not a rough sketch; no borders, no text, no speech bubbles.`,
+      `The description below may list several steps of an action (look → prepare → act → contact → settle) and a camera move from a start to an end framing: draw only the single key moment of the main action, in one framing — do not draw each step or each framing as a separate picture.`,
       multiShot
         ? `All panels belong to ONE scene of ${shots.length} shots: the same world, lighting, characters and art style. This panel is in shot ${shotNo}${
             cuts.get(e.id) ? " and opens it with a hard cut — its own camera position and framing" : ""
@@ -1259,7 +1260,7 @@ function buildStoryboardHandoffs(data: ProjectData): ExpressionHandoff[] {
           cuts.get(e.id) ? "; this panel opens a new shot after a hard cut, so the camera position changes but the screen sides, eyelines and states continue" : "; this panel is in the same shot, so the camera moves on from that framing"
         }.`,
       rules && `Continuity rules of this scene (every panel keeps them): ${clip(rules, 600) || rules.slice(0, 600)}`,
-      t.state && `Continuity at this moment: ${sentence(t.state)}`,
+      t.state && `Continuity (the states this moment sits between — positions, props and light to keep; still one single frame): ${sentence(t.state)}`,
       sketchNo &&
         `Image reference ${sketchNo} is a rough storyboard sketch of this panel: follow its composition, character placement, poses and camera angle; do NOT copy its rough lines or missing details — render it fully in the art style above.`,
       t.action ? `This moment: ${sentence(t.action)}` : sketchNo ? "This moment: exactly as in the sketch." : "",
@@ -1283,7 +1284,6 @@ function buildStoryboardHandoffs(data: ProjectData): ExpressionHandoff[] {
 export function buildSketchHandoffs(data: ProjectData): ExpressionHandoff[] {
   const aspect = data.video.aspectRatio;
   const en = freshEnglish(data);
-  const n = data.expressions.length;
   const who = data.cast
     .filter((c) => c.name.trim())
     .map((c) => {
@@ -1297,13 +1297,14 @@ export function buildSketchHandoffs(data: ProjectData): ExpressionHandoff[] {
       ? [{ role: "image reference 1", assetId: data.baseAssetId, why: "장면 기준 그림 — 누가 누구인지·배경 배치만 (색·그림체는 따르지 않음)" }]
       : [];
     const prompt = [
-      `Rough storyboard sketch, panel ${i + 1} of ${n}, ${aspect} frame: quick loose black pencil line drawing on a plain white background. Simple lines only — no colour, no shading, no grey fills, no texture, no rendering; simple gesture figures with readable poses, faces only as simple shapes and eye lines. Like a director's thumbnail for a film storyboard. No panel borders, no text, no arrows, no numbers.`,
+      `A rough sketch of one ${aspect} film frame: ONE single image of ONE moment that fills the whole frame — never a storyboard sheet, a grid, a contact sheet, a comic page or a sequence of small frames; exactly one camera view. Quick loose black pencil lines on a plain white background. Simple lines only — no colour, no shading, no grey fills, no texture, no rendering; simple gesture figures with readable poses, faces only as simple shapes and eye lines, like a director's thumbnail. No borders, no text, no arrows, no numbers.`,
+      `The description below may list several steps of an action (look → prepare → act → contact → settle) and a camera move from a start to an end framing: draw only the single key moment of the main action, in one framing — do not draw each step or each framing as a separate picture.`,
       data.baseAssetId &&
         "Image reference 1 is the finished scene picture: use it ONLY to know who is who (silhouettes, hair shapes, sizes) and how the set is laid out. Do NOT copy its colours, shading, detail or art style — this must stay a rough line sketch.",
       who && `Characters who may appear: ${who}. Draw only those this moment needs.`,
       t.action ? `This moment: ${sentence(t.action)}` : "",
-      t.camera && `Camera and framing: ${sentence(t.camera)} Show this framing clearly (where the camera stands, how big the figures are in frame).`,
-      "Keep the composition clear: main figures large enough to read, background as a few simple lines (horizon, walls, door, big props).",
+      t.camera && `Camera: ${sentence(t.camera)} Draw one framing only (the framing at the key moment): where the camera stands and how big the figures are.`,
+      `Keep the composition clear: main figures large enough to read, background as a few simple lines (horizon, walls, door, big props). Again: one single frame, not several panels.`,
     ]
       .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
       .join("\n");

@@ -39,7 +39,7 @@ describe("storyboard continuity (연결성)", () => {
     expect(h.prompt).toContain("180° rule");
     expect(h.prompt).toContain("opens a new shot after a hard cut");
     expect(h.prompt).toContain("Continuity rules of this scene (every panel keeps them): 1) 아스파샤 화면 왼쪽");
-    expect(h.prompt).toContain("Continuity at this moment: 샤르휘나가 숄을 듦.");
+    expect(h.prompt).toContain("still one single frame): 샤르휘나가 숄을 듦.");
     // the first panel has nothing before it
     expect(buildExpressionHandoffs(d)[0].prompt).not.toContain("panel just before");
   });
