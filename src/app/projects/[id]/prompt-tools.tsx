@@ -18,6 +18,8 @@ export type VideoHandoffView = {
   prompt: string;
   promptKo: string;
   cameraMove: boolean;
+  /** for models with a negative-prompt field */
+  negativePrompt?: string;
   adjustments: { where: string; rule: string; before: string; after: string }[];
   constraints: string;
   overrides: string[];

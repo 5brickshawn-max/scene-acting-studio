@@ -392,7 +392,9 @@ describe("compact video prompt and image composition", () => {
 
   it("keeps long designs under the target length, with the full text in the team summary", () => {
     const h = buildVideoHandoff(heavy());
-    expect(h.prompt.length).toBeLessThanOrEqual(VIDEO_PROMPT_TARGET);
+    // the target is the base plus the studio block's extra length (weight, camera, sound)
+    expect(h.lengthTarget).toBeGreaterThan(VIDEO_PROMPT_TARGET);
+    expect(h.prompt.length).toBeLessThanOrEqual(h.lengthTarget);
     expect(h.prompt).toContain('Say exactly (British English): "Line 1."');
     expect(h.prompt).toContain("Expression target: reference image 4.");
     expect(h.promptKo).toContain("눈썹을 움직입니다 6번째 문장입니다");
@@ -447,7 +449,7 @@ describe("compact video prompt and image composition", () => {
     const d = heavy();
     const still = buildVideoHandoff(d).prompt;
     expect(still).toContain("Camera move: none");
-    expect(still).toContain("never lunge into the camera");
+    expect(still).toContain("gestures toward the viewer stay within the frame");
     d.video.extraDirection = "배경 흰색 단색, 카메라가 컷별로 무빙";
     const moving = buildVideoHandoff(d);
     expect(moving.cameraMove).toBe(true);
@@ -459,7 +461,7 @@ describe("compact video prompt and image composition", () => {
 
   it("asks for voice only and names the language in English", () => {
     const d = heavy();
-    expect(buildVideoHandoff(d).prompt).toContain("NO MUSIC, only natural sound.");
+    expect(buildVideoHandoff(d).prompt).toContain("Only natural sound and the sound effects that occur in the scene, with no music.");
     expect(languageEn("고대 영어")).toBe("Old English");
     expect(languageEn("불어")).toBe("French");
     expect(languageEn("Klingon")).toBe("Klingon");
@@ -493,8 +495,11 @@ describe("studio constraints and automatic reconciliation", () => {
     d.expressionSetup.framing = "close_up";
     d.video.extraDirection = "카메라가 천천히 다가감";
     expect(buildVideoHandoff(d).prompt.endsWith(STUDIO_CONSTRAINTS)).toBe(true);
-    expect(STUDIO_CONSTRAINTS).toContain("NO smooth interpolation, NO motion blur, NO morphing. NO MUSIC, only natural sound.");
-    expect(STUDIO_CONSTRAINTS).toContain("(If a camera move is specified) HANDHELD");
+    // positive wording only: the words to avoid live in the negative prompt
+    expect(STUDIO_CONSTRAINTS).toContain("[MOTION] 2.5D & 3D animation. Only the timing is stop-motion");
+    expect(STUDIO_CONSTRAINTS).toContain("[WEIGHT & GRAVITY — HEAVY]");
+    expect(STUDIO_CONSTRAINTS).toContain("real HANDHELD camera");
+    expect(STUDIO_CONSTRAINTS).not.toMatch(/\bNO |never gliding|streaming/);
   });
 
   it("stresses ONE continuous shot with no cuts", () => {
@@ -692,7 +697,7 @@ describe("추가 연출 (the director's direction) wins and is never cut", () =>
     expect(block).toContain("\n\nLIGHT\nWarm key from screen-left, soft fill, golden rim light on the hair.");
     expect(block).not.toContain("…");
     expect(h.prompt.endsWith(h.constraints)).toBe(true);
-    expect(h.prompt.indexOf("DIRECTOR'S DIRECTION")).toBeLessThan(h.prompt.indexOf("Constraints: stop-motion"));
+    expect(h.prompt.indexOf("DIRECTOR'S DIRECTION")).toBeLessThan(h.prompt.indexOf("[MOTION] 2.5D"));
   });
 
   it("recognizes the camera move and lets the director's rig replace the constraints' HANDHELD", () => {
@@ -700,7 +705,7 @@ describe("추가 연출 (the director's direction) wins and is never cut", () =>
     expect(h.cameraMove).toBe(true);
     expect(h.prompt).toContain("Camera: exactly as in the DIRECTOR'S DIRECTION below");
     expect(h.prompt).not.toContain("Camera move: none");
-    expect(h.constraints).toContain("(Camera move as directed above — Steadicam replaces HANDHELD) quiet and purposeful, alive, not chaotic.");
+    expect(h.constraints).toContain("The camera move is as directed above (Steadicam): quiet and purposeful, alive");
     expect(h.prompt).not.toContain("never gimbal-smooth");
     expect(h.overrides.join(" ")).toContain("‘Steadicam’");
   });

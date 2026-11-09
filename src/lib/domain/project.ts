@@ -355,6 +355,8 @@ export const ProjectDataSchema = z.object({
     mergeLegacyCamera,
     z.object({
       aspectRatio: z.enum(["16:9", "9:16"]),
+      /** how heavy movement reads in the video (실제 무게 / 무겁게 / 과장: 중력 2배) */
+      weight: z.enum(["natural", "heavy", "extra"]).default("heavy"),
       /** the director's direction (추가 연출): camera, light, background … kept whole in the video prompt */
       extraDirection: z.string(),
       /**
@@ -455,7 +457,7 @@ export function createProjectData(title = "새 장면", castCount = 1, mode: Sce
     expressions,
     dialogue: { language: "한국어", lines: [] },
     acting: { duration: 8, segments: evenSegments(expressions.map((e) => e.id), 8) },
-    video: { aspectRatio: "16:9", extraDirection: "", promptFixes: [], startFrameAssetId: null, endFrameAssetId: null, resultAssetIds: [] },
+    video: { aspectRatio: "16:9", weight: "heavy", extraDirection: "", promptFixes: [], startFrameAssetId: null, endFrameAssetId: null, resultAssetIds: [] },
     english: null,
   };
 }

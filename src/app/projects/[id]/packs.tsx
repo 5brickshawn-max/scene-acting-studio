@@ -18,6 +18,7 @@ type VideoPack = {
   version: number;
   references: { assetId: string; label: string; parts?: { assetId: string }[] }[];
   prompt: string;
+  negativePrompt?: string;
   cameraMove: boolean;
   adjustments: { where: string; rule: string; before: string; after: string }[];
   overrides: string[];
@@ -172,6 +173,7 @@ export function HiggsfieldVideoPack() {
                 listed.push(`${i + 1}. ${name}`);
               }
               files.push(text("프롬프트.txt", h.prompt));
+              if (h.negativePrompt) files.push(text("네거티브프롬프트.txt", h.negativePrompt));
               files.push(
                 text(
                   "작업안내.txt",
@@ -184,6 +186,7 @@ export function HiggsfieldVideoPack() {
                       : "2. 아래 그림을 번호 순서대로 참고 그림으로 첨부합니다. 번호가 프롬프트의 reference image 번호와 같아야 합니다.",
                     `   그림은 영상 비율(${data.video.aspectRatio})에 맞춰 흰 여백을 붙였습니다. 인물이 늘어나거나 찌그러지지 않게 하려는 것이니 원본 대신 이 파일을 쓰세요.`,
                     `3. ‘프롬프트.txt’를 그대로 붙여넣습니다 (${h.prompt.length.toLocaleString("ko-KR")}자, 맨 끝에 스튜디오 제약사항 포함).`,
+                    "   네거티브 프롬프트 칸이 있으면(Kling 등) ‘네거티브프롬프트.txt’를 그 칸에 넣고, creativity/relevance는 relevance 쪽으로 올리세요.",
                     `4. 길이 ${Math.ceil(data.acting.duration)}초${
                       data.acting.duration % 1 ? ` (액팅 ${data.acting.duration}초를 올림 — Higgsfield는 초 단위)` : ""
                     }, 화면 비율 ${data.video.aspectRatio}로 생성합니다. ${

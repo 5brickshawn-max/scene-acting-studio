@@ -14,6 +14,7 @@ import { HiggsfieldVideoPack } from "../packs";
 import { EnglishBar, PromptApplyBar, TextDiff, useVideoPrompt, type VideoPrompt } from "../prompt-tools";
 import { englishStale } from "@/lib/domain/english";
 import { VIDEO_MODELS, videoDuration, videoMaxDuration, type VideoModelKey } from "@/lib/higgsfield/models";
+import { WEIGHT_LABEL, WEIGHT_LEVELS } from "@/lib/domain/constraints";
 import type { PromptCheckResult } from "@/lib/ai/schemas";
 
 const short = (t: string, n = 90) => (t.length > n ? t.slice(0, n) + "…" : t);
@@ -375,6 +376,20 @@ export function VideoStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }
         <div className="grid md:grid-cols-2 gap-4">
           <Seg label="화면 비율" value={data.video.aspectRatio} options={["16:9", "9:16"] as const}
             labels={{ "16:9": "가로 16:9", "9:16": "세로 9:16" }} onChange={(v) => setVideo({ aspectRatio: v })} />
+          <div>
+            <Seg
+              label="움직임 무게감 (스튜디오 제약사항에 들어감)"
+              value={data.video.weight}
+              options={WEIGHT_LEVELS}
+              labels={WEIGHT_LABEL}
+              onChange={(v) => setVideo({ weight: v })}
+            />
+            <p className="field-help">
+              무게감은 숫자가 아니라 눈에 보이는 결과로 지시합니다: 실제 속도(슬로모션 없음), 짧은 체공과 빠른 낙하, 강한 착지와 충격 반응, 미끄러지지 않는 발, 빨리
+              떨어지는 머리카락·옷. ‘과장’은 “중력이 두 배인 것처럼”을 더합니다(우주·행성 같은 이미지가 끼어들면 ‘무겁게’로 바꾸세요). 대사·동작이 짧은 컷(넘어짐·낙하는 0.5초
+              안팎)은 4단계 시간 분배에서 짧게 주고, 나머지 시간은 다른 동작으로 채우세요.
+            </p>
+          </div>
           <Field
             label="추가 연출 (선택) · 감독 지시"
             multiline
@@ -518,6 +533,19 @@ export function VideoStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }
               <div className="flex items-center justify-between mb-1"><span className="field-label">프롬프트 (영문, 붙여넣기용) · {h.prompt.length.toLocaleString("ko-KR")}자</span><CopyButton text={h.prompt} label="프롬프트 복사" /></div>
               <textarea className="textarea font-mono text-[13px]" rows={12} readOnly value={h.prompt} aria-label="영상 프롬프트" />
             </div>
+            {h.negativePrompt && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="field-label">네거티브 프롬프트 (Kling 등 네거티브 칸이 있는 곳에 따로 붙여넣기)</span>
+                  <CopyButton text={h.negativePrompt} label="네거티브 복사" />
+                </div>
+                <textarea className="textarea font-mono text-[13px]" rows={3} readOnly value={h.negativePrompt} aria-label="네거티브 프롬프트" />
+                <p className="field-help">
+                  본문에는 피할 것을 부정문으로 쓰지 않고 긍정형으로만 씁니다(부정문은 오히려 그 단어를 떠올리게 할 수 있음). 앱에서 바로 생성할 때는 Higgsfield에 네거티브 칸이 없어 이
+                  목록은 쓰이지 않습니다. Kling 사이트에서 직접 만들 때는 creativity/relevance를 relevance 쪽으로 올리면 네거티브가 더 엄격히 지켜집니다.
+                </p>
+              </div>
+            )}
             <details>
               <summary className="cursor-pointer font-semibold">한국어로 내용 확인 (구간별 설계 전체, 줄이지 않은 원문)</summary>
               <pre className="whitespace-pre-wrap mt-2 text-[14px]">{h.promptKo}</pre>

@@ -13,26 +13,67 @@
  * adapts to the director's rig.
  */
 
+/**
+ * The studio block, written in positive terms (text encoders tend to picture the words a "never …" names);
+ * the things to avoid go to NEGATIVE_PROMPT for models with a negative field. Weight comes from visible
+ * results (fast drops, short airtime, hard contacts, planted feet), not from numbers.
+ */
 const MOTION =
-  "Constraints: stop-motion stepped cadence on ones at 24fps with painterly & line boil, every character, creature and moving object stepping pose to pose, never gliding. NO smooth interpolation, NO motion blur, NO morphing. NO MUSIC, only natural sound.";
-const SECONDARY =
-  "SECONDARY ACTION on ones: whichever loose elements are present (hair, clothing, fabric, straps, accessories, fur) swinging, streaming and settling with follow-through.";
-const CAMERA = "(If a camera move is specified) HANDHELD, quiet and purposeful, alive, never gimbal-smooth, never tripod-locked, not chaotic.";
+  "[MOTION] 2.5D & 3D animation. Only the timing is stop-motion: stepped cadence, 24fps, animated on ones — a new held pose every frame, moving in crisp frame-by-frame steps, with painterly & line boil. Every character, creature and moving object travels pose to pose. Shapes stay solid and constant from frame to frame.";
 
-/** The block exactly as the studio wrote it. */
-export const STUDIO_CONSTRAINTS = [MOTION, SECONDARY, CAMERA].join("\n\n");
+/** How heavy movement reads: real weight, heavy, or exaggerated (as if gravity were twice as strong). */
+export const WEIGHT_LEVELS = ["natural", "heavy", "extra"] as const;
+export type WeightLevel = (typeof WEIGHT_LEVELS)[number];
+export const WEIGHT_LABEL: Record<WeightLevel, string> = { natural: "실제 무게", heavy: "무겁게", extra: "과장 (중력 2배)" };
 
+const WEIGHT: Record<WeightLevel, string> = {
+  natural:
+    "[WEIGHT] Bodies and objects have real weight. All motion runs at real-time speed. Jumps and falls are quick: whatever leaves the ground comes back down promptly, speeding up on the way down. Every foot contact plants flat and holds its place; weight shifts visibly from foot to foot. Landings bend the knees and the body takes the impact, then recovers.",
+  heavy:
+    "[WEIGHT & GRAVITY — HEAVY] Everything is dense and heavy. All motion runs at real-time speed. Airtime is short: jumps stay low and anything that leaves the ground drops back fast, accelerating on the way down. Every ground contact is a hard hit: feet plant flat and lock in place, knees and spine compress on landing, the body jolts on the impact frame, then recovers with visible effort. Running is heavy and pounding: the torso dips on every footfall, each step shoves off the ground, the feet stay planted.",
+  extra:
+    "[WEIGHT & GRAVITY — HEAVY, EXAGGERATED] Everything is dense and heavy, as if gravity were twice as strong as on Earth. All motion runs at real-time speed. Airtime is short: jumps stay low, and anything that leaves the ground drops back almost instantly, accelerating hard on the way down — a fall has only a few poses, spaced wider and wider toward the ground. Losing balance to hitting the ground takes under half a second. Every ground contact is a hard hit: feet plant flat and lock in place, knees and spine compress on landing, the body squashes and jolts on the impact frame, then recovers slowly and with visible effort. Running is heavy and pounding: the torso dips on every footfall, each step shoves off the ground, and the feet stay planted. A falling character slams down like a sack of wet sand and stays down for a beat.",
+};
+
+const CAMERA_HANDHELD =
+  "[CAMERA — NOT STOP-MOTION] The stepped cadence applies only to what moves inside the frame, not to the camera. The camera is a real HANDHELD camera held by a person: in every frame there is a small visible shake, irregular drift and a slight tilt, and in quiet beats it sways like breathing. Moves that follow the action are clear: they start half a beat late, overshoot slightly, and settle with a small wobble. On every heavy impact the camera takes a sharp jolt, as if the ground shook, then settles.";
+const cameraRig = (rig: string) =>
+  `[CAMERA — NOT STOP-MOTION] The stepped cadence applies only to what moves inside the frame, not to the camera. The camera move is as directed above (${rig}): quiet and purposeful, alive; on a heavy impact it gives a small jolt, then settles.`;
+
+const SOUND = "[SOUND] Only natural sound and the sound effects that occur in the scene, with no music. Impacts sound heavy and low: deep thuds, hard footfalls, the forced breath of effort.";
+
+const SECONDARY: Record<WeightLevel, string> = {
+  natural:
+    "[SECONDARY ACTION — also on ones] Only loose elements already in the scene (hair, clothing, cloth, straps, accessories, fur). They follow the main action with a short delay and settle soon after it stops.",
+  heavy:
+    "[SECONDARY ACTION — also on ones] Only loose elements already in the scene (hair, clothing, cloth, straps, accessories, fur). They are heavy and pulled down by gravity: they swing with the main action, trail only briefly, drop fast, slap against the body on landing and settle quickly.",
+  extra:
+    "[SECONDARY ACTION — also on ones] Only loose elements already in the scene (hair, clothing, cloth, straps, accessories, fur). They are heavy and pulled down hard by gravity: they swing with the main action, trail only briefly, drop fast, slap down against the body on landing, and settle quickly with a short, stiff follow-through.",
+};
+
+/** For models with a negative-prompt field (e.g. Kling on its own site); the app does not put these words in the prompt itself. */
+export function negativePrompt(weight: WeightLevel = "heavy"): string {
+  const common =
+    "smooth interpolation, motion blur, morphing, melting shapes, gimbal-smooth camera, tripod shot, locked-off shot, background music, text, subtitles";
+  const light =
+    "slow motion, floating, floaty, weightless, low gravity, moon gravity, hovering, drifting, gliding, sliding feet, foot sliding, moonwalk, bouncy, slow fall, long hang time, hair floating, fabric fluttering slowly";
+  return weight === "natural" ? `slow motion, floating, gliding, sliding feet, ${common}` : `${light}, ${common}`;
+}
+
+/** The block exactly as the studio wrote it (heavy weight, handheld camera). */
+export const STUDIO_CONSTRAINTS = constraintsFor(null);
 
 /**
- * The constraints block for one video. Unchanged unless the director names a
- * camera rig other than handheld (Steadicam, gimbal, tripod, dolly …): then the
- * camera sentence keeps its spirit but follows the director's rig instead of
- * contradicting it ("never gimbal-smooth" vs a Steadicam).
+ * The constraints block for one video. The camera part follows the director's rig when they name one other
+ * than handheld (Steadicam, gimbal, tripod, dolly …), instead of contradicting it.
  */
-export function constraintsFor(rig: string | null): string {
-  if (!rig) return STUDIO_CONSTRAINTS;
-  return [MOTION, SECONDARY, `(Camera move as directed above — ${rig} replaces HANDHELD) quiet and purposeful, alive, not chaotic.`].join("\n\n");
+export function constraintsFor(rig: string | null, weight: WeightLevel = "heavy"): string {
+  return [MOTION, WEIGHT[weight], rig ? cameraRig(rig) : CAMERA_HANDHELD, SOUND, SECONDARY[weight]].join("\n\n");
 }
+
+/** The studio's earlier wording, still in many directors' texts: paragraphs repeating it are left out too. */
+const LEGACY =
+  "Constraints: stop-motion stepped cadence on ones at 24fps with painterly & line boil, every character, creature and moving object stepping pose to pose, never gliding. NO smooth interpolation, NO motion blur, NO morphing. NO MUSIC, only natural sound. SECONDARY ACTION on ones: whichever loose elements are present (hair, clothing, fabric, straps, accessories, fur) swinging, streaming and settling with follow-through. HANDHELD, quiet and purposeful, alive, never gimbal-smooth, never tripod-locked, not chaotic.";
 
 /**
  * What kind of text a field holds decides which rules apply:
@@ -294,7 +335,7 @@ const words = (t: string) => (t.toLowerCase().match(/[a-z0-9가-힣]{3,}/g) ?? [
  */
 export function dropConstraintRepeats(direction: string, where: string, log: Adjustment[]): string {
   if (!direction.trim()) return direction;
-  const known = new Set(words(constraintsFor(null)));
+  const known = new Set([...words(constraintsFor(null)), ...words(LEGACY)]);
   const paras = direction.split(/\n\s*\n/);
   const kept = paras.filter((p) => {
     const w = words(p.replace(/^\s*[A-Za-z가-힣 &]{2,30}\s*[:：]/, ""));

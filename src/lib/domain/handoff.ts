@@ -12,7 +12,7 @@
  */
 import { comboId, MAX_COMBO_PARTS } from "@/lib/combo";
 import { MAX_PRINCIPLES, principleOf } from "./principles";
-import { constraintsFor, dropConstraintRepeats, directorAngle, directorBackground, directorRig, hasCameraMove, reconcile, type Adjustment } from "./constraints";
+import { constraintsFor, dropConstraintRepeats, negativePrompt, directorAngle, directorBackground, directorRig, hasCameraMove, reconcile, type Adjustment } from "./constraints";
 import { freshEnglish } from "./english";
 import {
   isVoiceOver,
@@ -574,6 +574,8 @@ export type VideoHandoff = {
   directorBlock: string;
   /** the length this prompt aims for (longer with 영어 정리) */
   lengthTarget: number;
+  /** for models with a negative-prompt field (the app's own requests do not carry it) */
+  negativePrompt: string;
 };
 
 /**
@@ -678,6 +680,9 @@ const BUDGETS: Budget[] = [
   { face: 0, gesture: 60, note: 0, transition: 70, delivery: 50, style: 80, voice: 80, features: 4, enPose: false, enBody: true, principles: 1 },
   { face: 0, gesture: 0, note: 0, transition: 60, delivery: 40, style: 50, voice: 50, features: 3, enPose: false, enBody: false, principles: 0 },
 ];
+/** Room the studio block takes beyond its earlier ~700 characters (added to the length target). */
+const constraintsExtra = (constraints: string) => Math.max(0, constraints.length - 700) + 150;
+
 /** Video models follow prompts up to roughly this length well (constraints included); longer ones get diluted. */
 export const VIDEO_PROMPT_TARGET = 3500;
 /** With 영어 정리 the beats carry real acting in short English, worth a little more room. */
@@ -1036,8 +1041,8 @@ export function buildVideoHandoff(
     : cameraMove
       ? `Camera move: as described in the beats, HANDHELD as in the Constraints at the end; one continuous take with no cuts, and ${theChar} proportions never change.`
       : multi
-        ? "Camera move: none. The framing holds still on the group for the whole shot (no zoom, pan or push-in); every character stays at the same distance, size and position in the frame, and gestures toward the viewer never lunge into the camera."
-        : "Camera move: none. The framing holds still on the character for the whole shot (no zoom, pan or push-in); the character stays at the same distance, size and position in the frame, and gestures toward the viewer never lunge into the camera.";
+        ? "Camera move: none — the framing stays on the group for the whole shot with only the faint sway of a hand-held camera; every character stays at the same distance, size and position in the frame, and gestures toward the viewer stay within the frame."
+        : "Camera move: none — the framing stays on the character for the whole shot with only the faint sway of a hand-held camera; the character stays at the same distance, size and position in the frame, and gestures toward the viewer stay within the frame.";
   // look lines: per character in a group (fewer features each so the header stays short)
   const lookFor = (B: Budget) => {
     const per = multi ? Math.max(2, B.features - data.cast.length + 1) : B.features;
@@ -1122,10 +1127,12 @@ export function buildVideoHandoff(
   const directorBlock = director
     ? `DIRECTOR'S DIRECTION (the director's own words: follow exactly; where it differs from the general camera, framing or background lines above, this wins):\n${director}`
     : "";
-  const constraints = constraintsFor(rig);
+  const constraints = constraintsFor(rig, data.video.weight);
   const assemble = (B: Budget) => [headerWith(B), beatsWith(B).join("\n\n"), directorBlock, constraints].filter(Boolean).join("\n\n");
   // a group scene needs room for the cast, the voices and every character's acting per beat
-  const lengthTarget = (enBeats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) + (multi ? VIDEO_PROMPT_EXTRA_PER_CHARACTER * (data.cast.length - 1) : 0);
+  // the studio block grew (weight, camera, sound): its extra length is not taken from the beats
+  const lengthTarget =
+    (enBeats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) + (multi ? VIDEO_PROMPT_EXTRA_PER_CHARACTER * (data.cast.length - 1) : 0) + constraintsExtra(constraints);
   let prompt = "";
   for (const B of BUDGETS) {
     prompt = assemble(B);
@@ -1149,6 +1156,7 @@ export function buildVideoHandoff(
     overrides,
     directorBlock,
     lengthTarget,
+    negativePrompt: negativePrompt(data.video.weight),
   };
 }
 
@@ -1497,8 +1505,8 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         : cameraMove
           ? `Camera: follows the panel cameras below${multiShot ? ", moving continuously inside each shot" : ", moving continuously between them"} (HANDHELD as in the Constraints at the end)${multiShot ? "" : "; one continuous take with no cuts"}.`
           : multiShot
-            ? "Camera: each panel's framing as described; the camera does not move inside a shot."
-            : "Camera move: none. The framing holds still for the whole shot.",
+            ? "Camera: each panel's framing as described; inside a shot the camera stays on that framing with only a faint hand-held sway."
+            : "Camera move: none — the framing stays put for the whole shot with only the faint sway of a hand-held camera.",
       refs.length
         ? [
             "Reference images (upload in this order):",
@@ -1532,11 +1540,14 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
   const directorBlock = director
     ? `DIRECTOR'S DIRECTION (the director's own words: follow exactly; where it differs from the general camera, framing or background lines above, this wins):\n${director}`
     : "";
-  const constraints = constraintsFor(rig);
+  const constraints = constraintsFor(rig, data.video.weight);
   // room for the named characters beyond four (their names, features and voices)
   // each panel past six carries its own action, camera and line
   const lengthTarget =
-    (en.beats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) + Math.max(0, data.cast.length - 4) * 200 + Math.max(0, data.acting.segments.length - 6) * 250;
+    (en.beats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) +
+    Math.max(0, data.cast.length - 4) * 200 +
+    Math.max(0, data.acting.segments.length - 6) * 250 +
+    constraintsExtra(constraints);
   let prompt = "";
   for (const B of STORY_BUDGETS) {
     prompt = [headerWith(B), beatsWith(B).join("\n\n"), directorBlock, constraints].filter(Boolean).join("\n\n");
@@ -1554,6 +1565,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
     overrides,
     directorBlock,
     lengthTarget,
+    negativePrompt: negativePrompt(data.video.weight),
   };
 }
 

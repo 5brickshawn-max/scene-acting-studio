@@ -37,8 +37,28 @@ describe("director paragraphs that only repeat the constraints", async () => {
     ].join("\n\n");
     const log: Adjustment[] = [];
     const out = dropConstraintRepeats(t, "추가 연출", log);
-    expect(out).toBe("SOUND : Natural sound & Sound effects.\n\nCAMERA: slow crane-up over the wall at the end.");
+    // the sound paragraph is now covered by the studio block's [SOUND] too
+    expect(out).toBe("CAMERA: slow crane-up over the wall at the end.");
     expect(log[0].rule).toContain("제약사항과 같은 문단");
     expect(dropConstraintRepeats("CAMERA: slow crane-up.", "추가 연출", [])).toBe("CAMERA: slow crane-up.");
+  });
+});
+
+describe("weight and positive wording (studio block)", async () => {
+  const { constraintsFor, negativePrompt } = await import("@/lib/domain/constraints");
+  it("weight levels change the block; the words to avoid go to the negative prompt, not the body", () => {
+    expect(constraintsFor(null, "natural")).toContain("[WEIGHT] Bodies and objects have real weight");
+    expect(constraintsFor(null, "heavy")).toContain("Every ground contact is a hard hit");
+    expect(constraintsFor(null, "extra")).toContain("as if gravity were twice as strong as on Earth");
+    expect(constraintsFor(null, "extra")).toContain("slams down like a sack of wet sand");
+    for (const w of ["natural", "heavy", "extra"] as const) expect(constraintsFor(null, w)).not.toMatch(/never gliding|\bNO |streaming|slow motion/);
+    expect(constraintsFor("Steadicam", "heavy")).toContain("The camera move is as directed above (Steadicam)");
+    expect(negativePrompt("heavy")).toContain("slow motion, floating, floaty, weightless");
+    expect(negativePrompt("heavy")).toContain("background music");
+  });
+  it("the old studio paragraphs left in a director's text are dropped as repeats", async () => {
+    const { dropConstraintRepeats } = await import("@/lib/domain/constraints");
+    const old = "SECONDARY ACTION on ones: whichever loose elements are present (hair, clothing, fabric, straps, accessories, fur) swinging, streaming and settling with follow-through.";
+    expect(dropConstraintRepeats(`${old}\n\nCAMERA: crane-up at the end.`, "추가 연출", [])).toBe("CAMERA: crane-up at the end.");
   });
 });
