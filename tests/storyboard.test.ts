@@ -1,3 +1,4 @@
+import { keepPainted } from "@/lib/domain/handoff";
 import { describe, expect, it } from "vitest";
 import { addCastMember, shotsOf, approve, canApprove, createProjectData, imageAspectFor, MAX_CAST, MAX_CAST_STORYBOARD, parseProjectData, stepIssues, type ProjectData } from "@/lib/domain/project";
 import { buildExpressionHandoffs, buildFrameHandoff, buildVideoHandoff, cameraTextMoves } from "@/lib/domain/handoff";
@@ -167,7 +168,7 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     expect(p).toContain("세라 — 첫째 특징, 둘째 특징;");
     expect(p).not.toContain("셋째 특징");
     const h = buildVideoHandoff(d);
-    expect(h.lengthTarget).toBe(3500 + 3 * 200 + (h.constraints.length - 700) + 150);
+    expect(h.lengthTarget).toBe(3500 + 3 * 200 + (h.constraints.length - 700) + 150 + keepPainted(d.style).length);
     expect(h.prompt.length).toBeLessThanOrEqual(h.lengthTarget);
   });
 

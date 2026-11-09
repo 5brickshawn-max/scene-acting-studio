@@ -140,3 +140,23 @@ describe("cross-step consistency", () => {
       }
     });
 });
+
+describe("prompt wording fixes", () => {
+  it("continuity rules with list numbers are not cut inside brackets", async () => {
+    const { buildVideoHandoff } = await import("@/lib/domain/handoff");
+    const d = setExpressionCount(createProjectData("규칙", 1, "storyboard"), 3);
+    d.expressionSetup.continuity =
+      "1) Shots 1,2,3 from ahead of her path, she nears camera, her right side (braid, loose strap) screen left; overheads put path at frame top. 2) " +
+      "x".repeat(900);
+    const p = buildVideoHandoff(d, "references").prompt;
+    expect(p).not.toMatch(/\(braid\./);
+  });
+  it("a locked panel camera becomes handheld-steady; a painted style stays painted", async () => {
+    const { heldSteady, keepPainted } = await import("@/lib/domain/handoff");
+    expect(heldSteady("Low-angle locked shot near ground")).toBe("Low-angle steady handheld shot near ground");
+    expect(heldSteady("Wide shot, locked at eye level")).toBe("Wide shot, held steady by hand at eye level");
+    expect(heldSteady("고정된 채 클로즈업")).toBe("핸드헬드로 거의 고정된 채 클로즈업");
+    expect(keepPainted("Painterly 3D & 2.5D with watercolor brushwork")).toMatch(/hand-painted/);
+    expect(keepPainted("pink clay")).toBe("");
+  });
+});

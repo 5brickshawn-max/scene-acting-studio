@@ -124,7 +124,7 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
       ? "카메라는 추가 연출을 따릅니다."
       : h.cameraMove
         ? "구간 설명에 카메라 움직임이 있어 제약사항대로 핸드헬드로 지시합니다."
-        : "카메라 움직임 지시가 없어 정지 화면으로 지시합니다.",
+        : "카메라 움직임 지시가 없어 이동 없이 핸드헬드로 거의 고정된 화면으로 지시합니다.",
   );
   // ── a camera plan written for another length than the video ──
   const planned = timingMismatch(director, duration);

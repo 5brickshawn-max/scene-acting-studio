@@ -202,7 +202,7 @@ export function HiggsfieldVideoPack() {
                         ? "추가 연출을 따름"
                         : h.cameraMove
                           ? "움직임 있음 (핸드헬드)"
-                          : "움직임 없음 (정지 화면)"
+                          : "이동 없음 — 핸드헬드로 거의 고정 (작은 흔들림)"
                     }`,
                     ...(h.adjustments.length
                       ? ["", "제약사항과 맞추려고 프롬프트에서 자동으로 고친 부분:", ...h.adjustments.map((a) => `- ${a.where}: ${a.rule}`)]

@@ -762,7 +762,15 @@ const clip = (t: string, max: number) => {
   if (max === Infinity || c.length <= max) return c;
   const head = c.slice(0, max + 1);
   // never end inside brackets ("화면 왼쪽 손(캐릭터 오른손." is noise)
-  const closed = (s: string) => (s.match(/[(（[]/g)?.length ?? 0) === (s.match(/[)）\]]/g)?.length ?? 0);
+  // a stray closer ("1) …", "2) …" list numbers) is not a bracket that was opened
+  const closed = (s: string) => {
+    let depth = 0;
+    for (const ch of s) {
+      if ("(（[".includes(ch)) depth++;
+      else if (")）]".includes(ch) && depth > 0) depth--;
+    }
+    return depth === 0;
+  };
   const lastEnd = (re: RegExp) => {
     let at = -1;
     for (const m of head.matchAll(re)) {
@@ -1129,7 +1137,7 @@ export function buildVideoHandoff(
           realBackground
             ? "Keep the character in this 3D & 2.5D animation style (never photorealistic); only the background follows the DIRECTOR'S DIRECTION."
             : "Stay in this 3D & 2.5D animation style; never photorealistic."
-        }`,
+        }${keepPainted(styleText)}`,
       multi
         ? `Match the reference images exactly: every character keeps their own face, hair, colors, costume and the shared drawing style; never swap or blend features between characters. Each character's face shape, eye shape and size, nose, hairline and body proportions stay identical in every beat; only the expression muscles (brows, eyelids, mouth) and the poses change.`
         : `Match the reference images exactly: same face, hair, colors, costume and drawing style. Only one character appears. The face shape, eye shape and size, nose, hairline and body proportions stay identical in every beat; only the expression muscles (brows, eyelids, mouth) and the pose change.`,
@@ -1194,7 +1202,7 @@ export function buildVideoHandoff(
   // a group scene needs room for the cast, the voices and every character's acting per beat
   // the studio block grew (weight, camera, sound): its extra length is not taken from the beats
   const lengthTarget =
-    (enBeats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) + (multi ? VIDEO_PROMPT_EXTRA_PER_CHARACTER * (data.cast.length - 1) : 0) + constraintsExtra(constraints);
+    (enBeats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) + (multi ? VIDEO_PROMPT_EXTRA_PER_CHARACTER * (data.cast.length - 1) : 0) + constraintsExtra(constraints) + keepPainted(styleText).length;
   let prompt = "";
   for (const B of BUDGETS) {
     prompt = assemble(B);
@@ -1290,11 +1298,26 @@ export function endState(state: string): string {
 }
 
 /** The studio works in 3D & 2.5D: a style text that says "2D" (an older AI guess, or typed by hand) is read that way. */
+/** A painted style (brushwork, lines, cel shading) on 3D forms: video models tend to render it as glossy CG instead. */
+const PAINTED = /painterly|watercolou?r|gouache|brush|\bink\b|cel[- ]?shad|outline|line art|\blines?\b|hand[- ]painted|회화|수채|과슈|붓|선화|셀/i;
+export const keepPainted = (style: string) =>
+  PAINTED.test(style)
+    ? " Every frame keeps the hand-painted surface — visible brushwork, the drawn outlines and the flat cel-shading steps — on the 3D forms; it is never a glossy CG render with smooth plastic skin, subsurface glow or realistic depth of field."
+    : "";
 export function studioStyle(style: string): string {
   return style.replace(/(^|[^\d.])2D(?!\w)/g, "$13D & 2.5D").replace(/(^|[^\w.])2[- ]?D animation/gi, "$13D & 2.5D animation");
 }
 
 /** The scene's continuity rules (연결 규칙), English where fresh. */
+/**
+ * With the studio's HANDHELD camera, a panel camera written as "locked" (or 고정) would contradict it (and the
+ * negative prompt's "locked-off shot"): it becomes a camera held steady by hand, which is what was meant.
+ */
+export const heldSteady = (t: string) =>
+  t
+    .replace(/\b(?:locked(?:[- ]off)?|static)\s+shot\b/gi, "steady handheld shot")
+    .replace(/\blocked[- ]off\b|\blocked\b|\bstatic\b(?=\s+(?:shot|camera|frame|framing))|\bstatic\b(?=,|\.|$)/gi, "held steady by hand")
+    .replace(/(?<!핸드헬드로 거의 )고정/g, "핸드헬드로 거의 고정");
 const continuityRules = (data: ProjectData, en: ReturnType<typeof freshEnglish>) => en.continuity ?? clean(data.expressionSetup.continuity);
 
 function storyboardRefs(data: ProjectData): ReferenceSlot[] {
@@ -1544,7 +1567,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         multiShot && k > 0 && (cuts.get(seg.expressionId) ? "HARD CUT to a new shot here." : "Same shot: the camera moves on continuously from the previous panel, no cut."),
         n && (conti ? `Composition, blocking and camera: as in ${n} (rough sketch).` : `Frame target: ${n}.`),
         cut(action, B.action) && `Action: ${sentence(cut(action, B.action))}`,
-        cut(camera, B.camera) && `Camera: ${sentence(cut(camera, B.camera))}`,
+        cut(camera, B.camera) && `Camera: ${sentence(rig ? cut(camera, B.camera) : heldSteady(cut(camera, B.camera)))}`,
         cut(fixed ? p?.state ?? "" : e?.continuity ?? "", B.state) && `Continuity: ${sentence(cut(fixed ? p?.state ?? "" : e?.continuity ?? "", B.state))}`,
         principleLine(e, B.principles),
         !last && B.transition && cut(transition, B.transition) && `Into the next panel: ${sentence(cut(transition, B.transition))}`,
@@ -1564,7 +1587,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         ? `A ${data.acting.duration}-second animated scene, ${data.video.aspectRatio}, edited in ${shots.length} shots: ${shots.map((sh, i) => `shot ${i + 1} = ${rangeOf(sh)}`).join("; ")}. Cut ONLY where a beat says HARD CUT; inside a shot the camera travels continuously from one panel's framing to the next.`
         : `ONE single continuous shot with no cuts: a ${data.acting.duration}-second animated scene, ${data.video.aspectRatio}. The beats below follow storyboard panels — successive moments of this same shot; the camera travels continuously from one panel's framing to the next and never cuts.`,
       ...storyboardCastEn(data, en, B.features, B.features * 50),
-      (en.style || data.style.trim()) && `Art style: ${sentence(clip(studioStyle(en.style ?? data.style), 200) || clean(studioStyle(en.style ?? data.style)).slice(0, 200))} Stay in this 3D & 2.5D animation style; never photorealistic.`,
+      (en.style || data.style.trim()) && `Art style: ${sentence(clip(studioStyle(en.style ?? data.style), 200) || clean(studioStyle(en.style ?? data.style)).slice(0, 200))} Stay in this 3D & 2.5D animation style; never photorealistic.${keepPainted(en.style ?? data.style)}`,
       conti
         ? `LOOK (most important): every frame is a finished, fully coloured picture with the colour grading, light, atmosphere and brushwork of the scene picture and the art style below. The storyboard sketches are black-and-white layout guides only; nothing in the video looks like a sketch. The character design sheets give identity only (face, hair shape, body, costume design) — where this scene changes how a character looks (e.g. hair bleached by the sun, dust, a washed-out palette), follow the scene's description and the scene picture, not the sheet's colours. The background references give the world; nobody's proportions change and no character is duplicated.`
         : `Match the reference images exactly: the named characters' faces, hair, colors and costumes, the world, the lighting and the drawing style; nobody's proportions change and no character is duplicated.`,
@@ -1628,7 +1651,8 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
     (en.beats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) +
     Math.max(0, data.cast.length - 4) * 200 +
     Math.max(0, data.acting.segments.length - 6) * 250 +
-    constraintsExtra(constraints);
+    constraintsExtra(constraints) +
+    keepPainted(en.style ?? data.style).length;
   let prompt = "";
   for (const B of STORY_BUDGETS) {
     prompt = [headerWith(B), beatsWith(B).join("\n\n"), directorBlock, constraints].filter(Boolean).join("\n\n");
