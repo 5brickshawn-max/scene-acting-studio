@@ -1,9 +1,9 @@
 "use client";
 import { useState } from "react";
-import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, SceneComposeOutT, SheetCheckOutT, StoryboardOutT } from "@/lib/ai/schemas";
+import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, SceneComposeOutT, SheetCheckOutT, StoryboardOutT, ActingCheckOutT } from "@/lib/ai/schemas";
 import { JOB_LABEL, type JobKind } from "@/lib/ai/schemas";
-import { composeStructure, applyActing, applyCharacter, applyComposition, applyDialogue, applyExpressions, applyStoryboard, applyTextFixes, type CharacterField, type ComposeField } from "@/lib/domain/apply";
-import { castLabel, FACING_LABEL, GAZE_LABEL, INTENSITY_LABEL, maxCastFor, type ProjectData } from "@/lib/domain/project";
+import { composeStructure, applyActing, applyCharacter, applyComposition, applyDialogue, applyExpressions, applyStoryboard, applyTextFixes, applyActingFixes, type ActingFix, type CharacterField, type ComposeField } from "@/lib/domain/apply";
+import { usesConti as usesContiOf, castLabel, FACING_LABEL, GAZE_LABEL, INTENSITY_LABEL, maxCastFor, type ProjectData } from "@/lib/domain/project";
 import type { JobView } from "@/lib/types";
 import { useEditor } from "./editor-context";
 import { SketchRedoButton } from "./steps/higgsfield-direct";
@@ -499,6 +499,95 @@ export function SheetCheckResult({ job, out }: { job: JobView; out: SheetCheckOu
   );
 }
 
+const ACTING_FIX_LABEL = { action: "장면 묘사 (2단계)", camera: "카메라 (2단계)", continuity: "연결 상태 (2단계)", transition: "넘어가는 연기 (액팅)", length: "길이 (액팅)" } as const;
+
+/** What a correction would change now, or null when it is already in place. */
+function actingFixState(d: ProjectData, f: ActingFix): { current: string; next: string } | null {
+  const e = d.expressions[f.panel - 1];
+  if (!e) return null;
+  const seg = d.acting.segments.find((s) => s.expressionId === e.id);
+  if (f.field === "length") {
+    if (!seg || f.seconds === null) return null;
+    const cur = Math.round((seg.end - seg.start) * 100) / 100;
+    return Math.abs(cur - f.seconds) < 0.05 ? null : { current: `${cur}초`, next: `${Math.round(f.seconds * 100) / 100}초` };
+  }
+  const current = f.field === "transition" ? seg?.transition ?? "" : e[f.field];
+  return current.trim() === f.text.trim() ? null : { current, next: f.text };
+}
+
+/** 4단계 자동 점검: 콘티 그림 · 컷 설계 글 · 액팅이 어긋난 곳과 고칠 내용, 하나씩 또는 모두 적용. */
+export function ActingCheckResult({ job, out }: { job: JobView; out: ActingCheckOutT }) {
+  const { doc, canEdit } = useEditor();
+  const apply = useApply(job);
+  const story = doc.data.mode === "storyboard";
+  const unit = story ? "컷" : "표정";
+  const fixes: (ActingFix & { reason: string })[] = out.fixes ?? [];
+  const open = fixes.filter((f) => actingFixState(doc.data, f));
+  const redraw = story ? [...new Set(out.issues.filter((i) => i.severity === "high" && i.panel).map((i) => i.panel!))] : [];
+  // a text fix touches step 2, a timing fix step 4: each is saved where it belongs
+  const applyOne = (f: ActingFix) =>
+    doc.edit(f.field === "transition" || f.field === "length" ? 3 : 1, (d) => applyActingFixes(d, [f]));
+  return (
+    <ProposalShell
+      job={job}
+      title="콘티 · 설계 · 액팅 충돌 경고"
+      summary={out.summary}
+      onApply={open.length ? () => apply(applyActingFixes(doc.data, open), "4단계 점검: 콘티·설계·액팅 맞춤") : undefined}
+      applyLabel={`수정 ${open.length}건 모두 적용`}
+    >
+      {out.issues.length > 0 && (
+        <ul className="space-y-1">
+          {out.issues.map((i, n) => (
+            <li key={n} className={`notice ${i.severity === "high" ? "notice-error" : "notice-warn"}`}>
+              {i.panel ? <strong>{i.panel}번 {unit}: </strong> : null}
+              {i.message}
+            </li>
+          ))}
+        </ul>
+      )}
+      {fixes.length > 0 && (
+        <ol className="space-y-2">
+          {fixes.map((f, n) => {
+            const st = actingFixState(doc.data, f);
+            return (
+              <li key={n} className="rounded-lg bg-white border border-line p-3 space-y-1">
+                <div className="font-semibold">
+                  {f.panel}번 {unit} · {ACTING_FIX_LABEL[f.field]}
+                  {!st && <span className="pill pill-ok ml-2">적용됨</span>}
+                </div>
+                <p className="text-[14px] text-muted">{f.reason}</p>
+                {st && <p className="text-[14px] line-through text-muted">{st.current || "(비어 있음)"}</p>}
+                {st && <p className="text-[14px]">{st.next}</p>}
+                {canEdit && st && (
+                  <button className="btn btn-sm" onClick={() => applyOne(f)}>
+                    이 수정 적용
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+      {canEdit && redraw.length > 0 && usesContiOf(doc.data) && (
+        <div className="space-y-2">
+          <div className="font-semibold">그림이 장면과 어긋난 컷 — 러프 콘티 다시 그리기</div>
+          <ul className="flex flex-wrap gap-3">
+            {redraw.map((p) => {
+              const e = doc.data.expressions[p - 1];
+              return e ? (
+                <li key={p} className="flex items-center gap-2">
+                  <span className="text-[14px]">{p}번 컷</span>
+                  <SketchRedoButton expressionId={e.id} hasSketch={Boolean(e.sketchAssetId)} />
+                </li>
+              ) : null;
+            })}
+          </ul>
+        </div>
+      )}
+    </ProposalShell>
+  );
+}
+
 /* ───────────── Step 3: dialogue ───────────── */
 
 export function DialogueProposal({ job, out }: { job: JobView; out: DialogueOutT }) {
@@ -568,6 +657,7 @@ export function PendingProposal({ step, kinds, except }: { step: number; kinds?:
   if (!pending) return null;
   const { job, proposal } = pending;
   if (job.kind === "check_sheet") return <SheetCheckResult job={job} out={proposal as SheetCheckOutT} />;
+  if (job.kind === "check_acting") return <ActingCheckResult job={job} out={proposal as ActingCheckOutT} />;
   switch (step) {
     case 0:
       return job.kind === "compose_scene" ? (

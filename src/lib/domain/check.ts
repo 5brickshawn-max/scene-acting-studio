@@ -6,7 +6,7 @@
  */
 import { hasCameraMove } from "./constraints";
 import { VIDEO_PROMPT_TARGET, cameraTextMoves, shownBeats, type VideoHandoff } from "./handoff";
-import { castLabel, continuityAnchor, imageAspectFor, imageIsStale, shotsOf, timelineOrder, usesConti, type ProjectData } from "./project";
+import { castLabel, continuityAnchor, imageAspectFor, imageIsStale, sketchIsStale, shotsOf, timelineOrder, usesConti, type ProjectData } from "./project";
 import { estimateSpeechSeconds } from "./speech";
 import { retime, timingMismatch } from "./timing";
 import { englishStale } from "./english";
@@ -182,6 +182,9 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
   const toImages: CheckFix = { kind: "goto", step: 1, label: "2단계 표정 그림으로" };
   if (!data.video.startFrameAssetId && usesConti(data)) {
     const noSketch = data.expressions.filter((e) => !e.sketchAssetId);
+    const changed = data.expressions.filter((e) => sketchIsStale(e));
+    if (changed.length)
+      add("warn", "러프 콘티", `${changed.map((e) => `${no(e.id)}번`).join(", ")} 컷: 러프 콘티를 그린 뒤 글이 바뀌어 그림과 글이 다를 수 있습니다. 영상은 둘 중 하나를 무시합니다.`, { kind: "goto", step: 3, label: "4단계 일치 점검으로" });
     if (noSketch.length) add("warn", "러프 콘티", `러프 콘티가 없는 컷: ${noSketch.map((e) => `${no(e.id)}번`).join(", ")}. 그 구간은 구도 참고 없이 만들어집니다.`, { kind: "goto", step: 1, label: "2단계 러프 콘티로" });
     else add("ok", "콘티 방식", "캐릭터 시트 → 배경·에셋 → 러프 콘티 순서로 첨부하고, 러프 콘티는 구도·동선·포즈·카메라만 따르도록 지시합니다(그림체는 시트와 장면 그림).");
   } else if (!data.video.startFrameAssetId) {

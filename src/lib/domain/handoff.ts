@@ -1374,7 +1374,7 @@ function buildStoryboardHandoffs(data: ProjectData, fixes: Record<string, string
     const line = data.dialogue.lines.find((l) => l.expressionId === e.id)?.line.trim();
     const prompt = [
       `One finished ${aspect} frame of the animation (moment ${i + 1} of ${n} in this scene): ONE single image of ONE moment that fills the whole frame — never a storyboard sheet, a grid, a contact sheet, a comic page or a sequence of small frames; exactly one camera view. Not a rough sketch; no borders, no text, no speech bubbles.`,
-      `The description below may list several steps of an action (look → prepare → act → contact → settle) and a camera move from a start to an end framing: draw only the single key moment of the main action, in one framing — do not draw each step or each framing as a separate picture.`,
+      `The description below may list several steps of an action (look → prepare → act → contact → settle) and a camera move from a start to an end framing: draw only the single moment the action arrives at (its end pose), in one framing — do not draw each step or each framing as a separate picture, and do not draw anything that happens after the description ends.`,
       // the framing first: reference pictures pull toward their own composition (the scene picture is often this same moment)
       t.camera && `FRAMING OF THIS PANEL (follow it over every reference picture): ${sentence(t.camera)}`,
       multiShot
@@ -1445,6 +1445,8 @@ export function buildSketchHandoffs(data: ProjectData): ExpressionHandoff[] {
         "Image reference 1 is the finished scene picture: use it ONLY to know who is who (silhouettes, hair shapes, sizes) and how the set is laid out. Do NOT copy its colours, shading, detail or art style — this must stay a rough line sketch.",
       who && `Characters who may appear: ${who}. Draw only those this moment needs.`,
       t.action ? `This moment: ${sentence(t.action)}` : "",
+      endState(t.state) &&
+        `The pose to draw (where this moment ends — hands, body position and props exactly like this, e.g. an open hand stays open, a fist stays a fist, kneeling stays kneeling): ${sentence(endState(t.state))}`,
       t.camera && `Camera: ${sentence(t.camera)} Draw one framing only (the framing at the key moment): where the camera stands and how big the figures are.`,
       `Keep the composition clear: main figures large enough to read, background as a few simple lines (horizon, walls, door, big props). Again: one single frame, not several panels.`,
     ]

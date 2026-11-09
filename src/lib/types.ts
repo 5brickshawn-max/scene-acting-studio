@@ -29,7 +29,7 @@ export type JobView = {
   kind: string;
   step: number;
   status: "queued" | "running" | "done" | "failed";
-  input: { message?: string; instruction?: string; characterId?: string };
+  input: { message?: string; instruction?: string; characterId?: string; checkKey?: string };
   output: unknown;
   error: string | null;
   based_on_version: number;

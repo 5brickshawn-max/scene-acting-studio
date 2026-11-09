@@ -14,6 +14,7 @@ import {
   EnglishOut,
   PromptCheckOut,
   SheetCheckOut,
+  ActingCheckOut,
   consultSchemaFor,
   type EnglishOutT,
   type JobKind,
@@ -342,7 +343,8 @@ async function buildRequest(job: JobRow, data: ProjectData) {
                 `  피할 연결 오류: 진행 방향 반전, 대화축 무단 횡단(좌우 교환), 인물 순간 이동, 시선 높이 불일치(아이를 보는데 눈은 위), 포즈 리셋, 잡은 손 바뀜, 동작 중복, 접촉 단계 누락(손이 닿기 전에 물건이 움직임), 소품 상태 복구(건넨 물건이 다시 원래 사람에게), 감정 리셋, 빛·바람 방향 반전, 같은 거리인데 인물이 커지거나 키 순서가 바뀜.\n` +
                 `- speaker: 이 컷에서 대사를 말하는 주요 인물 번호(1~${data.cast.length}), 대사가 없으면 0.\n` +
                 `- link: 앞 컷과의 연결. 시나리오가 화면을 끊어 새 쇼트로 넘어가면(예: '특대 클로즈업 세 컷이 1초씩', '완전 부감으로', 장소·시점이 크게 바뀜) cut, 같은 쇼트에서 카메라가 이어서 움직여 다음 구도가 되면 continuous. 첫 컷은 continuous. cut이면 camera에는 그 쇼트의 구도만 쓰고, 앞 컷에서 이어지는 움직임은 쓰지 마세요.\n` +
-                (sketches.length ? `팀이 올린 러프 스케치가 있는 컷은 그 구도·자세·카메라를 따르고 action에 그대로 풀어 쓰세요.\n` : "") +
+                (sketches.length ? `팀이 올린 러프 스케치가 있는 컷은 그 구도·자세·카메라를 따르고 action에 그대로 풀어 쓰세요. 그림의 손 모양(편 손/주먹)·자세(엎드림/무릎/서 있음/걸음)·소품 상태를 그림과 다르게 쓰지 마세요.\n` : "") +
+                `- ★ 한 컷의 글은 한 장면만 가리켜야 합니다(러프 콘티는 이 글로 그리고, 영상은 그림과 글을 함께 받습니다): 제목(title)·action의 마지막 동작·state의 '끝'이 모두 같은 최종 자세를 말하게 쓰세요. 예: 제목이 '일어나 한 걸음'이면 action도 '…한 걸음 내딛는다'로 끝나고 state 끝도 '서서 한 걸음 내딛은 자세'. action이 무릎 꿇기에서 끝나면 제목·끝 상태도 무릎 꿇기. 손 모양·소품 상태도 세 곳이 같게.\n` +
                 (data.expressionSetup.scene.trim()
                   ? `'상황 설정·기초 대사'의 흐름을 따르고, 기초 대사마다 그 대사를 말하는 컷을 배정하세요.\n\n상황 설정·기초 대사:\n${data.expressionSetup.scene.trim()}\n`
                   : "") +
@@ -470,13 +472,41 @@ async function buildRequest(job: JobRow, data: ProjectData) {
               `duration은 반드시 ${data.acting.duration}으로 두고, 구간은 0초에서 시작해 빈틈없이 이어져 ${data.acting.duration}초에서 끝나야 합니다. 모든 표정을 한 번씩 쓰세요. ` +
               `대사를 말할 시간이 충분하도록 하고(한국어 기준 1초에 약 4~5음절), transition에는 다음 표정으로 넘어가는 연기를 짧게 적으세요. 넘어짐·낙하·충돌처럼 빠른 동작만 있는 구간은 짧게 주어(0.5초 안팎) 영상 모델이 슬로모션으로 늘이지 않게 하세요.` +
               (data.mode === "storyboard"
-                ? ` 스토리보드 방식이라 컷 순서는 2단계 순서(컷 1, 2, 3 …) 그대로 두고 시간만 나누세요 — 순서를 바꾸면 컷 사이 연결이 깨집니다. transition은 다음 컷으로 넘어가는 방식입니다: 다음 컷이 [컷 분할]이면 무엇에서 끊기는지(예: 숨이 끝나는 순간 컷), [이어짐]이면 카메라·몸이 어떻게 이어지는지. 초 단위 시각은 쓰지 마세요.`
+                ? ` 스토리보드 방식이라 컷 순서는 2단계 순서(컷 1, 2, 3 …) 그대로 두고 시간만 나누세요 — 순서를 바꾸면 컷 사이 연결이 깨집니다. transition은 다음 컷으로 넘어가는 방식입니다: 다음 컷이 [컷 분할]이면 무엇에서 끊기는지(예: 숨이 끝나는 순간 컷), [이어짐]이면 카메라·몸이 어떻게 이어지는지. 초 단위 시각은 쓰지 마세요. transition은 이 컷의 장면 묘사·연결 상태 '끝'의 자세에서 출발해 다음 컷 '시작'의 자세로 이어져야 합니다 — 설계(그리고 그것으로 그린 러프 콘티)에 없는 새 자세·손 모양·동작을 만들지 마세요. 컷 길이는 그 컷 action의 동작을 모두 보여 줄 수 있게 주세요(동작이 많은 컷을 너무 짧게 주지 않기).`
                 : "") +
               (data.expressionSetup.scene.trim() ? ` '상황 설정·기초 대사'의 흐름(순서와 템포, 숨을 고르는 순간)을 따르세요.` : "") +
               `\n\n${ctx}${extra}`,
           },
         ] as Content,
       };
+    case "check_acting": {
+      // 콘티 그림 · 컷 설계 글 · 액팅(시간·전환): the three must tell the same scene
+      const [base, pics] = await Promise.all([baseImage(), expressionImages(data)]);
+      const story = data.mode === "storyboard";
+      const unit = story ? "컷" : "표정";
+      return {
+        schema: ActingCheckOut,
+        content: [
+          ...base,
+          ...pics,
+          {
+            type: "text",
+            text:
+              `4단계(액팅) 자동 점검입니다. 세 가지가 서로 같은 장면을 말하는지 ${unit}마다 비교하세요: ` +
+              `① ${pics.length ? `${unit} 그림(${usesConti(data) ? "러프 콘티 — 흑백 선 그림이라 그림체·색은 보지 않음" : "완성 그림"})` : "그림(없음 — 글과 액팅만 비교)"} ` +
+              `② ${unit} 설계 글(장면 묘사·카메라·연결 상태 '시작/끝') ③ 액팅(구간 길이와 '다음으로 넘어가는 연기' transition, 대사 길이).\n` +
+              `찾을 충돌: 그림의 손 모양·자세·소품 상태·숏 크기가 글과 다름 / 글의 마지막 동작과 연결 상태 '끝'이 다름 / transition이 이 ${unit}의 끝 자세나 다음 ${unit}의 시작 자세와 맞지 않거나 설계에 없는 동작을 만듦 / ` +
+              `구간이 그 ${unit}의 동작이나 대사를 보여 주기에 너무 짧거나(대사는 한국어 1초 약 4음절, 영어 1초 약 2.5단어), 넘어짐·충돌처럼 빠른 순간이 너무 길어 슬로모션이 될 구간 / ` +
+              `${story ? "이어짐 컷 사이에서 앞 컷 끝 자세와 다음 컷 시작 자세가 다름." : "이웃 표정 사이 자세가 이어질 수 없음."}\n` +
+              `issues에는 무엇과 무엇이(그림/설계 글/액팅) 어떻게 다른지 ${unit} 번호와 함께 구체적으로 적으세요(심각하면 high).\n` +
+              `fixes에는 충돌을 없애는 수정을 넣으세요. 고칠 쪽 정하기: 그림이 장면 흐름·연결 규칙에 맞으면 글과 액팅을 그림에 맞추고(그림은 다시 그리려면 비용이 들고, 영상은 그림을 따라가므로), ` +
+              `그림이 장면을 깨뜨리면 글은 두고 issues에 '그 ${unit} 콘티를 다시 그리기'를 적으세요. field: action/camera/continuity(설계 글, text에 새 전체 내용 — 나머지 내용과 '시작: … / 끝: …' 형식은 살림), ` +
+              `transition(액팅의 넘어가는 연기, 새 전체 내용; 마지막 ${unit}에는 쓰지 않음), length(이 ${unit}의 새 길이를 seconds에, text는 빈 문자열 — 전체 ${data.acting.duration}초는 고정이므로 늘린 만큼 다른 구간이 줄어듦을 감안해 꼭 필요한 것만). ` +
+              `한 ${unit}의 끝 상태를 고치면 다음 ${unit} 연결 상태의 '시작'도 함께 고치세요. 글은 지금 글과 같은 언어로 쓰세요. 충돌이 없으면 issues와 fixes를 비워 두세요.\n\n${ctx}`,
+          },
+        ] as Content,
+      };
+    }
     case "check_prompt": {
       // the exact prompt generation will send (same source as gen.ts)
       const h = buildVideoHandoff(data, data.video.startFrameAssetId ? "start_frame" : "references");
@@ -668,7 +698,7 @@ export async function runJob(jobId: string) {
       // Text-only planning jobs do not need the deepest reasoning; image analysis keeps "high".
       // (Effort stays fixed per kind: changing it would also miss the prompt cache.)
       const effort =
-        job.kind === "write_dialogue" || job.kind === "plan_acting" || job.kind === "check_prompt" || job.kind === "write_english" ? "medium" : "high";
+        job.kind === "write_dialogue" || job.kind === "plan_acting" || job.kind === "check_prompt" || job.kind === "check_acting" || job.kind === "write_english" ? "medium" : "high";
       result = await callClaude(req.schema, BASE_SYSTEM, [{ role: "user", content: cacheThroughLastImage(req.content) }], effort);
     }
     const u = result.usage;

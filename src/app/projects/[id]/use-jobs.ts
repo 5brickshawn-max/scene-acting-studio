@@ -54,7 +54,7 @@ export function useJobs(projectId: string, initial: JobView[]) {
   }, [activeIds]);
 
   const request = useCallback(
-    async (kind: JobKind, step: number, opts: { message?: string; instruction?: string; characterId?: string } = {}) => {
+    async (kind: JobKind, step: number, opts: { message?: string; instruction?: string; characterId?: string; checkKey?: string } = {}) => {
       setRequestError(null);
       const res = await fetch(`/api/projects/${projectId}/ai`, {
         method: "POST",

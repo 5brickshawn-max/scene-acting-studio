@@ -177,3 +177,42 @@ describe("conti check: text corrections", () => {
     invariants(x, "after text fixes");
   });
 });
+
+describe("safeguards: sketch ↔ text ↔ acting", () => {
+  it("flags a sketch whose text changed, and clears it when the text is matched to the sketch", async () => {
+    const { withSketch, sketchIsStale } = await import("@/lib/domain/project");
+    const { applyTextFixes } = await import("@/lib/domain/apply");
+    let d = setExpressionCount(createProjectData("콘티", 1, "storyboard"), 3);
+    d = { ...d, expressions: d.expressions.map((e) => withSketch({ ...e, action: "손을 편다" }, "sk")) };
+    expect(sketchIsStale(d.expressions[0])).toBe(false);
+    d = { ...d, expressions: d.expressions.map((e, i) => (i === 0 ? { ...e, action: "주먹을 쥔다" } : e)) };
+    expect(sketchIsStale(d.expressions[0])).toBe(true);
+    const fixed = applyTextFixes(d, [{ panel: 1, field: "action", text: "모래를 움켜쥔 주먹" }]);
+    expect(sketchIsStale(fixed.expressions[0])).toBe(false);
+  });
+  it("applies acting fixes: transition, text, and a new length that keeps the timeline whole", async () => {
+    const { applyActingFixes } = await import("@/lib/domain/apply");
+    const d = setDuration(setExpressionCount(createProjectData("콘티", 1, "storyboard"), 4), 8);
+    const x = applyActingFixes(d, [
+      { panel: 2, field: "length", text: "", seconds: 4, },
+      { panel: 1, field: "transition", text: "숨이 끝나는 순간 컷", seconds: null },
+      { panel: 3, field: "continuity", text: "시작: 엎드림 / 끝: 무릎", seconds: null },
+    ]);
+    const seg2 = x.acting.segments.find((s) => s.expressionId === x.expressions[1].id)!;
+    expect(Math.abs(seg2.end - seg2.start - 4) < 0.01).toBe(true);
+    expect(x.acting.segments.find((s) => s.expressionId === x.expressions[0].id)!.transition).toBe("숨이 끝나는 순간 컷");
+    expect(x.expressions[2].continuity).toBe("시작: 엎드림 / 끝: 무릎");
+    invariants(x, "after acting fixes");
+    // an impossible length is skipped
+    const y = applyActingFixes(d, [{ panel: 1, field: "length", text: "", seconds: 7.9 }]);
+    expect(y.acting.segments).toEqual(d.acting.segments);
+  });
+  it("the sketch prompt draws the pose the panel ends on", async () => {
+    const { buildSketchHandoffs } = await import("@/lib/domain/handoff");
+    const d = setExpressionCount(createProjectData("콘티", 1, "storyboard"), 2);
+    d.expressions[0] = { ...d.expressions[0], action: "pushes up and kneels", continuity: "시작: 엎드림 / 끝: 무릎을 꿇은 자세" };
+    const p = buildSketchHandoffs(d)[0].prompt;
+    expect(p).toContain("The pose to draw");
+    expect(p).toContain("무릎을 꿇은 자세");
+  });
+});

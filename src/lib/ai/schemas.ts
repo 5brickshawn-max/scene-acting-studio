@@ -168,6 +168,29 @@ export const SheetCheckOut = z.object({
     .describe("스토리보드 방식에서만: 그림이 장면에 맞는데 글이 그림과 다를 때, 글을 그림에 맞추는 수정. 그 밖에는 빈 배열"),
 });
 
+/** 4단계 자동 점검: 콘티 그림 · 컷 설계 글 · 액팅(시간·전환)이 서로 맞는지. */
+export const ActingCheckOut = z.object({
+  summary: z.string(),
+  issues: z.array(
+    z.object({
+      panel: z.number().int().nullable().describe("컷 번호 (1부터), 전체 문제면 null"),
+      severity: z.enum(["high", "low"]),
+      message: z.string().describe("무엇과 무엇이 어긋났는지: 그림 / 장면 설계 글 / 액팅 중 어느 둘이 다른지 구체적으로"),
+    }),
+  ),
+  fixes: z.array(
+    z.object({
+      panel: z.number().int().describe("컷 번호 (1부터)"),
+      field: z
+        .enum(["action", "camera", "continuity", "transition", "length"])
+        .describe("action=장면 묘사, camera=카메라, continuity=연결 상태, transition=다음으로 넘어가는 연기(액팅), length=이 컷의 길이(초)"),
+      text: z.string().describe("그 칸의 새 전체 내용(한국어). length면 빈 문자열"),
+      seconds: z.number().nullable().describe("length일 때 이 컷의 새 길이(초), 그 밖에는 null"),
+      reason: z.string().describe("왜 고치는지 한 문장"),
+    }),
+  ),
+});
+
 export const DialogueOut = z.object({
   summary: z.string(),
   voices: z
@@ -272,6 +295,7 @@ export const JOB_KINDS = [
   "check_sheet",
   "write_dialogue",
   "plan_acting",
+  "check_acting",
   "check_prompt",
   "write_english",
   "consult",
@@ -285,6 +309,7 @@ export const JOB_STEP: Record<Exclude<JobKind, "consult">, number> = {
   check_sheet: 1,
   write_dialogue: 2,
   plan_acting: 3,
+  check_acting: 3,
   check_prompt: 4,
   write_english: 4,
 };
@@ -296,6 +321,7 @@ export const JOB_LABEL: Record<JobKind, string> = {
   check_sheet: "표정 그림 검사",
   write_dialogue: "대사 작성",
   plan_acting: "액팅 타이밍 설계",
+  check_acting: "콘티·설계·액팅 일치 점검",
   check_prompt: "렌더 전 AI 점검",
   write_english: "영어 프롬프트 정리",
   consult: "상의",
@@ -330,6 +356,7 @@ export type SceneComposeOutT = z.infer<typeof SceneComposeOut>;
 export type ExpressionsOutT = z.infer<typeof ExpressionsOut>;
 export type StoryboardOutT = z.infer<typeof StoryboardOut>;
 export type SheetCheckOutT = z.infer<typeof SheetCheckOut>;
+export type ActingCheckOutT = z.infer<typeof ActingCheckOut>;
 export type DialogueOutT = z.infer<typeof DialogueOut>;
 export type ActingOutT = z.infer<typeof ActingOut>;
 export type PromptCheckOutT = z.infer<typeof PromptCheckOut>;

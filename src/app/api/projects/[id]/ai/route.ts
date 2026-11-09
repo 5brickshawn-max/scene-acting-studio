@@ -17,6 +17,8 @@ const Body = z.object({
   instruction: z.string().max(4000).optional(),
   /** analyze_character: the cast member to analyze */
   characterId: z.string().max(64).optional(),
+  /** an automatic check: the fingerprint of what it checked, so it is not repeated for the same content */
+  checkKey: z.string().max(64).optional(),
 });
 
 function startOfTodayKST() {
@@ -66,7 +68,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       project_id: id,
       kind: body.kind,
       step,
-      input: { message: body.message, instruction: body.instruction, characterId: body.characterId },
+      input: { message: body.message, instruction: body.instruction, characterId: body.characterId, checkKey: body.checkKey },
       based_on_version: project.current_version,
       created_by: ctx.userId,
     })

@@ -168,6 +168,8 @@ export const ExpressionSchema = z.object({
   principles: z.array(z.string()).default([]),
   /** a rough storyboard sketch for this panel: composition, poses and camera are taken from it, not its drawing style */
   sketchAssetId: z.string().nullable().default(null),
+  /** fingerprint of the panel's text (description · camera · continuity) the sketch was made for; null = unknown (older data) */
+  sketchBasis: z.string().nullable().default(null),
   /**
    * storyboard: how this panel follows the previous one — "continuous" (the camera moves on in the same shot)
    * or "cut" (컷 분할: a hard cut, a new shot). Ignored for the first panel.
@@ -410,6 +412,7 @@ export function blankExpression(panel: number | null = null, characterId = ""): 
     continuity: "",
     principles: [],
     sketchAssetId: null,
+    sketchBasis: null,
     link: "continuous",
     reactions: [],
     panel,
@@ -832,6 +835,9 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
       // 콘티 방식: the video is made from the sheets, the places and the rough sketches
       const noSketch = data.expressions.filter((e) => !e.sketchAssetId).length;
       if (noSketch) warn(`러프 콘티가 없는 컷이 ${noSketch}개 있습니다. 콘티 방식 영상에는 컷마다 러프 콘티가 들어갑니다.`);
+      const changed = data.expressions.map((e, i) => (sketchIsStale(e) ? i + 1 : 0)).filter(Boolean);
+      if (changed.length)
+        warn(`${changed.join("·")}번 컷: 러프 콘티를 그린 뒤 장면 묘사·카메라·연결 상태 글이 바뀌었습니다. 그림과 글이 다르면 영상이 한쪽을 무시합니다 — 콘티를 다시 그리거나 AI 콘티 검사로 글을 그림에 맞추세요.`);
     } else {
       const missing = data.expressions.filter((e) => !e.imageAssetId).length;
       if (missing) warn(`그림이 없는 컷이 ${missing}개 있습니다. Higgsfield로 생성하거나 직접 올리세요. (러프 콘티만으로 영상을 만들려면 모든 컷에 러프 콘티를 넣으세요 — 콘티 방식)`);
@@ -884,6 +890,9 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
 
   if (step === 3) {
     issues.push(...timelineIssues(data));
+    const changed = usesConti(data) ? data.expressions.map((e, i) => (sketchIsStale(e) ? i + 1 : 0)).filter(Boolean) : [];
+    if (changed.length)
+      warn(`${changed.join("·")}번 컷: 러프 콘티를 그린 뒤 2단계 글이 바뀌어 그림과 글이 다를 수 있습니다. 아래 ‘콘티 · 설계 · 액팅 일치 점검’을 확인하세요.`);
   }
 
   if (step === 4) {
@@ -1045,4 +1054,37 @@ export function withActors(d: ProjectData): ProjectData {
     return next;
   });
   return changed ? { ...d, expressions } : d;
+}
+
+/** Fingerprint of what a panel's sketch shows in words (description · camera · continuity), whitespace-insensitive. */
+export function panelBasis(e: Pick<Expression, "action" | "camera" | "continuity">): string {
+  const t = [e.action, e.camera, e.continuity].map((x) => x.replace(/\s+/g, " ").trim()).join("|");
+  let h = 5381;
+  for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+/** The panel's text changed after its sketch was made (so picture and words may now disagree). */
+export const sketchIsStale = (e: Expression) => Boolean(e.sketchAssetId && e.sketchBasis && e.sketchBasis !== panelBasis(e));
+
+/** The sketch now stands for the panel's current text (a new sketch, or text corrected to match it). */
+export const withSketch = (e: Expression, sketchAssetId: string | null): Expression => ({
+  ...e,
+  sketchAssetId,
+  sketchBasis: sketchAssetId ? panelBasis(e) : null,
+});
+
+/**
+ * Fingerprint of everything the 4단계 점검 compares (pictures, panel text, timing, transitions, lines): the
+ * automatic check runs again only when this changes.
+ */
+export function actingCheckKey(d: ProjectData): string {
+  const t = JSON.stringify([
+    d.expressions.map((e) => [e.sketchAssetId, e.imageAssetId, e.action, e.camera, e.continuity]),
+    d.acting.segments.map((s) => [s.expressionId, s.start, s.end, s.transition]),
+    d.dialogue.lines.map((l) => [l.expressionId, l.line]),
+  ]);
+  let h = 5381;
+  for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
 }

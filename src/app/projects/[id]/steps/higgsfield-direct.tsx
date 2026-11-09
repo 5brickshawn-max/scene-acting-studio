@@ -13,7 +13,7 @@ import {
 } from "@/lib/higgsfield/models";
 import type { AssetView, JobView } from "@/lib/types";
 import { AssetPicker } from "../ui";
-import { FRAMING_LABEL, ratioLabel, castLabel, continuityAnchor, imageAspectFor, imageIsStale, timelineOrder, usesConti, type Framing } from "@/lib/domain/project";
+import { FRAMING_LABEL, ratioLabel, castLabel, continuityAnchor, imageAspectFor, imageIsStale, timelineOrder, usesConti, withSketch, type Framing } from "@/lib/domain/project";
 import { useEditor } from "../editor-context";
 
 type Quote = { credits: number | null; each?: number | null; count?: number; balance: number | null; workspace: string | null; model: string; references: number };
@@ -290,7 +290,7 @@ export function SketchGenerator() {
       let expressions = x.expressions;
       for (const j of ready) {
         const id = (j.input as { expressionId?: string }).expressionId;
-        expressions = expressions.map((e) => (e.id === id ? { ...e, sketchAssetId: jobAssetId(j)! } : e));
+        expressions = expressions.map((e) => (e.id === id ? withSketch(e, jobAssetId(j)!) : e));
       }
       return { ...x, expressions };
     });

@@ -16,7 +16,7 @@ type EditorCtx = {
   assets: Map<string, AssetView>;
   addAsset: (a: AssetView) => void;
   /** Saves pending edits first so the AI sees exactly what is on screen. */
-  askAi: (kind: JobKind, step: number, opts?: { message?: string; instruction?: string; characterId?: string }) => Promise<string | null>;
+  askAi: (kind: JobKind, step: number, opts?: { message?: string; instruction?: string; characterId?: string; checkKey?: string }) => Promise<string | null>;
   dismissed: Set<string>;
   dismiss: (jobId: string) => void;
 };

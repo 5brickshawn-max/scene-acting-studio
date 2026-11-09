@@ -20,6 +20,7 @@ import {
   weightedSegments,
   type Expression,
   type ProjectData,
+  panelBasis,
 } from "./project";
 
 export type CharacterField = "locks" | "appearance" | "outfit" | "style" | "questions";
@@ -263,7 +264,61 @@ export type PanelTextFix = { panel: number; field: "action" | "camera" | "contin
 export function applyTextFixes(data: ProjectData, fixes: PanelTextFix[]): ProjectData {
   const expressions = data.expressions.map((e, i) => {
     const mine = fixes.filter((f) => f.panel === i + 1 && f.text.trim());
-    return mine.length ? mine.reduce((x, f) => ({ ...x, [f.field]: f.text.trim() }), e) : e;
+    if (!mine.length) return e;
+    const next = mine.reduce((x, f) => ({ ...x, [f.field]: f.text.trim() }), e);
+    // the words now follow the picture: the sketch stands for the corrected text
+    return next.sketchAssetId ? { ...next, sketchBasis: panelBasis(next) } : next;
   });
   return { ...data, expressions };
+}
+
+/** A 4단계 점검 correction: a panel's text, its transition (acting), or its length in seconds (panel counts from 1). */
+export type ActingFix = { panel: number; field: "action" | "camera" | "continuity" | "transition" | "length"; text: string; seconds: number | null };
+
+const MIN_SEGMENT = 0.3;
+
+/**
+ * Applies text, transition and length corrections. A new length is taken from (or given to) the other panels in
+ * proportion to their lengths, so the timeline stays contiguous from 0 to the fixed duration.
+ */
+export function applyActingFixes(data: ProjectData, fixes: ActingFix[]): ProjectData {
+  const exists = (f: ActingFix) => f.panel >= 1 && f.panel <= data.expressions.length;
+  const texts = fixes.filter((f) => exists(f) && (f.field === "action" || f.field === "camera" || f.field === "continuity")) as PanelTextFix[];
+  let next = applyTextFixes(data, texts);
+  const idOf = (f: ActingFix) => data.expressions[f.panel - 1].id;
+  const transitions = fixes.filter((f) => exists(f) && f.field === "transition" && f.text.trim());
+  if (transitions.length)
+    next = {
+      ...next,
+      acting: {
+        ...next.acting,
+        segments: next.acting.segments.map((s) => {
+          const t = transitions.find((f) => idOf(f) === s.expressionId);
+          return t ? { ...s, transition: t.text.trim() } : s;
+        }),
+      },
+    };
+  const lengths = fixes.filter((f) => exists(f) && f.field === "length" && f.seconds !== null && f.seconds > 0);
+  const segs = next.acting.segments;
+  const total = next.acting.duration;
+  if (lengths.length && segs.length > 1) {
+    const want = new Map<string, number>();
+    for (const f of lengths) want.set(idOf(f), f.seconds!);
+    const fixedSum = segs.reduce((a, s) => a + (want.has(s.expressionId) ? want.get(s.expressionId)! : 0), 0);
+    const free = segs.filter((s) => !want.has(s.expressionId));
+    const freeOld = free.reduce((a, s) => a + (s.end - s.start), 0);
+    const room = total - fixedSum;
+    // impossible asks (nothing left for the others) are skipped rather than squeezing panels to nothing
+    if (free.length && room >= free.length * MIN_SEGMENT && freeOld > 0) {
+      let t = 0;
+      const out = segs.map((s, k) => {
+        const len = want.get(s.expressionId) ?? Math.max(MIN_SEGMENT, ((s.end - s.start) / freeOld) * room);
+        const seg = { ...s, start: round3(t), end: k === segs.length - 1 ? total : round3(t + len) };
+        t = seg.end;
+        return seg;
+      });
+      if (out.every((s) => s.end - s.start > 0.05)) next = { ...next, acting: { ...next.acting, segments: out } };
+    }
+  }
+  return next;
 }

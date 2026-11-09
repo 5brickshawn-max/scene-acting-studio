@@ -19,6 +19,8 @@ import {
   MAX_EXPRESSIONS,
   MAX_PANELS_STORYBOARD,
   usesConti,
+  sketchIsStale,
+  withSketch,
   MAX_VIDEO_SECONDS,
   MIN_EXPRESSIONS,
   directionIssues,
@@ -936,8 +938,16 @@ function PanelCard({ e, index }: { e: Expression; index: number }) {
             assetId={e.sketchAssetId}
             removable
             emptyText="콘티 칸을 올리거나 위 ‘러프 콘티 바로 생성’으로 만들면 구도·자세·카메라를 따릅니다 (선 그림체는 따르지 않음)."
-            onChange={(id) => update({ sketchAssetId: id })}
+            onChange={(id) => {
+              done.markEdited();
+              doc.edit(1, (x) => ({ ...x, expressions: x.expressions.map((y) => (y.id === e.id ? withSketch(y, id) : y)) }));
+            }}
           />
+          {sketchIsStale(e) && (
+            <p className="notice notice-warn text-[13px]">
+              이 콘티를 그린 뒤 장면 묘사·카메라·연결 상태 글이 바뀌었습니다. 그림과 글이 다르면 영상이 한쪽을 무시합니다 — 콘티를 다시 그리거나, ④ AI 콘티 검사로 글을 그림에 맞추세요.
+            </p>
+          )}
           <SketchRedoButton expressionId={e.id} hasSketch={Boolean(e.sketchAssetId)} />
         </div>
         <figure>
