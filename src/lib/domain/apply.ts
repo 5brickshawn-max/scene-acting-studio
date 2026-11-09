@@ -3,9 +3,6 @@
 import { MAX_PRINCIPLES, principleOf } from "./principles";
 import type { ActingOutT, CharacterOutT, DialogueOutT, ExpressionsOutT, SceneComposeOutT, StoryboardOutT } from "@/lib/ai/schemas";
 import {
-  capShots,
-  fitShots,
-  MAX_SHOTS,
   MAX_EXPRESSIONS,
   MAX_VIDEO_SECONDS,
   MIN_EXPRESSIONS,
@@ -52,21 +49,13 @@ export type ComposeField = "cast" | "style" | "extras" | "opening" | "questions"
 export function composeStructure(data: Pick<ProjectData, "mode">, out: Pick<SceneComposeOutT, "shots" | "duration">) {
   const story = data.mode === "storyboard";
   // character-by-character scenes are one continuous shot: its panels are the beats
-  let shots = (story ? out.shots : [{ title: "", seconds: out.duration, panels: out.shots.flatMap((s) => s.panels) }]).filter((s) => s.panels.length);
-  const proposedShots = shots.length;
-  // at most MAX_SHOTS shots: the shortest shot (fewest panels) joins the one before it
-  while (shots.length > MAX_SHOTS) {
-    let k = 1;
-    for (let i = 2; i < shots.length; i++) if (shots[i].panels.length <= shots[k].panels.length) k = i;
-    const merged = { title: shots[k - 1].title, seconds: (shots[k - 1].seconds || 0) + (shots[k].seconds || 0), panels: [...shots[k - 1].panels, ...shots[k].panels] };
-    shots = [...shots.slice(0, k - 1), merged, ...shots.slice(k + 1)];
-  }
+  const shots = (story ? out.shots : [{ title: "", seconds: out.duration, panels: out.shots.flatMap((s) => s.panels) }]).filter((s) => s.panels.length);
   const panels: { title: string; shot: number; weight: number }[] = [];
   shots.forEach((s, k) => s.panels.forEach((t) => panels.push({ title: t, shot: k, weight: Math.max(0.2, s.seconds || 1) / s.panels.length })));
   const total = panels.length;
   const kept = panels.slice(0, MAX_EXPRESSIONS);
   const duration = round3(Math.min(MAX_VIDEO_SECONDS, Math.max(1, out.duration || kept.reduce((a, p) => a + p.weight, 0))));
-  return { story, shots: shots.length, mergedShots: proposedShots - shots.length, panels: kept, total, clipped: total > MAX_EXPRESSIONS, tooFew: kept.length < MIN_EXPRESSIONS, duration };
+  return { story, shots: shots.length, panels: kept, total, clipped: total > MAX_EXPRESSIONS, tooFew: kept.length < MIN_EXPRESSIONS, duration };
 }
 
 /**
@@ -123,8 +112,6 @@ export function applyComposition(data: ProjectData, out: SceneComposeOutT, field
     next = {
       ...next,
       expressions,
-      // the proposed shot count becomes the team's choice (step 2 ① shows and keeps it)
-      expressionSetup: st.story ? { ...next.expressionSetup, shots: new Set(st.panels.map((p) => p.shot)).size } : next.expressionSetup,
       acting: { duration: st.duration, segments: weightedSegments(ids, st.panels.map((p) => p.weight), st.duration) },
     };
   }
@@ -216,13 +203,11 @@ export function applyStoryboard(data: ProjectData, out: StoryboardOutT, indexes?
       link: i === 0 ? "continuous" : o.link ?? prev.link,
     });
   });
-  // a shot count the team chose (step 2 ①) stays, keeping the AI's cut places where they fit; else at most MAX_SHOTS
-  const chosen = data.expressionSetup.shots;
   // the scene's continuity rules come with a full design (a partial pick keeps the team's rules)
   const whole = !indexes || out.panels.every((_, i) => i >= count || indexes.includes(i));
   const rules = whole && out.continuity?.trim() ? out.continuity.trim() : data.expressionSetup.continuity;
   const next = { ...data, expressions, expressionSetup: { ...data.expressionSetup, continuity: rules } };
-  return reopenFrom(chosen !== null ? fitShots(next, chosen) : capShots(next), 1);
+  return reopenFrom(next, 1);
 }
 
 export function applyDialogue(data: ProjectData, out: DialogueOutT): ProjectData {

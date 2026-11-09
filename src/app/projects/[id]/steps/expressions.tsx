@@ -17,11 +17,6 @@ import {
   TILT,
   TILT_LABEL,
   MAX_EXPRESSIONS,
-  MAX_SHOTS,
-  capShots,
-  evenShots,
-  setPanelCount,
-  syncChosenShots,
   MAX_VIDEO_SECONDS,
   MIN_EXPRESSIONS,
   directionIssues,
@@ -661,9 +656,7 @@ function DurationField() {
         </div>
       </div>
       <p className="field-help">
-        {doc.data.mode === "storyboard"
-          ? `쇼트 ${shotsOf(doc.data).length}개 · 패널 ${doc.data.expressions.length}개 · 쇼트당 평균 ${Math.round((d / Math.max(1, shotsOf(doc.data).length)) * 10) / 10}초 · 패널당 평균 ${per}초.`
-          : `표정 ${doc.data.expressions.length}개 · 하나당 평균 ${per}초.`} 대사(3단계)는 이 시간 안에서 쓰고, 액팅(4단계)에서는 이 시간을 어떻게 나눌지만 정합니다.
+        {doc.data.mode === "storyboard" ? "컷" : "표정"} {doc.data.expressions.length}개 · 하나당 평균 {per}초. 대사(3단계)는 이 시간 안에서 쓰고, 액팅(4단계)에서는 이 시간을 어떻게 나눌지만 정합니다.
         영상 모델 한도: Kling 4.0·Seedance 2.5 최대 30초, Gemini Omni Flash 1.2 최대 15초(참고 그림·끝 프레임 사용 시 10초), MiniMax H3 최대 15초.
       </p>
     </div>
@@ -690,7 +683,6 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
   const { doc, canEdit } = useEditor();
   const d = doc.data;
   const s = d.expressionSetup;
-  const shotCount = shotsOf(d).length;
   const setImage = useImageSetter();
   return (
     <StepFrame
@@ -700,40 +692,16 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
       onNavigate={onNavigate}
     >
       <section className="space-y-4">
-        <h3 className="section-title">① 쇼트 수·패널 수·영상 길이·화면 비율</h3>
-        <p className="field-help">
-          <strong>쇼트</strong>는 컷으로 끊기는 장면 단위(최대 {MAX_SHOTS}개), <strong>패널</strong>은 콘티 칸(= 아래 컷 카드 한 장, 최대 {MAX_EXPRESSIONS}개)입니다. 한
-          쇼트 안의 패널들은 카메라가 이어서 움직이며 연결됩니다. 예: 한 시퀀스 = 쇼트 4개 × 패널 3개 = 패널 12개.
-        </p>
+        <h3 className="section-title">① 컷 수·영상 길이·화면 비율</h3>
         <div>
-          <div className="field-label">총 쇼트 수 (컷으로 끊기는 장면)</div>
-          <div className="seg" role="group" aria-label="총 쇼트 수">
-            {Array.from({ length: MAX_SHOTS }, (_, i) => i + 1).map((n) => (
-              <button key={n} aria-pressed={s.shots === null ? false : shotCount === n} disabled={!canEdit || n > d.expressions.length} onClick={() => doc.edit(1, (x) => evenShots(x, n))}>
-                {n}쇼트
-              </button>
-            ))}
-            <button aria-pressed={s.shots === null} disabled={!canEdit} onClick={() => doc.edit(1, (x) => ({ ...x, expressionSetup: { ...x.expressionSetup, shots: null } }))}>
-              AI가 정함
-            </button>
-          </div>
-        </div>
-        <div>
-          <div className="field-label">총 패널 수 (콘티 칸)</div>
-          <div className="seg" role="group" aria-label="총 패널 수">
+          <div className="field-label">컷 수</div>
+          <div className="seg">
             {Array.from({ length: MAX_EXPRESSIONS - MIN_EXPRESSIONS + 1 }, (_, i) => i + MIN_EXPRESSIONS).map((n) => (
-              <button key={n} aria-pressed={s.count === n} disabled={!canEdit} onClick={() => doc.edit(1, (x) => setPanelCount(x, n))}>
-                {n}패널
+              <button key={n} aria-pressed={s.count === n} disabled={!canEdit} onClick={() => doc.edit(1, (x) => setExpressionCount(x, n))}>
+                {n}컷
               </button>
             ))}
           </div>
-          <p className="field-help">
-            지금 쇼트 {shotCount}개 · 패널 {d.expressions.length}개 (쇼트마다 {shotsOf(d).map((sh) => sh.length).join("·")}패널).{" "}
-            {s.shots === null
-              ? `쇼트 수를 고르지 않으면 AI 콘티 설계가 시나리오에 맞게 정합니다(최대 ${MAX_SHOTS}개).`
-              : "쇼트 수를 고르면 패널을 쇼트에 고르게 나누고, AI 콘티 설계도 이 쇼트 수를 지킵니다."}{" "}
-            끊는 위치는 아래 컷 카드의 ‘앞 컷과의 연결’에서 바꿀 수 있습니다.
-          </p>
         </div>
         <DurationField />
         <div>
@@ -765,7 +733,7 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
           label={s.scene.trim() ? "시나리오에 맞춰 AI로 콘티 설계" : "AI로 콘티 설계"}
           disabled={!d.baseAssetId}
           disabledReason="1단계에서 장면 기준 그림을 먼저 올리세요."
-          description={`시나리오 전체를 쇼트 ${shotCount}개·패널 ${s.count}개·${d.acting.duration}초에 담아 제목·장면 묘사·카메라·연결·말하는 인물을 제안합니다. 러프 스케치를 올린 컷은 그 구도를 따릅니다.`}
+          description={`시나리오 전체를 컷 ${s.count}개·${d.acting.duration}초에 담아 제목·장면 묘사·카메라·연결·말하는 인물을 제안합니다. 러프 스케치를 올린 컷은 그 구도를 따릅니다.`}
         />
         <div className="rounded-lg border border-line bg-[#f7f8fa] p-3 space-y-2">
           <p className="text-[14px]">
@@ -775,8 +743,8 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
           <AiAction
             kind="design_expressions"
             step={1}
-            label={`쇼트 ${shotCount}개·패널 ${s.count}개·${d.acting.duration}초로 처음부터 다시 설계`}
-            instruction={`[처음부터 다시] 지금 쇼트 ${shotCount}개, 패널(컷) ${s.count}개, 영상 길이 ${d.acting.duration}초에 맞춰 시나리오 전체를 다시 나눠 주세요.`}
+            label={`컷 ${s.count}개·${d.acting.duration}초로 처음부터 다시 설계`}
+            instruction={`[처음부터 다시] 지금 컷 수 ${s.count}개와 영상 길이 ${d.acting.duration}초에 맞춰 시나리오 전체를 다시 나눠 주세요.`}
             disabled={!d.baseAssetId}
             disabledReason="1단계에서 장면 기준 그림을 먼저 올리세요."
           />
@@ -794,7 +762,7 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
       </section>
 
       <section className="space-y-4">
-        <h3 className="section-title">③ 컷 카드 (패널)</h3>
+        <h3 className="section-title">③ 컷 카드</h3>
         <ShotStrip />
         <GuidePanel />
         <SketchGenerator />
@@ -834,7 +802,7 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
 
 /** The scene's shot structure at a glance: panels joined by camera moves (→) or split by cuts (|). */
 function ShotStrip() {
-  const { doc, canEdit } = useEditor();
+  const { doc } = useEditor();
   const d = doc.data;
   const shots = shotsOf(d);
   const no = (id: string) => d.expressions.findIndex((e) => e.id === id) + 1;
@@ -856,19 +824,9 @@ function ShotStrip() {
           </span>
         ))}
       </div>
-      {shots.length > MAX_SHOTS && (
-        <div className="notice notice-warn flex flex-wrap items-center gap-2">
-          <span>쇼트가 {shots.length}개입니다. 한 장면은 쇼트 최대 {MAX_SHOTS}개까지입니다(패널은 12개까지 괜찮음).</span>
-          {canEdit && (
-            <button className="btn btn-sm" onClick={() => doc.edit(1, (x) => capShots(x))}>
-              쇼트 {MAX_SHOTS}개로 합치기 (짧은 쇼트를 앞 쇼트에 이어 붙임)
-            </button>
-          )}
-        </div>
-      )}
       <p className="field-help">
         {shots.length > 1
-          ? `컷 분할 ${shots.length - 1}곳, 쇼트 ${shots.length}개 (최대 ${MAX_SHOTS}개). ✂ 에서 화면이 끊기고 새 쇼트가 시작되며, → 는 같은 쇼트 안에서 카메라가 이어서 움직입니다.`
+          ? `컷 분할 ${shots.length - 1}곳, 쇼트 ${shots.length}개. ✂ 에서 화면이 끊기고 새 쇼트가 시작되며, → 는 같은 쇼트 안에서 카메라가 이어서 움직입니다.`
           : "지금은 모든 컷이 카메라 이동으로 이어지는 한 쇼트입니다. 컷 카드의 ‘앞 컷과의 연결’에서 컷 분할을 고를 수 있습니다."}
       </p>
     </div>
@@ -924,14 +882,10 @@ function PanelCard({ e, index }: { e: Expression; index: number }) {
             value={e.link}
             options={["continuous", "cut"] as const}
             labels={{ continuous: "→ 이어짐 (카메라 이동)", cut: "✂ 컷 분할 (새 쇼트)" }}
-            disabledOptions={shotsOf(d).length >= MAX_SHOTS ? (["cut"] as const) : []}
             onChange={(v) =>
-              doc.edit(1, (x) => syncChosenShots({ ...x, expressions: x.expressions.map((y) => (y.id === e.id ? { ...y, link: v } : y)) }))
+              doc.edit(1, (x) => ({ ...x, expressions: x.expressions.map((y) => (y.id === e.id ? { ...y, link: v } : y)) }))
             }
           />
-          {e.link !== "cut" && shotsOf(d).length >= MAX_SHOTS && (
-            <p className="field-help">쇼트가 이미 {MAX_SHOTS}개라 더 나눌 수 없습니다. 다른 컷의 컷 분할을 ‘이어짐’으로 바꾸면 여기서 나눌 수 있습니다.</p>
-          )}
         </div>
       )}
       <Field

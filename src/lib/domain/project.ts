@@ -325,8 +325,6 @@ export const ProjectDataSchema = z.object({
      * The AI designs the expressions as this scene in order, and uses the lines as the dialogue (step 3).
      */
     scene: z.string().default(""),
-    /** storyboard: the shot count the team chose (step 2 ①); null = the AI decides (at most MAX_SHOTS) */
-    shots: z.number().int().nullable().default(null),
     /**
      * storyboard 연결 규칙: the scene's continuity rules every panel keeps — the 180° line and screen sides,
      * light direction, costume/prop changes and when they happen, the geography of the place
@@ -452,7 +450,6 @@ export function createProjectData(title = "새 장면", castCount = 1, mode: Sce
       sheetAssetId: null,
       framing: n === 1 && mode === "cast" ? "bust" : "medium",
       scene: "",
-      shots: null,
       continuity: "",
     },
     expressions,
@@ -638,79 +635,6 @@ export function cutBefore(data: Pick<ProjectData, "mode" | "expressions" | "acti
   return new Map(order.map((id, k) => [id, data.mode === "storyboard" && k > 0 && byId.get(id)?.link === "cut"]));
 }
 
-/** A storyboard scene has at most this many shots (cuts between them); panels inside a shot can be many. */
-export const MAX_SHOTS = 4;
-
-/** Links in timeline order rewritten so that `cutAt` (timeline positions) open new shots. */
-function withCutsAt(data: ProjectData, cutAt: Set<number>): ProjectData {
-  const pos = new Map(data.acting.segments.map((s, k) => [s.expressionId, k]));
-  return {
-    ...data,
-    expressions: data.expressions.map((e) => {
-      const k = pos.get(e.id) ?? data.expressions.indexOf(e);
-      return { ...e, link: k > 0 && cutAt.has(k) ? ("cut" as const) : ("continuous" as const) };
-    }),
-  };
-}
-
-/**
- * Exactly `n` shots by joining or splitting the current ones (the team's cut places are kept where they can be):
- * too many — the shortest shot (the later one on a tie) joins the one before; too few — the longest shot
- * (the earlier one on a tie) is split in its middle.
- */
-export function fitShots(data: ProjectData, n: number): ProjectData {
-  if (data.mode !== "storyboard") return data;
-  const total = data.acting.segments.length;
-  const want = Math.max(1, Math.min(MAX_SHOTS, total, Math.round(n)));
-  const sizes = shotsOf(data).map((s) => s.length);
-  if (sizes.length === want) return data;
-  while (sizes.length > want) {
-    let k = 1;
-    for (let i = 2; i < sizes.length; i++) if (sizes[i] <= sizes[k]) k = i;
-    sizes.splice(k - 1, 2, sizes[k - 1] + sizes[k]);
-  }
-  while (sizes.length < want) {
-    let k = 0;
-    for (let i = 1; i < sizes.length; i++) if (sizes[i] > sizes[k]) k = i;
-    const left = Math.ceil(sizes[k] / 2);
-    sizes.splice(k, 1, left, sizes[k] - left);
-  }
-  const cutAt = new Set<number>();
-  sizes.reduce((at, len) => (cutAt.add(at), at + len), 0);
-  return withCutsAt(data, cutAt);
-}
-
-/** `n` shots of (nearly) equal panel counts — the layout chosen in step 2's ① before the panels are designed. */
-export function evenShots(data: ProjectData, n: number): ProjectData {
-  if (data.mode !== "storyboard") return data;
-  const total = data.acting.segments.length;
-  const want = Math.max(1, Math.min(MAX_SHOTS, total, Math.round(n)));
-  const cutAt = new Set<number>();
-  for (let g = 0; g < want; g++) cutAt.add(Math.round((g * total) / want));
-  const d = withCutsAt(data, cutAt);
-  return { ...d, expressionSetup: { ...d.expressionSetup, shots: want } };
-}
-
-/** Bring a storyboard down to MAX_SHOTS shots (the shortest shot joins the one before). */
-export function capShots(data: ProjectData): ProjectData {
-  if (data.mode !== "storyboard") return data;
-  const d = shotsOf(data).length > MAX_SHOTS ? fitShots(data, MAX_SHOTS) : data;
-  const chosen = d.expressionSetup.shots;
-  return chosen !== null && chosen > MAX_SHOTS ? { ...d, expressionSetup: { ...d.expressionSetup, shots: MAX_SHOTS } } : d;
-}
-
-/** After the team edits a cut link by hand, the chosen shot count follows what is on the board. */
-export function syncChosenShots(data: ProjectData): ProjectData {
-  return data.expressionSetup.shots === null ? data : { ...data, expressionSetup: { ...data.expressionSetup, shots: shotsOf(data).length } };
-}
-
-/** The panel count changes: with a chosen shot count, the panels are spread over that many shots again. */
-export function setPanelCount(data: ProjectData, n: number): ProjectData {
-  const d = setExpressionCount(data, n);
-  const chosen = data.expressionSetup.shots;
-  return data.mode === "storyboard" && chosen !== null ? evenShots(d, Math.min(chosen, d.expressions.length)) : capShots(d);
-}
-
 /** Shots of a storyboard scene: runs of panels joined by continuous camera moves (one shot when nothing is cut). */
 export function shotsOf(data: Pick<ProjectData, "mode" | "expressions" | "acting">): string[][] {
   const cuts = cutBefore(data);
@@ -876,9 +800,6 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
   if (step === 1 && isStoryboard(data)) {
     // storyboard: each panel is described as a whole; no per-character acting or direction checks
     if (data.expressions.length !== data.expressionSetup.count) block("컷 수가 설정과 다릅니다.");
-    const shotCount = shotsOf(data).length;
-    if (shotCount > MAX_SHOTS)
-      block(`쇼트가 ${shotCount}개입니다. 한 장면은 쇼트 최대 ${MAX_SHOTS}개(컷 분할 ${MAX_SHOTS - 1}곳)까지입니다. ‘쇼트 ${MAX_SHOTS}개로 합치기’를 누르거나 컷 분할을 줄이세요.`);
     data.expressions.forEach((e, i) => {
       if (!filled(e.action) && !e.sketchAssetId) block(`${i + 1}번 컷: 장면 묘사를 쓰거나 러프 스케치를 올리세요.`);
     });
