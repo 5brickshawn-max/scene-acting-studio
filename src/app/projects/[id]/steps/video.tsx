@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 import { useEffect, useRef, useState } from "react";
-import type { ProjectData, StepIndex } from "@/lib/domain/project";
+import { usesConti, type ProjectData, type StepIndex } from "@/lib/domain/project";
 import type { CheckFix, CheckItem } from "@/lib/domain/check";
 import { appendDirection, applyRetime, applyTextFix, fixState, fixWhere, promptFixRows, removePromptFix, type CheckTextFix } from "@/lib/domain/fixes";
 import { useEditor } from "../editor-context";
@@ -376,6 +376,24 @@ export function VideoStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }
         <div className="grid md:grid-cols-2 gap-4">
           <Seg label="화면 비율" value={data.video.aspectRatio} options={["16:9", "9:16"] as const}
             labels={{ "16:9": "가로 16:9", "9:16": "세로 9:16" }} onChange={(v) => setVideo({ aspectRatio: v })} />
+          {data.mode === "storyboard" && (
+            <div>
+              <Seg
+                label="참고 그림 구성 (스토리보드)"
+                value={data.video.refMode}
+                options={["auto", "conti", "panels"] as const}
+                labels={{ auto: "자동", conti: "콘티 방식", panels: "완성 컷 그림 방식" }}
+                onChange={(v) => setVideo({ refMode: v })}
+              />
+              <p className="field-help">
+                지금: <strong>{usesConti(data) ? "콘티 방식" : "완성 컷 그림 방식"}</strong>.{" "}
+                {usesConti(data)
+                  ? "① 캐릭터 시트(1단계 인물별 자료) → ② 장면 기준 그림·배경·에셋(추가 참고) → ③ 러프 콘티 순서로 첨부하고, 프롬프트가 각 그림의 역할을 지시합니다(러프 콘티는 구도·동선·포즈·카메라만, 그림체는 시트와 장면 그림)."
+                  : "장면 기준 그림과 컷마다의 완성 컷 그림을 첨부합니다."}{" "}
+                자동은 모든 컷에 러프 콘티가 있으면 콘티 방식을 씁니다. 참고 그림은 최대 7장이라 넘치면 러프 콘티를 나란히 붙입니다.
+              </p>
+            </div>
+          )}
           <div>
             <Seg
               label="움직임 무게감 (스튜디오 제약사항에 들어감)"

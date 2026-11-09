@@ -3,7 +3,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { z } from "zod";
 import sharp from "sharp";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { readProjectData, castLabel, effectiveText, maxCastFor, MAX_EXPRESSIONS, MAX_PANELS_STORYBOARD, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
+import { readProjectData, usesConti, castLabel, effectiveText, maxCastFor, MAX_EXPRESSIONS, MAX_PANELS_STORYBOARD, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
 import {
   ActingOut,
   CharacterOut,
@@ -102,6 +102,9 @@ async function characterSheets(data: ProjectData): Promise<Content> {
 
 /** Each expression's own image, labelled with its number (falls back to the legacy single sheet). */
 async function expressionImages(data: ProjectData): Promise<Content> {
+  // 콘티 방식: the panels are the rough sketches
+  if (usesConti(data))
+    return imageBlocks(data.expressions.map((e, i) => ({ assetId: e.sketchAssetId, label: `[${i + 1}번 컷 러프 콘티 — ${e.emotion || "제목 없음"}]` })));
   const out = await imageBlocks(
     data.expressions.map((e, i) => ({
       assetId: e.imageAssetId,
@@ -391,6 +394,7 @@ async function buildRequest(job: JobRow, data: ProjectData) {
             {
               type: "text",
               text:
+                (usesConti(data) ? `러프 콘티들(컷마다 한 장, 흑백 선 그림 — 그림체·색은 검사하지 말 것)을 컷 설계(장면 묘사·카메라·연결 상태)에 비교해 구도·인물 배치·포즈·카메라·연결성을 검사하세요. ` : "") +
                 `컷 그림들(컷마다 한 장)을 장면 기준 그림과 컷 설계(장면 묘사·카메라)에 비교해 검사하세요. panel은 컷 번호입니다. 그림이 없는 컷은 검사하지 말고 panelCountMatches는 true로 두세요. ` +
                 `각 그림이 장면 묘사대로인지, 주요 인물의 정체성(얼굴·머리·의상)이 기준 그림과 같고 서로 섞이지 않았는지, 그림체·조명·세계가 컷끼리 이어지는지, 비율이 ${imageAspectFor(data)}인지 확인하세요. ` +
                 `가장 중요한 것은 이웃한 컷끼리, 그리고 컷 분할 앞뒤 쇼트끼리의 **연결성**입니다. 컷 순서대로 바로 앞 컷과 비교해 확인하세요: ` +

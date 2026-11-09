@@ -1460,6 +1460,8 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
   const endFrame = source === "start_frame" && (opts.endFrame ?? Boolean(data.video.endFrameAssetId));
   const refs = source === "references" ? videoReferences(data) : [];
   const refNo = (id: string) => referenceTarget(refs, id);
+  // 콘티 방식: character sheets + places + rough sketches (the sketches give composition only)
+  const conti = refs.some((r) => r.sketch);
   const en = freshEnglish(data);
   const lang = en.language ?? languageEn(data.dialogue.language || "");
   const adjustments: Adjustment[] = [];
@@ -1533,7 +1535,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
       return [
         `${k + 1}. ${fmtSec(seg.start)}–${fmtSec(seg.end)} seconds: panel ${panelNo(seg.expressionId)}${p?.title ? ` — ${p.title}` : ""}${multiShot ? ` (shot ${shotNo})` : ""}`,
         multiShot && k > 0 && (cuts.get(seg.expressionId) ? "HARD CUT to a new shot here." : "Same shot: the camera moves on continuously from the previous panel, no cut."),
-        n && `Frame target: ${n}.`,
+        n && (conti ? `Composition, blocking and camera: as in ${n} (rough sketch).` : `Frame target: ${n}.`),
         cut(action, B.action) && `Action: ${sentence(cut(action, B.action))}`,
         cut(camera, B.camera) && `Camera: ${sentence(cut(camera, B.camera))}`,
         cut(fixed ? p?.state ?? "" : e?.continuity ?? "", B.state) && `Continuity: ${sentence(cut(fixed ? p?.state ?? "" : e?.continuity ?? "", B.state))}`,
@@ -1556,7 +1558,9 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         : `ONE single continuous shot with no cuts: a ${data.acting.duration}-second animated scene, ${data.video.aspectRatio}. The beats below follow storyboard panels — successive moments of this same shot; the camera travels continuously from one panel's framing to the next and never cuts.`,
       ...storyboardCastEn(data, en, B.features, B.features * 50),
       (en.style || data.style.trim()) && `Art style: ${sentence(clip(en.style ?? data.style, 200) || clean(en.style ?? data.style).slice(0, 200))} Stay in this 2D style; never photorealistic or 3D.`,
-      `Match the reference images exactly: the named characters' faces, hair, colors and costumes, the world, the lighting and the drawing style; nobody's proportions change and no character is duplicated.`,
+      conti
+        ? `Match the character design sheets for every named character's face, hair, body and costume design, and the scene picture and background references for the world, the light and the drawing style; nobody's proportions change and no character is duplicated.`
+        : `Match the reference images exactly: the named characters' faces, hair, colors and costumes, the world, the lighting and the drawing style; nobody's proportions change and no character is duplicated.`,
       continuityRules(data, en) &&
         `Continuity rules (keep them in every shot): ${clip(continuityRules(data, en), B.rules) || continuityRules(data, en).slice(0, B.rules)}${multiShot ? " Across each HARD CUT the screen sides, eyelines, costumes, props and light carry on." : ""}`,
       background ? "Background as in the DIRECTOR'S DIRECTION below." : "Background and world as in the panel references.",
@@ -1571,14 +1575,24 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         ? [
             "Reference images (upload in this order):",
             ...refs.map((r, i) =>
-              r.role === "identity"
+              r.role === "identity" && r.characterId
+                ? `${i + 1}. character design sheet of ${castName(data, r.characterId)} — face, hair, body and costume design only (not a pose, composition or background)`
+                : r.role === "identity"
                 ? `${i + 1}. scene reference drawing — named characters, style and world; identity only`
+                : r.role === "world"
+                  ? `${i + 1}. ${r.assetId === data.baseAssetId ? "scene picture — the world, its light and the finished art style" : "background / asset reference — the place, props and architecture"}; not the composition`
+                : r.sketch && r.parts
+                  ? `${i + 1}. panels ${r.parts.map((p) => panelNo(p.expressionId)).join(", ")} side by side, left to right — rough storyboard sketches`
+                : r.sketch
+                  ? `${i + 1}. panel ${r.expressionId ? panelNo(r.expressionId) : "?"}${r.expressionId && panels.get(r.expressionId)?.title ? ` (${panels.get(r.expressionId)!.title})` : ""} — rough storyboard sketch`
                 : r.parts
                   ? `${i + 1}. panels ${r.parts.map((p) => panelNo(p.expressionId)).join(", ")} side by side, left to right — consecutive storyboard frames`
                   : `${i + 1}. panel ${r.expressionId ? panelNo(r.expressionId) : "?"}${r.expressionId && panels.get(r.expressionId)?.title ? ` (${panels.get(r.expressionId)!.title})` : ""} — storyboard frame target`,
             ),
           ].join("\n")
         : `Use the start frame as the exact first panel.${endFrame ? " The shot ends exactly on the end frame." : ""}`,
+      conti &&
+        "The storyboard sketches are rough black-and-white line drawings made for planning: take from them only each panel's composition, where everyone stands, their poses and the camera framing. Render every frame fully in the art style of the design sheets and the scene picture — colour, light and finished lines — never as line art.",
       refs.some((r) => r.parts) &&
         "Panels shown side by side in one reference are separate moments: each plays in full frame in turn; never show a split screen, grid or side-by-side frames.",
       speaking &&
@@ -1614,8 +1628,12 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
     if (prompt.length <= lengthTarget) break;
   }
   return {
-    recommendedModel: "Kling 4.0 (컷 그림을 참고 그림으로 순서대로 첨부)",
-    startFrame: refs.length ? "시작 프레임 없이, 아래 참고 그림을 순서대로 첨부하세요." : "첫 컷 그림을 시작 프레임으로 첨부하세요.",
+    recommendedModel: conti ? "Kling 4.0 (캐릭터 시트 → 배경·에셋 → 러프 콘티를 참고 그림으로 순서대로 첨부)" : "Kling 4.0 (컷 그림을 참고 그림으로 순서대로 첨부)",
+    startFrame: refs.length
+      ? conti
+        ? "시작 프레임 없이, 아래 참고 그림을 순서대로 첨부하세요: ① 캐릭터 시트 ② 장면 그림·배경·에셋 ③ 러프 콘티."
+        : "시작 프레임 없이, 아래 참고 그림을 순서대로 첨부하세요."
+      : "첫 컷 그림을 시작 프레임으로 첨부하세요.",
     references: refs,
     prompt,
     promptKo: beatsWith(STORY_BUDGETS[0], false).join("\n\n"),

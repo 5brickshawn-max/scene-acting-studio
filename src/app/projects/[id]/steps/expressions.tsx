@@ -18,6 +18,7 @@ import {
   TILT_LABEL,
   MAX_EXPRESSIONS,
   MAX_PANELS_STORYBOARD,
+  usesConti,
   MAX_VIDEO_SECONDS,
   MIN_EXPRESSIONS,
   directionIssues,
@@ -683,13 +684,14 @@ function useImageSetter() {
 function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) {
   const { doc, canEdit } = useEditor();
   const d = doc.data;
+  const conti = usesConti(d);
   const s = d.expressionSetup;
   const setImage = useImageSetter();
   return (
     <StepFrame
       step={1}
       title="콘티를 만드세요"
-      intro="장면을 컷으로 나누고, 컷마다 그 순간 화면 전체(장면 묘사·카메라)를 정해 한 장씩 그립니다. 러프 스케치를 올리면 그 구도를 따릅니다. 컷들은 영상에서 컷 없는 한 쇼트로 이어집니다."
+      intro="장면을 컷으로 나누고, 컷마다 그 순간 화면 전체(장면 묘사·카메라·연결 상태)를 정한 뒤 러프 콘티를 만듭니다. 콘티 방식이면 영상은 1단계의 캐릭터 시트·장면 그림·배경 참고와 이 러프 콘티로 만들어져, 완성 컷 그림은 필요 없습니다(선택)."
       onNavigate={onNavigate}
     >
       <section className="space-y-4">
@@ -782,24 +784,34 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
 
       <EnglishBar />
 
-      <HiggsfieldDirect onUse={setImage} />
-
-      <details className="rounded-xl border border-line">
-        <summary className="cursor-pointer p-4 font-semibold">수동으로 만들기·직접 올리기 (컷별 프롬프트 · ZIP 다운로드)</summary>
-        <div className="px-1 pb-1">
-          <HiggsfieldHandoff />
+      <details className="rounded-xl border border-line" open={!conti}>
+        <summary className="cursor-pointer p-4 font-semibold">
+          완성 컷 그림 (선택){conti ? " — 콘티 방식에서는 필요 없음. 영상 참고를 완성 그림으로 하려면 5단계에서 ‘완성 컷 그림 방식’을 고르세요" : ""}
+        </summary>
+        <div className="px-1 pb-1 space-y-4">
+          <HiggsfieldDirect onUse={setImage} />
+          <details className="rounded-xl border border-line">
+            <summary className="cursor-pointer p-4 font-semibold">수동으로 만들기·직접 올리기 (컷별 프롬프트 · ZIP 다운로드)</summary>
+            <div className="px-1 pb-1">
+              <HiggsfieldHandoff />
+            </div>
+          </details>
         </div>
       </details>
 
       <section className="space-y-4">
-        <h3 className="section-title">④ 컷 그림 검사</h3>
+        <h3 className="section-title">④ {conti ? "러프 콘티 검사" : "컷 그림 검사"}</h3>
         <AiAction
           kind="check_sheet"
           step={1}
-          label="AI로 컷 그림 검사"
-          disabled={!d.expressions.some((e) => e.imageAssetId)}
-          disabledReason="컷 그림을 생성하거나 올리면 검사할 수 있습니다."
-          description="장면 묘사대로인지, 주요 인물이 섞이지 않았는지, 컷끼리 한 쇼트처럼 이어지는지 확인합니다."
+          label={conti ? "AI로 러프 콘티 검사 (구도·배치·연결)" : "AI로 컷 그림 검사"}
+          disabled={!d.expressions.some((e) => (conti ? e.sketchAssetId : e.imageAssetId))}
+          disabledReason={conti ? "러프 콘티를 만들면 검사할 수 있습니다." : "컷 그림을 생성하거나 올리면 검사할 수 있습니다."}
+          description={
+            conti
+              ? "러프 콘티가 장면 묘사·카메라대로인지, 컷끼리 좌우·위치·시선·소품이 이어지는지 확인합니다(선 그림이라 그림체·색은 보지 않음)."
+              : "장면 묘사대로인지, 주요 인물이 섞이지 않았는지, 컷끼리 한 쇼트처럼 이어지는지 확인합니다."
+          }
         />
         <PendingProposal step={1} kinds={["check_sheet"]} />
       </section>
@@ -867,7 +879,7 @@ function PanelCard({ e, index }: { e: Expression; index: number }) {
           <SketchRedoButton expressionId={e.id} hasSketch={Boolean(e.sketchAssetId)} />
         </div>
         <figure>
-          <div className="field-label">컷 그림</div>
+          <div className="field-label">컷 그림 (선택)</div>
           <div className="rounded-lg border border-line checker grid place-items-center overflow-hidden" style={{ aspectRatio: aspect }}>
             {own ? <img src={own.previewUrl} alt={`${index + 1}번 컷 그림`} className="w-full h-full object-contain" /> : <span className="text-[13px] text-muted p-2 text-center">아래 Higgsfield에서 생성</span>}
           </div>

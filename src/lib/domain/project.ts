@@ -828,11 +828,17 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
     });
     if (!(data.acting.duration > 0 && data.acting.duration <= MAX_VIDEO_SECONDS))
       block(`영상 전체 길이는 0초 초과 ${MAX_VIDEO_SECONDS}초 이하로 정하세요.`);
-    const missing = data.expressions.filter((e) => !e.imageAssetId).length;
-    if (missing) warn(`그림이 없는 컷이 ${missing}개 있습니다. Higgsfield로 생성하거나 직접 올리세요.`);
+    if (usesConti(data)) {
+      // 콘티 방식: the video is made from the sheets, the places and the rough sketches
+      const noSketch = data.expressions.filter((e) => !e.sketchAssetId).length;
+      if (noSketch) warn(`러프 콘티가 없는 컷이 ${noSketch}개 있습니다. 콘티 방식 영상에는 컷마다 러프 콘티가 들어갑니다.`);
+    } else {
+      const missing = data.expressions.filter((e) => !e.imageAssetId).length;
+      if (missing) warn(`그림이 없는 컷이 ${missing}개 있습니다. Higgsfield로 생성하거나 직접 올리세요. (러프 콘티만으로 영상을 만들려면 모든 컷에 러프 콘티를 넣으세요 — 콘티 방식)`);
+    }
     const aspect = imageAspectFor(data);
     const stale = data.expressions.filter((e) => e.imageAssetId && e.imageAspect !== aspect).length;
-    if (stale) warn(`컷 그림 ${stale}장이 지금 화면 비율(${aspect})로 만든 그림이 아닙니다. 다시 생성하세요.`);
+    if (stale && !usesConti(data)) warn(`컷 그림 ${stale}장이 지금 화면 비율(${aspect})로 만든 그림이 아닙니다. 다시 생성하세요.`);
   } else if (step === 1) {
     if (data.expressions.length !== data.expressionSetup.count) block("표정 개수가 설정과 다릅니다.");
     data.expressions.forEach((e, i) => {
