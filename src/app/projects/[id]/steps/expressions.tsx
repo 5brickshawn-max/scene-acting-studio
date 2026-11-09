@@ -48,6 +48,7 @@ import { StepFrame } from "./step-frame";
 import { HiggsfieldDirect, SketchGenerator, SketchRedoButton } from "./higgsfield-direct";
 import { ExpressionPackButton } from "../packs";
 import { EnglishBar } from "../prompt-tools";
+import { englishStale } from "@/lib/domain/english";
 import { guideIssues } from "@/lib/domain/check";
 import { ACTION_ORDER_KO, HU_ITEMS_KO, MAX_PRINCIPLES, PRINCIPLES } from "@/lib/domain/principles";
 
@@ -245,6 +246,48 @@ function FramingPicker() {
   );
 }
 
+/**
+ * "수정 완료 · 반영": after editing a card by hand, save now and rebuild the English the prompts use, so the
+ * next picture or video request (and the prompt on screen) follows the edit at once.
+ */
+function useEditCompletion() {
+  const { doc, askAi, canEdit } = useEditor();
+  const [edited, setEdited] = useState(false);
+  const [state, setState] = useState<"idle" | "saving" | "done" | "error">("idle");
+  const complete = async () => {
+    setState("saving");
+    const ok = await doc.flush();
+    if (ok === false) return setState("error");
+    // the prompts use the English made from the saved design: make it again for what changed
+    if (canEdit && englishStale(doc.data).length) await askAi("write_english", 4);
+    setEdited(false);
+    setState("done");
+    setTimeout(() => setState((s) => (s === "done" ? "idle" : s)), 4000);
+  };
+  return { edited, markEdited: () => (setEdited(true), setState("idle")), complete, state };
+}
+
+function EditCompletionBar({ c }: { c: ReturnType<typeof useEditCompletion> }) {
+  const { canEdit } = useEditor();
+  if (!canEdit || (!c.edited && c.state === "idle")) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg bg-[#fff7ef] border border-[#f3c9ae] p-2">
+      {c.edited && (
+        <button type="button" className="btn btn-sm btn-primary" disabled={c.state === "saving"} onClick={() => void c.complete()}>
+          {c.state === "saving" ? "저장·반영 중…" : "수정 완료 · 반영"}
+        </button>
+      )}
+      <span className="text-[13px] text-muted" aria-live="polite">
+        {c.state === "done"
+          ? "✓ 저장했고, 바뀐 부분의 영어 정리를 다시 만들어 프롬프트에 반영합니다(30초 안팎)."
+          : c.state === "error"
+            ? "저장하지 못했습니다. 화면 위쪽의 저장 상태를 확인하세요."
+            : "고친 내용을 바로 저장하고 그림·영상 프롬프트에 반영합니다."}
+      </span>
+    </div>
+  );
+}
+
 /** 2-3 priority animation principles for one beat (the team's field guide), as toggle chips. */
 function PrincipleChips({ e, onChange }: { e: Expression; onChange: (keys: string[]) => void }) {
   const { canEdit } = useEditor();
@@ -319,10 +362,15 @@ function GuidePanel() {
 function ExpressionCard({ e, index }: { e: Expression; index: number }) {
   const { doc, assets } = useEditor();
   const s = doc.data.expressionSetup;
-  const update = (patch: Partial<Expression>) =>
+  const done = useEditCompletion();
+  const update = (patch: Partial<Expression>) => {
+    done.markEdited();
     doc.edit(1, (d) => ({ ...d, expressions: d.expressions.map((x) => (x.id === e.id ? { ...x, ...patch } : x)) }));
-  const change = (fn: (x: Expression) => Expression) =>
+  };
+  const change = (fn: (x: Expression) => Expression) => {
+    done.markEdited();
     doc.edit(1, (d) => ({ ...d, expressions: d.expressions.map((x) => (x.id === e.id ? fn(x) : x)) }));
+  };
   const ref = s.refAssetId ? assets.get(s.refAssetId) : undefined;
   const sheet = s.sheetAssetId ? assets.get(s.sheetAssetId) : undefined;
   const own = e.imageAssetId ? assets.get(e.imageAssetId) : undefined;
@@ -430,6 +478,7 @@ function ExpressionCard({ e, index }: { e: Expression; index: number }) {
           />
         </>
       )}
+      <EditCompletionBar c={done} />
     </article>
   );
 }
@@ -687,6 +736,7 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
   const conti = usesConti(d);
   const s = d.expressionSetup;
   const setImage = useImageSetter();
+  const rulesDone = useEditCompletion();
   return (
     <StepFrame
       step={1}
@@ -764,10 +814,14 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
           multiline
           rows={4}
           value={s.continuity}
-          onChange={(v) => doc.edit(1, (x) => ({ ...x, expressionSetup: { ...x.expressionSetup, continuity: v } }))}
+          onChange={(v) => {
+            rulesDone.markEdited();
+            doc.edit(1, (x) => ({ ...x, expressionSetup: { ...x.expressionSetup, continuity: v } }));
+          }}
           placeholder={"AI 콘티 설계가 채워 줍니다. 예:\n1) 아스파샤는 늘 화면 왼쪽, 샤르휘나는 오른쪽 — 서로 마주 봄\n2) 성문은 화면 왼쪽, 사막은 오른쪽\n3) 해는 화면 오른쪽 낮은 곳(역광)\n4) 3번 컷에서 숄을 건넴 → 4번 컷부터 샤르휘나가 숄을 듦"}
           help="컷 그림과 영상 프롬프트에 함께 들어가, 컷과 컷·쇼트와 쇼트 사이의 의상·위치·방향·빛이 어긋나지 않게 합니다."
         />
+        <EditCompletionBar c={rulesDone} />
       </section>
 
       <section className="space-y-4">
@@ -856,8 +910,11 @@ function ShotStrip() {
 function PanelCard({ e, index }: { e: Expression; index: number }) {
   const { doc, assets } = useEditor();
   const d = doc.data;
-  const update = (patch: Partial<Expression>) =>
+  const done = useEditCompletion();
+  const update = (patch: Partial<Expression>) => {
+    done.markEdited();
     doc.edit(1, (x) => ({ ...x, expressions: x.expressions.map((y) => (y.id === e.id ? { ...y, ...patch } : y)) }));
+  };
   const own = e.imageAssetId ? assets.get(e.imageAssetId) : undefined;
   const aspect = d.video.aspectRatio.replace(":", "/");
   return (
@@ -933,6 +990,7 @@ function PanelCard({ e, index }: { e: Expression; index: number }) {
         </div>
       )}
       <Field label="메모 (팀용, 프롬프트에는 들어가지 않음)" value={e.notes} onChange={(v) => update({ notes: v })} />
+      <EditCompletionBar c={done} />
     </li>
   );
 }

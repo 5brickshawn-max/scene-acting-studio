@@ -87,6 +87,8 @@ describe("step screens render for one and for several characters", () => {
     expect(s2).toContain("러프 스케치 (선택)");
     expect(s2).toContain("러프 콘티 바로 생성");
     expect(s2).toContain("장면 연결 규칙");
+    // nothing edited yet: no completion button
+    expect(s2).not.toContain("수정 완료 · 반영");
     expect(s2).toContain("연결 상태 HU (시작 → 끝");
     expect(s2).toContain("우선 애니메이션 원칙 (2~3개");
     expect(s2).toContain("애니메이션 원칙·연속성 점검");
