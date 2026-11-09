@@ -116,3 +116,15 @@ describe("storyboard panel limit (6)", async () => {
     expect(stepIssues(seven, 1).some((i) => i.level === "block" && i.message.includes("최대 6개"))).toBe(true);
   });
 });
+
+describe("scene costumes reach every panel (disguise vs design sheet)", () => {
+  it("each panel prompt carries what everyone wears in this scene, and clothing follows the scene over the sheet", () => {
+    const d = board();
+    d.cast[1] = { ...d.cast[1], refAssetId: "sheet-2", outfit: "기본 차림: 회색 튜닉. 밤 탈출 변장: 튜닉 위에 남색 로브, 베일, 코와 입을 가리는 두건. 새벽: 변장을 벗음." };
+    const p = buildExpressionHandoffs(d)[1].prompt;
+    expect(p).toContain("Costumes in this scene (follow them, including disguises");
+    expect(p).toContain("밤 탈출 변장: 튜닉 위에 남색 로브");
+    expect(p).toContain("What they WEAR in this scene follows the scene's costume text");
+    expect(p).not.toContain("costume designs always come from the design sheets");
+  });
+});

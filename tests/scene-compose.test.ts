@@ -83,9 +83,9 @@ describe("첫 장면 (opening scene picture drawn from the scenario)", () => {
     expect(h.references.map((r) => r.assetId)).toEqual(["ref-bram"]);
     expect(h.prompt).toContain("Opening frame of an animated scene, 16:9");
     expect(h.prompt).toContain("draw every named character clearly");
-    expect(h.prompt).toContain("- 브람: 1. 은발 단발 창백한 피부. Outfit: 검은 갑옷 Image reference 1 is their design sheet: copy face, hair colour and hairstyle");
+    expect(h.prompt).toContain("- 브람: 1. 은발 단발 창백한 피부. Outfit: 검은 갑옷 Image reference 1 is their design sheet: copy face, hair colour and hairstyle, body proportions");
     // the picture beats the written description (which may be an old AI guess)
-    expect(h.prompt).toContain("where the text above differs, the design sheet wins");
+    expect(h.prompt).toContain("for the face, hair and body the design sheet wins over the text. What they wear in this scene follows the costume text above");
     expect(h.prompt).toContain("Crowd and background people (unnamed): 횃불을 든 군중 수십 명.");
     expect(h.prompt).toContain("The moment: 해 질 녘 광장");
   });
@@ -145,7 +145,7 @@ describe("references are always explained", () => {
     d.designRefAssetIds = ["sheet-1", "prop-1"];
     const panel = buildExpressionHandoffs(d)[0];
     expect(panel.references.map((r) => r.assetId)).toEqual(["scene-1", "sheet-1", "prop-1"]);
-    expect(panel.prompt).toContain("Image reference 2 is the design sheet of 칼리엘라: copy their face, hair colour and hairstyle, costume (colours, shapes, accessories) and proportions exactly from it — where the text describes them differently, the design sheet wins");
+    expect(panel.prompt).toContain("Image reference 2 is the design sheet of 칼리엘라: copy their face, hair colour and hairstyle, body proportions and the design details of their clothes exactly from it — for the face, hair and body the design sheet wins over any text. What they WEAR in this scene follows the scene's costume text");
     expect(panel.prompt).toContain("Image reference 3 is extra design reference for this scene");
     const scene = buildSceneImageHandoff(d);
     expect(scene.references.map((r) => r.assetId)).toEqual(["sheet-1", "prop-1"]);

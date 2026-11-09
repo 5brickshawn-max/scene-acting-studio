@@ -239,7 +239,7 @@ function extraRefsEn(data: ProjectData, refs: ReferenceSlot[]): string[] {
   refs.forEach((r, i) => {
     if (r.why.startsWith("인물 자료") && r.characterId)
       lines.push(
-        `Image reference ${i + 1} is the design sheet of ${castName(data, r.characterId)}: copy their face, hair colour and hairstyle, costume (colours, shapes, accessories) and proportions exactly from it — where the text describes them differently, the design sheet wins; the text only adds this scene's passing details (dirt, tears, wind, what they hold).`,
+        `Image reference ${i + 1} is the design sheet of ${castName(data, r.characterId)}: copy their face, hair colour and hairstyle, body proportions and the design details of their clothes exactly from it — for the face, hair and body the design sheet wins over any text. What they WEAR in this scene follows the scene's costume text and this panel's continuity (a disguise, robe, hood or face cover worn over the sheet's clothes, or taken off later); the text also adds passing details (dirt, tears, wind, what they hold).`,
       );
   });
   const extra = refs.flatMap((r, i) => (r.why.startsWith("추가 참고") ? [i + 1] : []));
@@ -1172,7 +1172,7 @@ export function cameraTextMoves(t: string): boolean {
  */
 
 /** Named characters by name and their key features (no fixed positions), then the crowd. */
-function storyboardCastEn(data: ProjectData, en: ReturnType<typeof freshEnglish>, wanted = 4): string[] {
+function storyboardCastEn(data: ProjectData, en: ReturnType<typeof freshEnglish>, wanted = 4, outfitMax = 320): string[] {
   // a big named cast keeps each line short: the two most telling features per character
   const features = data.cast.length > 4 ? Math.min(wanted, 2) : wanted;
   const named = data.cast
@@ -1181,8 +1181,19 @@ function storyboardCastEn(data: ProjectData, en: ReturnType<typeof freshEnglish>
       return `${castName(data, c.id)}${look.length ? ` — ${look.slice(0, features).join(", ")}` : ""}`;
     })
     .join("; ");
+  // what each one wears in THIS scene (disguises, time-of-day changes): look features alone can cut it off
+  const costumes = data.cast
+    .map((c) => {
+      const o = en.cast.get(c.id)?.outfit ?? clean(c.outfit);
+      const t = clip(o, outfitMax) || o.slice(0, outfitMax);
+      return t ? `${castName(data, c.id)}: ${noEndDot(t)}` : "";
+    })
+    .filter(Boolean)
+    .join(". ");
   return [
     named && `Named characters (each keeps their identity exactly as in the scene reference; never mix features between them): ${named}.`,
+    costumes &&
+      `Costumes in this scene (follow them, including disguises and changes between parts of the scene; pick the one this panel's moment and continuity call for): ${costumes}.`,
     data.extras.trim() &&
       `Crowd and background people (unnamed): ${noEndDot(clean(data.extras))}. Keep them consistent across panels and never let them cover the named characters' faces.`,
   ].filter((x): x is string => Boolean(x));
@@ -1291,7 +1302,7 @@ function buildStoryboardHandoffs(data: ProjectData, fixes: Record<string, string
       prevEnd && `The previous panel (panel ${prevNo}) ended like this — start this moment from it: ${sentence(prevEnd)}`,
       fix && `Corrections from the review of the previous version of this panel (fix all of these; keep everything else): ${sentence(fix.slice(0, 900))}`,
       (usesAnchor || usesPrev) &&
-        "When a reference picture disagrees with this moment's description or continuity (an earlier costume or prop state, another place or time of day), the description and continuity win; faces, hair and costume designs always come from the design sheets.",
+        "When a reference picture disagrees with this moment's description or continuity (an earlier costume or prop state, another place or time of day), the description and continuity win; faces, hair and body always come from the design sheets, and what each character wears follows this scene's costume and this panel's continuity.",
       rules && `Continuity rules of this scene (every panel keeps them): ${clip(rules, 600) || rules.slice(0, 600)}`,
       t.state && `Continuity (the states this moment sits between — positions, props and light to keep; still one single frame): ${sentence(t.state)}`,
       sketchNo &&
@@ -1475,7 +1486,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
       multiShot
         ? `A ${data.acting.duration}-second animated scene, ${data.video.aspectRatio}, edited in ${shots.length} shots: ${shots.map((sh, i) => `shot ${i + 1} = ${rangeOf(sh)}`).join("; ")}. Cut ONLY where a beat says HARD CUT; inside a shot the camera travels continuously from one panel's framing to the next.`
         : `ONE single continuous shot with no cuts: a ${data.acting.duration}-second animated scene, ${data.video.aspectRatio}. The beats below follow storyboard panels — successive moments of this same shot; the camera travels continuously from one panel's framing to the next and never cuts.`,
-      ...storyboardCastEn(data, en, B.features),
+      ...storyboardCastEn(data, en, B.features, B.features * 50),
       (en.style || data.style.trim()) && `Art style: ${sentence(clip(en.style ?? data.style, 200) || clean(en.style ?? data.style).slice(0, 200))} Stay in this 2D style; never photorealistic or 3D.`,
       `Match the reference images exactly: the named characters' faces, hair, colors and costumes, the world, the lighting and the drawing style; nobody's proportions change and no character is duplicated.`,
       continuityRules(data, en) &&
@@ -1575,7 +1586,7 @@ export function buildSceneImageHandoff(data: ProjectData): SceneImageHandoff {
     const look = f?.look ? f.look.join("; ") : [clean(c.locks), clean(c.appearance)].filter(Boolean).join(" ");
     const outfit = f?.outfit ?? clean(c.outfit);
     return `- ${castName(data, c.id)}${multi && !story ? ` (${POSITION_EN[c.position]})` : ""}: ${[look, outfit && `Outfit: ${outfit}`].filter(Boolean).join(". ")}${
-      n ? ` Image reference ${n} is their design sheet: copy face, hair colour and hairstyle, costume colours and shapes, accessories and proportions exactly from it — where the text above differs, the design sheet wins; the text only adds this scene's passing details (dirt, tears, wind, props held).` : ""
+      n ? ` Image reference ${n} is their design sheet: copy face, hair colour and hairstyle, body proportions and the design details of their clothes exactly from it — for the face, hair and body the design sheet wins over the text. What they wear in this scene follows the costume text above (a disguise, robe, hood or face cover over the sheet's clothes); the text also adds passing details (dirt, tears, wind, props held).` : ""
     }`;
   });
   const prompt = [
