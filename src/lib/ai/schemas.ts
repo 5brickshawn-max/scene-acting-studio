@@ -50,7 +50,12 @@ export const SceneComposeOut = z.object({
   opening: z
     .string()
     .describe("첫 장면 묘사: 장소·시간·빛, 모든 주요 인물이 어디서 무엇을 하는지(얼굴이 보이게), 군중·소품 (3~5문장)"),
-  questions: z.array(z.string()).describe("시나리오와 자료만으로 정할 수 없어 앱이 정한 것이나 확인이 필요한 것"),
+  questions: z
+    .array(z.string())
+    .describe("시나리오와 자료만으로 정할 수 없어 새로 정한 것이나 확인이 필요한 것 (팀이 이미 답한 질문은 다시 쓰지 않음, 없으면 빈 배열)"),
+  scenario: z
+    .string()
+    .describe("팀의 확인 답변이 시나리오 글 자체를 바꾸라고 하면(예: '시나리오 내용 수정') 그 답을 반영해 고친 시나리오 전체, 아니면 빈 문자열"),
   duration: z.number().describe("장면 전체 길이(초). 시나리오에 타임코드가 있으면 그 길이, 없으면 대사·동작에 맞는 길이. 60초 이하"),
   shots: z
     .array(

@@ -411,6 +411,17 @@ function CastCard(props: {
                   />
                 </div>
               ))}
+              <div className="rounded-lg bg-[#f7fbf5] border border-[#c6dfbf] p-3 space-y-2">
+                <AiAction
+                  kind="compose_scene"
+                  step={0}
+                  label={`답변 반영해 씬 구성 다시 제안 (답한 질문 ${c.questions.filter((q) => q.answer.trim()).length}개)`}
+                  instruction="[확인 답변 반영] 팀이 답한 확인 사항을 모두 반영해 인물·의상·그림체·첫 장면·쇼트 구성을 다시 제안하고, 답이 시나리오 수정을 요구하면 고친 시나리오도 주세요."
+                  disabled={!c.questions.some((q) => q.answer.trim())}
+                  disabledReason="먼저 질문에 답을 적으세요."
+                  description="답을 결정 사항으로 넣어 AI 씬 구성을 다시 돌립니다(답한 질문은 다시 묻지 않음). 제안은 위 ‘① 씬 시놉시스·시나리오’ 아래에 나타나고, 고를 항목만 적용됩니다. 시나리오 수정이 필요한 답이면 ‘시나리오 수정’ 항목도 함께 옵니다."
+                />
+              </div>
             </div>
           )}
       </div>

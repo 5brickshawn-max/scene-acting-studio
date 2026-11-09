@@ -77,6 +77,8 @@ describe("step screens render for one and for several characters", () => {
     d.cast = d.cast.map((c, i) => ({ ...c, name: ["칼리엘라", "브람"][i] }));
     const s1 = render(d, createElement(CharacterStep, nav));
     expect(s1).toContain("군중·배경 인물 (선택)");
+    const asked = { ...d, cast: d.cast.map((c, i) => (i === 0 ? { ...c, questions: [{ question: "횃불을 껐습니다. 맞나요?", answer: "횃불을 넣어주세요" }] } : c)) };
+    expect(render(asked, createElement(CharacterStep, nav))).toContain("답변 반영해 씬 구성 다시 제안 (답한 질문 1개)");
     expect(s1).toContain("주요 인물 (이름이 있는 인물)");
     expect(s1).not.toContain("화면 배치");
     const s2 = render(d, createElement(ExpressionStep, nav));

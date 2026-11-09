@@ -190,7 +190,7 @@ export function ComposeProposal({ job, out }: { job: JobView; out: SceneComposeO
   const d = doc.data;
   const story = d.mode === "storyboard";
   const max = maxCastFor(d.mode);
-  const [picked, setPicked] = useState<Set<ComposeField>>(new Set<ComposeField>(["cast", "style", "extras", "opening", "questions", "structure"]));
+  const [picked, setPicked] = useState<Set<ComposeField>>(new Set<ComposeField>(["cast", "style", "extras", "opening", "questions", "structure", "scenario"]));
   const st = composeStructure(d, out);
   const toggle = (k: ComposeField) =>
     setPicked((s) => {
@@ -224,6 +224,11 @@ export function ComposeProposal({ job, out }: { job: JobView; out: SceneComposeO
             ))}
           </ol>
         </ComposeRow>
+        {out.scenario?.trim() && (
+          <ComposeRow picked={picked} toggle={toggle} k="scenario" title="시나리오 수정 (확인 답변 반영)">
+            <span className="block whitespace-pre-wrap text-[14px]">{out.scenario}</span>
+          </ComposeRow>
+        )}
         <ComposeRow picked={picked} toggle={toggle} k="style" title="그림체 (장면 공통)">
           <span className="block whitespace-pre-wrap">{out.style}</span>
         </ComposeRow>

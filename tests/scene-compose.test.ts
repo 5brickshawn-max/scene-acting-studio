@@ -15,6 +15,7 @@ const OUT = SceneComposeOut.parse({
   style: "굵은 외곽선의 2D 셀 채색",
   opening: "해 질 녘 광장, 군중 사이로 칼리엘라가 걸어 나오고 브람이 막아선다. 세라는 노점 뒤에서 지켜본다.",
   questions: ["칼리엘라의 키를 브람보다 크게 정했습니다, 맞나요?"],
+  scenario: "",
   duration: 16,
   shots: [
     { title: "광장 와이드", seconds: 4, panels: ["군중이 술렁이는 광장", "카메라가 다가가 칼리엘라를 찾음"] },
@@ -161,5 +162,20 @@ describe("references are always explained", () => {
     const p = buildExpressionHandoffs(d)[0];
     expect(p.references.map((r) => r.assetId).slice(0, 2)).toEqual(["scene-1", "sheet-b"]);
     expect(p.prompt).toContain("Image reference 2 is the design sheet of 브람");
+  });
+});
+
+
+describe("확인 답변 반영 (answers to the AI's questions)", () => {
+  it("a scenario revised from the answers is applied when picked, and asked questions are not added again", () => {
+    let d = createProjectData("정원", 2, "storyboard");
+    d.expressionSetup.scene = "횃불 하나 없는 정원";
+    d.cast[1] = { ...d.cast[1], questions: [{ question: "칼리엘라의 키를 브람보다 크게 정했습니다, 맞나요?", answer: "네" }] };
+    const out = { ...OUT, scenario: "횃불이 켜진 정원" };
+    const next = applyComposition(d, out, ["scenario", "questions"]);
+    expect(next.expressionSetup.scene).toBe("횃불이 켜진 정원");
+    expect(next.cast.flatMap((c) => c.questions).filter((q) => q.question.startsWith("칼리엘라의 키"))).toHaveLength(1);
+    d = applyComposition(d, out, ["style"]);
+    expect(d.expressionSetup.scene).toBe("횃불 하나 없는 정원");
   });
 });

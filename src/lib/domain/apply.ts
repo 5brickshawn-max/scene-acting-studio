@@ -46,7 +46,7 @@ export function applyCharacter(data: ProjectData, out: CharacterOutT, fields: Ch
   return reopenFrom({ ...data, cast, style: pick.has("style") ? out.style : data.style }, 0);
 }
 
-export type ComposeField = "cast" | "style" | "extras" | "opening" | "questions" | "structure";
+export type ComposeField = "cast" | "style" | "extras" | "opening" | "questions" | "structure" | "scenario";
 
 /** The proposed structure as the app can build it: at most 12 panels, at least 2, within 60 seconds. */
 export function composeStructure(data: Pick<ProjectData, "mode">, out: Pick<SceneComposeOutT, "shots" | "duration">) {
@@ -94,7 +94,8 @@ export function applyComposition(data: ProjectData, out: SceneComposeOutT, field
   }
   if (pick.has("questions") && out.questions.length) {
     const first = { ...cast[0] };
-    const existing = new Set(first.questions.map((q) => q.question));
+    // questions already on any card (answered or not) are not added again
+    const existing = new Set(cast.flatMap((c) => c.questions.map((q) => q.question)));
     first.questions = [...first.questions, ...out.questions.filter((q) => !existing.has(q)).map((q) => ({ question: q, answer: "" }))];
     cast = [first, ...cast.slice(1)];
   }
@@ -104,6 +105,8 @@ export function applyComposition(data: ProjectData, out: SceneComposeOutT, field
     style: pick.has("style") && out.style.trim() ? out.style : data.style,
     extras: pick.has("extras") ? out.extras : data.extras,
     opening: pick.has("opening") && out.opening.trim() ? out.opening : data.opening,
+    // a scenario revised from the team's answers (e.g. "add torches to the garden")
+    expressionSetup: pick.has("scenario") && out.scenario?.trim() ? { ...data.expressionSetup, scene: out.scenario.trim() } : data.expressionSetup,
   });
   // 쇼트 구성: panel count, cut links (storyboard), titles and the time split, all at once
   const st = composeStructure(data, out);

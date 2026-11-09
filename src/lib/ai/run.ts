@@ -119,21 +119,26 @@ async function callClaude<S extends z.ZodType>(
   messages: Anthropic.Beta.BetaMessageParam[],
   effort: "low" | "medium" | "high" = "high",
 ) {
-  const res = await client.beta.messages.parse({
-    model: MODEL,
-    max_tokens: 16000,
-    system,
-    messages,
-    output_config: { effort, format: betaZodOutputFormat(schema) },
-    // If a safety classifier declines, retry on Anthropic's recommended fallback model.
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
-  });
+  const res = await client.beta.messages.parse(
+    {
+      model: MODEL,
+      // reasoning counts toward this: a 12-panel storyboard with continuity states needs room
+      max_tokens: 32000,
+      system,
+      messages,
+      output_config: { effort, format: betaZodOutputFormat(schema) },
+      // If a safety classifier declines, retry on Anthropic's recommended fallback model.
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+    },
+    // an explicit timeout (within the route's 800 s) lets a non-streaming request use the larger budget
+    { timeout: 12 * 60 * 1000 },
+  );
   if (res.stop_reason === "refusal") {
     throw new Error("AI가 이 요청을 처리하지 않았습니다. 요청 내용을 바꿔 다시 시도해주세요.");
   }
   if (res.stop_reason === "max_tokens") {
-    throw new Error("응답이 너무 길어 중간에 끊겼습니다. 요청 범위를 줄여 다시 시도해주세요.");
+    throw new Error("응답이 너무 길어 중간에 끊겼습니다. 컷(패널) 수를 줄이거나 시나리오를 나눠 다시 시도해주세요.");
   }
   if (!res.parsed_output) throw new Error("AI 응답 형식을 읽지 못했습니다. 다시 시도해주세요.");
   // input_tokens is only the part not served from the cache; keep the whole prompt size as "input".
@@ -198,6 +203,10 @@ async function buildRequest(job: JobRow, data: ProjectData) {
         characterSheets(data),
       ]);
       const pictured = data.cast.flatMap((c, i) => (c.refAssetId ? [`인물 ${i + 1} ${castLabel(data, c.id)}`] : []));
+      // the team's answers to earlier confirmation questions are decisions: applied, never asked again
+      const allQ = data.cast.flatMap((c) => c.questions);
+      const answeredQ = allQ.filter((q) => q.answer.trim());
+      const openQ = allQ.filter((q) => !q.answer.trim());
       const max = maxCastFor(data.mode);
       const notes = data.cast
         .map((c, i) =>
@@ -220,7 +229,7 @@ async function buildRequest(job: JobRow, data: ProjectData) {
               `- characters: 대사를 하거나 이름으로 불리는 주요 인물만, 최대 ${max}명(${data.mode === "storyboard" ? "스토리보드 방식" : "인물별 연기 방식"}). 그 밖의 사람들은 extras에 무리로 적으세요.\n` +
               `- 인물마다 그림 모델이 같은 인물을 계속 그릴 수 있게 locks(구별되는 식별 요소부터), appearance, outfit을 구체적으로.\n` +
               (pictured.length
-                ? `- ${pictured.join(", ")}은(는) 위에 설정화(참고 그림)가 있습니다. 이 인물들의 locks·appearance·outfit은 반드시 그 그림에 보이는 그대로 쓰세요: 머리 색·길이·모양, 눈 색, 피부, 의상의 색·모양·장신구, 체형. 아래 '팀이 적어 둔 인물 메모'가 그림과 다르면(이전 AI 제안이 남아 있을 수 있음) 메모를 버리고 그림을 따르고, 무엇을 고쳤는지 questions에 남기세요. 시나리오가 요구하는 이 장면만의 소품·상태(예: 건네받는 숄, 모래 묻은 머리)는 그림의 의상 위에 덧붙이세요.\n`
+                ? `- ${pictured.join(", ")}은(는) 위에 설정화(참고 그림)가 있습니다. 이 인물들의 locks·appearance·outfit은 반드시 그 그림에 보이는 그대로 쓰세요: 머리 색·길이·모양, 눈 색, 피부, 의상의 색·모양·장신구, 체형. 아래 '팀이 적어 둔 인물 메모'가 그림과 다르면(이전 AI 제안이 남아 있을 수 있음) 메모를 버리고 그림을 따르세요. 메모를 실제로 고친 경우에만 무엇을 고쳤는지 questions에 한 줄로 남기고, 메모가 비었거나 그림과 같아 고친 것이 없으면 그 내용은 questions에 쓰지 마세요. 시나리오가 요구하는 이 장면만의 소품·상태(예: 건네받는 숄, 모래 묻은 머리)는 그림의 의상 위에 덧붙이세요. 단, 팀의 확인 답변이 정한 의상·변장은 그 답을 따르세요.\n`
                 : "") +
               `- 설정화가 없는 인물은 팀 메모를 따르고, 없는 부분은 시나리오의 시대·장소·분위기에 맞게 정하되 지어낸 핵심 결정은 questions에 '…로 정했습니다, 맞나요?'처럼 남기세요.\n` +
               `- style: ${data.baseAssetId || refs.length ? "참고 그림의 그림체를 따라" : "시나리오의 장르·분위기에 맞는 2D 애니메이션 그림체로"} 선·채색·명암·색감을 구체적으로.\n` +
@@ -234,6 +243,11 @@ async function buildRequest(job: JobRow, data: ProjectData) {
               (notes ? `\n팀이 적어 둔 인물 메모:\n${notes}\n` : "") +
               (data.extras.trim() ? `\n팀이 적어 둔 군중: ${data.extras}\n` : "") +
               (data.style.trim() ? `\n팀이 적어 둔 그림체: ${data.style}\n` : "") +
+              (answeredQ.length
+                ? `\n팀이 답한 확인 사항 — 결정된 내용입니다. 모든 결과(인물·의상·그림체·첫 장면·쇼트 구성)에 그대로 반영하고, 같은 질문을 questions에 다시 쓰지 마세요. 답이 시나리오를 고치라고 하면 scenario에 고친 시나리오 전체를 쓰고, 그 내용으로 구성하세요:\n${answeredQ.map((q) => `- ${q.question} → ${q.answer}`).join("\n")}\n`
+                : "") +
+              (openQ.length ? `\n아직 답이 없는 질문(다시 쓰지 말 것):\n${openQ.map((q) => `- ${q.question}`).join("\n")}\n` : "") +
+              (answeredQ.length ? "" : `- scenario: 바꿀 필요가 없으면 빈 문자열.\n`) +
               extra,
           },
         ] as Content,
