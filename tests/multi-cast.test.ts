@@ -293,9 +293,9 @@ describe("AI proposals and fixes for the cast", () => {
     expect(buildExpressionHandoffs(d)[0].prompt).toContain("- 브람: moderate other 1. Wide eyes, lips pressed.");
     // changing a listener's acting makes that beat stale
     d.expressions[0] = updatePerformance(d.expressions[0], d.cast[1].id, { gesture: "칼을 뽑는다" });
-    expect(englishStale(d)).toEqual(["1번 표정"]);
+    expect(englishStale(d)).toEqual(["감정 흐름", "1번 표정"]);
     d.cast[1].voice = "다른 목소리";
-    expect(englishStale(d)).toEqual(["B 목소리", "1번 표정"]);
+    expect(englishStale(d)).toEqual(["B 목소리", "감정 흐름", "1번 표정"]);
   });
 });
 

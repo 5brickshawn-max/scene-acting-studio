@@ -369,6 +369,9 @@ function CastCard(props: {
               emptyText="캐릭터 시트·설정화가 있으면 올리세요. ‘AI로 씬 구성’과 첫 장면 생성에 쓰입니다."
               onChange={(id) => set({ refAssetId: id })}
             />
+            <p className="field-help">
+              시트의 표정이 영상 표정을 끌고 갑니다. <strong>얼굴 클로즈업은 무표정</strong>인 시트를 쓰세요(웃는 시트는 슬픈 장면도 미소 쪽으로 끌림 — 팀 시댄스 시험).
+            </p>
           </div>
           {props.positions && (
             <Seg label={props.story ? "장면 기준 그림 속 위치 (누가 누구인지 찾는 데 씀)" : "화면 위치"} value={c.position} options={POSITIONS} labels={POSITION_LABEL} onChange={(v) => set({ position: v })} />

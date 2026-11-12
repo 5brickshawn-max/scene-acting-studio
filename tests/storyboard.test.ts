@@ -1,4 +1,4 @@
-import { keepPainted } from "@/lib/domain/handoff";
+import { keepPainted, ACTING_EN } from "@/lib/domain/handoff";
 import { describe, expect, it } from "vitest";
 import { addCastMember, shotsOf, approve, canApprove, createProjectData, imageAspectFor, MAX_CAST, MAX_CAST_STORYBOARD, parseProjectData, stepIssues, type ProjectData } from "@/lib/domain/project";
 import { buildExpressionHandoffs, buildFrameHandoff, buildVideoHandoff, cameraTextMoves } from "@/lib/domain/handoff";
@@ -127,7 +127,7 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     expect(englishStale(d)).toEqual([]);
     expect(buildVideoHandoff(d).prompt).toContain("Action: The crowd parts 1.\nCamera: Wide shot 1.");
     d.expressions[0].camera = "다른 카메라";
-    expect(englishStale(d)).toEqual(["1번 컷"]);
+    expect(englishStale(d)).toEqual(["감정 흐름", "1번 컷"]);
   });
 
   it("tells Claude it is a storyboard and offers storyboard proposals in the chat", () => {
@@ -168,7 +168,7 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     expect(p).toContain("세라 — 첫째 특징, 둘째 특징;");
     expect(p).not.toContain("셋째 특징");
     const h = buildVideoHandoff(d);
-    expect(h.lengthTarget).toBe(3500 + 3 * 200 + (h.constraints.length - 700) + 150 + keepPainted(d.style).length);
+    expect(h.lengthTarget).toBe(3500 + 3 * 200 + (h.constraints.length - 700) + 150 + keepPainted(d.style).length + ACTING_EN.length + 150);
     expect(h.prompt.length).toBeLessThanOrEqual(h.lengthTarget);
   });
 
@@ -245,7 +245,7 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     const d = market();
     d.dialogue.lines[1].delivery = "샤리의 V.O.(속마음)입니다. 낮게.";
     let p = buildVideoHandoff(d).prompt;
-    expect(p).toContain('칼리엘라 is heard in voice-over (the speaker is not seen saying it, no lip-sync) (English): "Step aside."');
+    expect(p).toContain('칼리엘라 is heard in voice-over (heard over the picture, lips closed) (English): "Step aside."');
     expect(p).toContain('브람 says exactly (English): "Not one step further!"');
     expect(p).toContain("Lines marked voice-over are heard over the picture; nobody lip-syncs them.");
     d.dialogue.lines[2].vo = true;

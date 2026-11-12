@@ -50,6 +50,7 @@ const OUT = {
   language: "Classical Arabic",
   style: "Thin even dark-brown outlines, soft cel shading with gentle gradients, low contrast.",
   continuity: "",
+  arc: "CALM (brows level, soft eyes) → she hears the gate → ALARM (brows up, eyes wide, shoulders rise)",
   cast: [
     {
       character: 1,
@@ -91,7 +92,7 @@ describe("영어 정리 (English for the prompts)", () => {
 
   it("is used only while the Korean it came from is unchanged, piece by piece", () => {
     const d = project();
-    expect(englishStale(d)).toEqual(["유지할 특징", "의상", "목소리", "그림체", "대사 언어", "1번 표정", "2번 표정", "3번 표정", "4번 표정"]);
+    expect(englishStale(d)).toEqual(["유지할 특징", "의상", "목소리", "그림체", "감정 흐름", "대사 언어", "1번 표정", "2번 표정", "3번 표정", "4번 표정"]);
     d.english = buildEnglishSheet(d, OUT);
     expect(englishStale(d)).toEqual([]);
     expect(freshEnglish(d).beats.size).toBe(4);
@@ -100,7 +101,7 @@ describe("영어 정리 (English for the prompts)", () => {
 
     // the team edits expression 2's gesture: only that beat goes back to Korean
     d.expressions[1].gesture = "검지를 입술에 댑니다.";
-    expect(englishStale(d)).toEqual(["2번 표정"]);
+    expect(englishStale(d)).toEqual(["감정 흐름", "2번 표정"]);
     const p = buildVideoHandoff(d).prompt;
     expect(p).toContain("1. 0–2 seconds: weary annoyance");
     expect(p).toContain("2. 2–4 seconds: 장난스러운 윙크");
@@ -108,7 +109,7 @@ describe("영어 정리 (English for the prompts)", () => {
 
     // a render-check fix to a text also counts as a change
     const fix = resolveFix(d, { target: "transition", expression: 3, text: "몸은 제자리에 둔 채 고개만 돌립니다." })!;
-    expect(englishStale(applyTextFix(d, fix, "x"))).toEqual(["2번 표정", "3번 표정"]);
+    expect(englishStale(applyTextFix(d, fix, "x"))).toEqual(["감정 흐름", "2번 표정", "3번 표정"]);
   });
 
   it("gives the video model short English beats, the exact lines and an English language name", () => {

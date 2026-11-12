@@ -26,18 +26,23 @@ export function englishSources(d: ProjectData) {
     language: d.dialogue.language.trim(),
     style: d.style.trim(),
     continuity: d.mode === "storyboard" ? d.expressionSetup.continuity.trim() : "",
+    /** the arc follows the whole design: any panel, transition or line change makes it stale */
+    arc: d.expressions.length ? `arc1|${d.expressionSetup.scene.trim()}|${beatSources(d).join("|")}` : "",
     cast: d.cast.map((c) => ({
       characterId: c.id,
       look: [c.name.trim(), c.locks.trim(), c.appearance.trim()].filter(Boolean).join("\n"),
       outfit: c.outfit.trim(),
       voice: effectiveText(d, "voice", c.id, c.voice).trim(),
     })),
-    beats: d.expressions.map((e) => {
+    beats: d.expressions.map((e, i) => ({ expressionId: e.id, source: beatSources(d)[i] })),
+  };
+}
+
+function beatSources(d: ProjectData): string[] {
+  return d.expressions.map((e) => {
       const seg = d.acting.segments.find((s) => s.expressionId === e.id);
       const line = d.dialogue.lines.find((l) => l.expressionId === e.id);
-      return {
-        expressionId: e.id,
-        source: JSON.stringify([
+      return JSON.stringify([
           // v2: storyboard moments are kept whole (older sheets were cut at 200 characters) → written again once
           d.mode === "storyboard" ? "sb2" : "",
           d.expressionSetup.framing,
@@ -60,10 +65,8 @@ export function englishSources(d: ProjectData) {
           line?.line ?? "",
           line?.meaning ?? "",
           line ? effectiveText(d, "delivery", e.id, line.delivery) : "",
-        ]),
-      };
-    }),
-  };
+        ]);
+  });
 }
 
 export type EnglishBeat = EnglishSheet["beats"][number];
@@ -73,6 +76,8 @@ export type FreshEnglish = {
   style: string | null;
   /** storyboard continuity rules in English, null when missing or out of date */
   continuity: string | null;
+  /** the scene's emotional arc (states → triggers), null when missing or out of date */
+  arc: string | null;
   /** fresh per-character pieces by cast member id (every member has an entry) */
   cast: Map<string, FreshCast>;
   /** fresh beats by expression id */
@@ -85,7 +90,7 @@ const NO_CAST: FreshCast = { look: null, outfit: null, voice: null };
 export function freshEnglish(d: ProjectData): FreshEnglish {
   const en = d.english;
   const blank = new Map(d.cast.map((c) => [c.id, NO_CAST]));
-  const none: FreshEnglish = { language: null, style: null, continuity: null, cast: blank, beats: new Map() };
+  const none: FreshEnglish = { language: null, style: null, continuity: null, arc: null, cast: blank, beats: new Map() };
   if (!en) return none;
   const src = englishSources(d);
   const ok = (key: string, source: string, text: string) => Boolean(source && text.trim() && key === textKey(source));
@@ -112,6 +117,7 @@ export function freshEnglish(d: ProjectData): FreshEnglish {
     language: ok(en.language.key, src.language, en.language.text) ? en.language.text.trim() : null,
     style: ok(en.style.key, src.style, en.style.text) ? en.style.text.trim() : null,
     continuity: ok(en.continuity.key, src.continuity, en.continuity.text) ? en.continuity.text.trim() : null,
+    arc: ok(en.arc.key, src.arc, en.arc.text) ? en.arc.text.trim() : null,
     cast,
     beats,
   };
@@ -138,6 +144,7 @@ export function englishStale(d: ProjectData): string[] {
   });
   if (!current(en?.style.key, src.style)) out.push("그림체");
   if (!current(en?.continuity.key, src.continuity)) out.push("연결 규칙");
+  if (!current(en?.arc.key, src.arc)) out.push("감정 흐름");
   if (!current(en?.language.key, src.language)) out.push("대사 언어");
   src.beats.forEach((b, i) => {
     const eb = en?.beats.find((x) => x.expressionId === b.expressionId);
@@ -159,6 +166,7 @@ type EnglishOut = {
   language: string;
   style: string;
   continuity?: string;
+  arc?: string;
   cast: { character: number; look: string[]; outfit: string; voice: string }[];
   beats: {
     panel: number;
@@ -180,6 +188,7 @@ export function buildEnglishSheet(d: ProjectData, out: EnglishOut): EnglishSheet
     language: piece(out.language, src.language, 60),
     style: piece(out.style, src.style, 200),
     continuity: piece(out.continuity ?? "", src.continuity, 600),
+    arc: piece(out.arc ?? "", src.arc, 650),
     cast: src.cast.flatMap((c, i) => {
       const o = out.cast.find((x) => x.character === i + 1);
       if (!o) return [];

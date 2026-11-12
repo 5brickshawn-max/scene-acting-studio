@@ -237,7 +237,9 @@ describe("Higgsfield models", async () => {
     expect(IMAGE_MODELS.gpt_image_2_6_flare.params.model).toBe("gpt_image_2_6_flare");
     expect(IMAGE_MODELS.seedream_v5_pro.params).toMatchObject({ model: "seedream_v5_pro", resolution: "2k" });
     expect(VIDEO_MODELS.kling4_0.resolutions.map((r) => r.key)).toEqual(["720p", "1080p"]);
-    expect(VIDEO_MODELS.seedance_2_5.resolutions[0].params).toMatchObject({ draft: true, resolution: "480p" });
+    // the team tests at plain 480p (the draft repeats frames); the draft stays available
+    expect(VIDEO_MODELS.seedance_2_5.resolutions.map((r) => r.key)).toEqual(["480p", "draft", "720p", "1080p"]);
+    expect(VIDEO_MODELS.seedance_2_5.resolutions[0].params).toEqual({ resolution: "480p" });
   });
   it("reference-mode video prompt asks for a single character", () => {
     const d = createProjectData("캐시");
@@ -461,7 +463,7 @@ describe("compact video prompt and image composition", () => {
 
   it("asks for voice only and names the language in English", () => {
     const d = heavy();
-    expect(buildVideoHandoff(d).prompt).toContain("Only natural sound and the sound effects that occur in the scene, with no music.");
+    expect(buildVideoHandoff(d).prompt).toContain("Only natural sound and the sound effects that occur in the scene, with no music, all at natural pitch.");
     expect(languageEn("고대 영어")).toBe("Old English");
     expect(languageEn("불어")).toBe("French");
     expect(languageEn("Klingon")).toBe("Klingon");
@@ -496,9 +498,10 @@ describe("studio constraints and automatic reconciliation", () => {
     d.video.extraDirection = "카메라가 천천히 다가감";
     expect(buildVideoHandoff(d).prompt.endsWith(STUDIO_CONSTRAINTS)).toBe(true);
     // positive wording only: the words to avoid live in the negative prompt
-    expect(STUDIO_CONSTRAINTS).toContain("[MOTION] 2.5D & 3D animation. Only the timing is stop-motion");
-    expect(STUDIO_CONSTRAINTS).toContain("[WEIGHT & GRAVITY — HEAVY]");
-    expect(STUDIO_CONSTRAINTS).toContain("real HANDHELD camera");
+    // the team's Seedance tests: full 24fps cadence, 1.5× gravity in one line, the camera as one line of feel
+    expect(STUDIO_CONSTRAINTS).toContain("[MOTION] A stylized 2.5D & 3D animated feature film. Full smooth feature-animation cadence");
+    expect(STUDIO_CONSTRAINTS).toContain("[WEIGHT AND SPEED] As if gravity were about one and a half times as strong");
+    expect(STUDIO_CONSTRAINTS).toContain("[CAMERA] Handheld from the hand, intimate and alive");
     expect(STUDIO_CONSTRAINTS).not.toMatch(/\bNO |never gliding|streaming/);
   });
 
@@ -697,7 +700,7 @@ describe("추가 연출 (the director's direction) wins and is never cut", () =>
     expect(block).toContain("\n\nLIGHT\nWarm key from screen-left, soft fill, golden rim light on the hair.");
     expect(block).not.toContain("…");
     expect(h.prompt.endsWith(h.constraints)).toBe(true);
-    expect(h.prompt.indexOf("DIRECTOR'S DIRECTION")).toBeLessThan(h.prompt.indexOf("[MOTION] 2.5D"));
+    expect(h.prompt.indexOf("DIRECTOR'S DIRECTION")).toBeLessThan(h.prompt.indexOf("[MOTION] "));
   });
 
   it("recognizes the camera move and lets the director's rig replace the constraints' HANDHELD", () => {
