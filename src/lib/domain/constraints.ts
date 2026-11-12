@@ -33,22 +33,19 @@ const MOTION: Record<Cadence, string> = {
     "[MOTION] 2.5D & 3D animation. Only the timing is stop-motion: stepped cadence, 24fps, animated on ones — a new held pose every frame, moving in crisp frame-by-frame steps, with painterly & line boil. Every character, creature and moving object travels pose to pose. Shapes keep their volume and design from frame to frame (a squash on impact recovers to the same shape).",
 };
 
-/** How heavy movement reads: real weight, heavy (about 1.5× gravity, the team's tested value), or exaggerated (2×). */
+/** How heavy movement reads: real weight, heavy, or exaggerated (as if gravity were about 1.5× as strong). */
 export const WEIGHT_LEVELS = ["natural", "heavy", "extra"] as const;
 export type WeightLevel = (typeof WEIGHT_LEVELS)[number];
-export const WEIGHT_LABEL: Record<WeightLevel, string> = { natural: "실제 무게", heavy: "무겁게 (중력 1.5배)", extra: "과장 (중력 2배)" };
+export const WEIGHT_LABEL: Record<WeightLevel, string> = { natural: "실제 무게", heavy: "무겁게", extra: "과장 (중력 1.5배)" };
 
-/**
- * Numbers live in the first sentence only; everything else is a visible result written as verbs
- * ("knees press into the ground"). Slowness lives only in the holds — never in the movement itself.
- */
+/** Weight as visible results at real-time speed (no instruction to speed movement up). The number lives in one place only. */
 const WEIGHT: Record<WeightLevel, string> = {
   natural:
     "[WEIGHT] Bodies and objects have real weight. All motion runs at real-time speed. Jumps and falls are quick: whatever leaves the ground comes back down promptly, speeding up on the way down. Every foot contact plants flat and holds its place; weight shifts visibly from foot to foot. Landings bend the knees and the body takes the impact, then recovers.",
   heavy:
-    "[WEIGHT AND SPEED] As if gravity were about one and a half times as strong, and every movement finishes in about two-thirds of its real time. Each movement is quick, heavy and decisive, carried by force: it snaps through and lands hard. The slowness lives only in the holds between movements. Bodies move against their own weight: feet plant flat and hold, knees and spine take each landing, shoulders drag down; whatever leaves the ground drops back fast. Props have solid weight in the hand.",
+    "[WEIGHT & GRAVITY — HEAVY] Everything is dense and heavy. All motion runs at real-time speed. Airtime is short: jumps stay low and anything that leaves the ground drops back fast, accelerating on the way down. Every ground contact is a hard hit: feet plant flat and lock in place, knees and spine compress on landing, the body jolts on the impact frame, then recovers with visible effort. Running is heavy and pounding: the torso dips on every footfall, each step shoves off the ground, the feet stay planted.",
   extra:
-    "[WEIGHT AND SPEED — EXAGGERATED] As if gravity were twice as strong, and every movement finishes in about half of its real time. Each movement is fast, heavy and decisive: it snaps through and lands hard, and the slowness lives only in the holds between movements. Airtime is short: jumps stay low and anything that leaves the ground drops back almost at once, accelerating hard on the way down. Every ground contact is a hard hit: feet plant flat and lock, knees and spine compress, the body squashes and jolts on the impact frame, then recovers slowly with visible effort. A falling character slams down like a sack of wet sand and stays down for a beat.",
+    "[WEIGHT & GRAVITY — HEAVY, EXAGGERATED] Everything is dense and heavy, as if gravity were about one and a half times as strong. All motion runs at real-time speed. Airtime is short: jumps stay low, and anything that leaves the ground drops back almost at once, accelerating hard on the way down — a fall has only a few poses, spaced wider and wider toward the ground. Every ground contact is a hard hit: feet plant flat and lock in place, knees and spine compress on landing, the body squashes and jolts on the impact frame, then recovers slowly and with visible effort. Running is heavy and pounding: the torso dips on every footfall, each step shoves off the ground, and the feet stay planted. A falling character slams down like a sack of wet sand and stays down for a beat.",
 };
 
 /**
