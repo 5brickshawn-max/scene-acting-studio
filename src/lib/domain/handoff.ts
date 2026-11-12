@@ -1469,7 +1469,7 @@ export function buildSketchHandoffs(data: ProjectData): ExpressionHandoff[] {
       endState(t.state) &&
         `The pose to draw (where this moment ends — hands, body position and props exactly like this, e.g. an open hand stays open, a fist stays a fist, kneeling stays kneeling): ${sentence(endState(t.state))}`,
       t.camera && `Camera: ${sentence(t.camera)} Draw one framing only (the framing at the key moment): where the camera stands and how big the figures are.`,
-      `Keep the composition clear: main figures large enough to read, set off-centre by thirds with open space on the other side (a close-up may sit near the middle); faces turned three-quarters or in profile, looking at something in the scene rather than at the viewer; background as a few simple lines (horizon, walls, door, big props). Again: one single frame, not several panels.`,
+      `Keep the composition clear: main figures large enough to read, background as a few simple lines (horizon, walls, door, big props). Again: one single frame, not several panels.`,
     ]
       .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
       .join("\n");
@@ -1664,10 +1664,6 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
       `Everyone stays alive between the panels (breathing, blinks, small weight shifts); every change ${multiShot ? "inside a shot " : ""}is acted through a physical action and in-between poses. Each action reads in order: look, prepare, act, contact, settle; the result pose holds long enough to read.${
         multiShot ? " Across a cut, the characters, costumes, world and light stay the same." : ""
       }`,
-      // the team's composition rule; with sketches the sketch decides the layout, the faces still turn
-      conti
-        ? "Faces turn three-quarters or in profile; nobody looks into the lens."
-        : "Compositions sit off-centre by thirds (a close-up may sit near the middle); faces turn three-quarters or in profile; nobody looks into the lens.",
     ]
       .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
       .join("\n");
@@ -1688,8 +1684,8 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
     Math.max(0, data.acting.segments.length - 6) * 250 +
     constraintsExtra(constraints) +
     keepPainted(en.style ?? data.style).length +
-    // the acting doctrine, the arc, frame zero and the composition rule are written once and never cut
-    ACTING_EN.length + arcLine(en.arc).length + frameZero.length + 150;
+    // the acting doctrine, the arc and frame zero are written once and never cut
+    ACTING_EN.length + arcLine(en.arc).length + frameZero.length;
   let prompt = "";
   for (const B of STORY_BUDGETS) {
     prompt = [headerWith(B), frameZero, beatsWith(B).join("\n\n"), directorBlock, constraints].filter(Boolean).join("\n\n");
