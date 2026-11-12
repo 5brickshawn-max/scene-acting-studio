@@ -18,60 +18,94 @@
  * the things to avoid go to NEGATIVE_PROMPT for models with a negative field. Weight comes from visible
  * results (fast drops, short airtime, hard contacts, planted feet), not from numbers.
  */
-const MOTION =
-  "[MOTION] 2.5D & 3D animation. Only the timing is stop-motion: stepped cadence, 24fps, animated on ones — a new held pose every frame, moving in crisp frame-by-frame steps, with painterly & line boil. Every character, creature and moving object travels pose to pose. Shapes keep their volume and design from frame to frame (a squash on impact recovers to the same shape).";
+/**
+ * Motion cadence. The team's rule (SH04_3 Seedance tests, Nov 2026): full 24fps feature-animation cadence is
+ * the default; the earlier stop-motion stepped timing stays available as an option.
+ */
+export const CADENCES = ["full", "stepped"] as const;
+export type Cadence = (typeof CADENCES)[number];
+export const CADENCE_LABEL: Record<Cadence, string> = { full: "풀 애니메이션 (24fps, 기본)", stepped: "스톱모션 박자" };
 
-/** How heavy movement reads: real weight, heavy, or exaggerated (as if gravity were twice as strong). */
+const MOTION: Record<Cadence, string> = {
+  full:
+    "[MOTION] A stylized 2.5D & 3D animated feature film. Full smooth feature-animation cadence, rendered on ones at 24 frames per second, moving pose to pose through clear key poses. REAL-TIME speed. Shapes keep their volume and design from frame to frame (a squash on impact recovers to the same shape).",
+  stepped:
+    "[MOTION] 2.5D & 3D animation. Only the timing is stop-motion: stepped cadence, 24fps, animated on ones — a new held pose every frame, moving in crisp frame-by-frame steps, with painterly & line boil. Every character, creature and moving object travels pose to pose. Shapes keep their volume and design from frame to frame (a squash on impact recovers to the same shape).",
+};
+
+/** How heavy movement reads: real weight, heavy (about 1.5× gravity, the team's tested value), or exaggerated (2×). */
 export const WEIGHT_LEVELS = ["natural", "heavy", "extra"] as const;
 export type WeightLevel = (typeof WEIGHT_LEVELS)[number];
-export const WEIGHT_LABEL: Record<WeightLevel, string> = { natural: "실제 무게", heavy: "무겁게", extra: "과장 (중력 2배)" };
+export const WEIGHT_LABEL: Record<WeightLevel, string> = { natural: "실제 무게", heavy: "무겁게 (중력 1.5배)", extra: "과장 (중력 2배)" };
 
+/**
+ * Numbers live in the first sentence only; everything else is a visible result written as verbs
+ * ("knees press into the ground"). Slowness lives only in the holds — never in the movement itself.
+ */
 const WEIGHT: Record<WeightLevel, string> = {
   natural:
     "[WEIGHT] Bodies and objects have real weight. All motion runs at real-time speed. Jumps and falls are quick: whatever leaves the ground comes back down promptly, speeding up on the way down. Every foot contact plants flat and holds its place; weight shifts visibly from foot to foot. Landings bend the knees and the body takes the impact, then recovers.",
   heavy:
-    "[WEIGHT & GRAVITY — HEAVY] Everything is dense and heavy. All motion runs at real-time speed. Airtime is short: jumps stay low and anything that leaves the ground drops back fast, accelerating on the way down. Every ground contact is a hard hit: feet plant flat and lock in place, knees and spine compress on landing, the body jolts on the impact frame, then recovers with visible effort. Running is heavy and pounding: the torso dips on every footfall, each step shoves off the ground, the feet stay planted.",
+    "[WEIGHT AND SPEED] As if gravity were about one and a half times as strong, and every movement finishes in about two-thirds of its real time. Each movement is quick, heavy and decisive, carried by force: it snaps through and lands hard. The slowness lives only in the holds between movements. Bodies move against their own weight: feet plant flat and hold, knees and spine take each landing, shoulders drag down; whatever leaves the ground drops back fast. Props have solid weight in the hand.",
   extra:
-    "[WEIGHT & GRAVITY — HEAVY, EXAGGERATED] Everything is dense and heavy, as if gravity were twice as strong as on Earth. All motion runs at real-time speed. Airtime is short: jumps stay low, and anything that leaves the ground drops back almost instantly, accelerating hard on the way down — a fall has only a few poses, spaced wider and wider toward the ground. Losing balance to hitting the ground takes under half a second. Every ground contact is a hard hit: feet plant flat and lock in place, knees and spine compress on landing, the body squashes and jolts on the impact frame, then recovers slowly and with visible effort. Running is heavy and pounding: the torso dips on every footfall, each step shoves off the ground, and the feet stay planted. A falling character slams down like a sack of wet sand and stays down for a beat.",
+    "[WEIGHT AND SPEED — EXAGGERATED] As if gravity were twice as strong, and every movement finishes in about half of its real time. Each movement is fast, heavy and decisive: it snaps through and lands hard, and the slowness lives only in the holds between movements. Airtime is short: jumps stay low and anything that leaves the ground drops back almost at once, accelerating hard on the way down. Every ground contact is a hard hit: feet plant flat and lock, knees and spine compress, the body squashes and jolts on the impact frame, then recovers slowly with visible effort. A falling character slams down like a sack of wet sand and stays down for a beat.",
 };
 
-const CAMERA_HANDHELD =
-  "[CAMERA — NOT STOP-MOTION] The stepped cadence applies only to what moves inside the frame, not to the camera. The camera is a real HANDHELD camera held by a person: in every frame there is a small visible shake, irregular drift and a slight tilt, and in quiet beats it sways like breathing. Moves that follow the action are clear: they start half a beat late, overshoot slightly, and settle with a small wobble. On every heavy impact the camera takes a sharp jolt, as if the ground shook, then settles.";
-const cameraRig = (rig: string) =>
-  `[CAMERA — NOT STOP-MOTION] The stepped cadence applies only to what moves inside the frame, not to the camera. The camera move is as directed above (${rig}): quiet and purposeful, alive; on a heavy impact it gives a small jolt, then settles.`;
+/**
+ * The camera is ONE line of feel. The team's tests: naming a camera position, a path or numbers froze the
+ * camera (frames with a still background went from 12% to 70%); "handheld from the hand … breathing with
+ * them" kept it flowing.
+ */
+const CAMERA_HANDHELD: Record<Cadence, string> = {
+  full: "[CAMERA] Handheld from the hand, intimate and alive: a soft breathing sway that stays close on the characters, breathing with them.",
+  stepped:
+    "[CAMERA] The stepped cadence is only for what moves inside the frame, not the camera. Handheld from the hand, intimate and alive: a soft breathing sway that stays close on the characters, breathing with them.",
+};
+const cameraRig = (rig: string, cadence: Cadence) =>
+  `[CAMERA] ${cadence === "stepped" ? "The stepped cadence is only for what moves inside the frame, not the camera. " : ""}The camera move is as directed above (${rig}): quiet and purposeful, alive.`;
 
-const SOUND = "[SOUND] Only natural sound and the sound effects that occur in the scene, with no music. Impacts sound heavy and low: deep thuds, hard footfalls, the forced breath of effort.";
+const SOUND =
+  "[SOUND] Only natural sound and the sound effects that occur in the scene, with no music, all at natural pitch. Impacts sound heavy and low: deep thuds, hard footfalls, the forced breath of effort.";
 
+/** Every reaction has a cause, in order: body first, then the heavier loose parts, then the lighter ones. */
 const SECONDARY: Record<WeightLevel, string> = {
   natural:
-    "[SECONDARY ACTION — also on ones] Only loose elements already in the scene (hair, clothing, cloth, straps, accessories, fur). They follow the main action with a short delay and settle soon after it stops.",
+    "[SECONDARY ACTION] Only loose elements already in the scene (hair, clothing, cloth, straps, accessories, fur). Every reaction has a cause, in order: the body first, then the heavier loose parts, then the lighter ones; they follow with a short delay and settle soon after the body stops.",
   heavy:
-    "[SECONDARY ACTION — also on ones] Only loose elements already in the scene (hair, clothing, cloth, straps, accessories, fur). They are heavy and pulled down by gravity: they swing with the main action, trail only briefly, drop fast, slap against the body on landing and settle quickly.",
+    "[SECONDARY ACTION] Only loose elements already in the scene (hair, clothing, cloth, straps, accessories, fur). Every reaction has a cause, in order: the body first, then the heavier loose parts (hoods, braids, cloaks), then the lighter ones (fringe, sleeves, strands of hair). They are heavy: they swing briefly, drop fast and settle. Nothing floats, nothing slides.",
   extra:
-    "[SECONDARY ACTION — also on ones] Only loose elements already in the scene (hair, clothing, cloth, straps, accessories, fur). They are heavy and pulled down hard by gravity: they swing with the main action, trail only briefly, drop fast, slap down against the body on landing, and settle quickly with a short, stiff follow-through.",
+    "[SECONDARY ACTION] Only loose elements already in the scene (hair, clothing, cloth, straps, accessories, fur). Every reaction has a cause, in order: the body first, then the heavier loose parts (hoods, braids, cloaks), then the lighter ones (fringe, sleeves, strands of hair). They are pulled down hard: they swing briefly, drop fast, slap against the body on landing and settle with a short, stiff follow-through. Nothing floats, nothing slides.",
 };
 
 /** For models with a negative-prompt field (e.g. Kling on its own site); the app does not put these words in the prompt itself. */
-export function negativePrompt(weight: WeightLevel = "heavy"): string {
+export function negativePrompt(weight: WeightLevel = "heavy", cadence: Cadence = "full"): string {
   const common =
-    "smooth interpolation, motion blur, morphing, melting shapes, gimbal-smooth camera, tripod shot, locked-off shot, background music, text, subtitles";
+    (cadence === "stepped" ? "smooth interpolation, " : "") +
+    "motion blur, morphing, melting shapes, gimbal-smooth camera, tripod shot, locked-off shot, background music, text, subtitles";
   const light =
     "slow motion, floating, floaty, weightless, low gravity, moon gravity, hovering, drifting, gliding, sliding feet, foot sliding, moonwalk, bouncy, slow fall, long hang time, hair floating, fabric fluttering slowly";
   return weight === "natural" ? `slow motion, floating, gliding, sliding feet, ${common}` : `${light}, ${common}`;
 }
 
-/** The block exactly as the studio wrote it (heavy weight, handheld camera). */
+/** The block exactly as the studio wrote it (heavy weight, handheld camera, full cadence). */
 export const STUDIO_CONSTRAINTS = constraintsFor(null);
 
 /**
  * The constraints block for one video. The camera part follows the director's rig when they name one other
  * than handheld (Steadicam, gimbal, tripod, dolly …), instead of contradicting it.
  */
-export function constraintsFor(rig: string | null, weight: WeightLevel = "heavy"): string {
-  return [MOTION, WEIGHT[weight], rig ? cameraRig(rig) : CAMERA_HANDHELD, SOUND, SECONDARY[weight]].join("\n\n");
+export function constraintsFor(rig: string | null, weight: WeightLevel = "heavy", cadence: Cadence = "full"): string {
+  const secondary = cadence === "stepped" ? SECONDARY[weight].replace("[SECONDARY ACTION]", "[SECONDARY ACTION — also on ones]") : SECONDARY[weight];
+  return [MOTION[cadence], WEIGHT[weight], rig ? cameraRig(rig, cadence) : CAMERA_HANDHELD[cadence], SOUND, secondary].join("\n\n");
 }
 
 /** The studio's earlier wording, still in many directors' texts: paragraphs repeating it are left out too. */
+const LEGACY_BLOCKS = [
+  "[MOTION] 2.5D & 3D animation. Only the timing is stop-motion: stepped cadence, 24fps, animated on ones — a new held pose every frame, moving in crisp frame-by-frame steps, with painterly & line boil.",
+  "[WEIGHT & GRAVITY — HEAVY] Everything is dense and heavy. All motion runs at real-time speed. Airtime is short: jumps stay low and anything that leaves the ground drops back fast, accelerating on the way down. Every ground contact is a hard hit: feet plant flat and lock in place, knees and spine compress on landing, the body jolts on the impact frame, then recovers with visible effort. Running is heavy and pounding: the torso dips on every footfall, each step shoves off the ground, the feet stay planted.",
+  "[CAMERA — NOT STOP-MOTION] The stepped cadence applies only to what moves inside the frame, not to the camera. The camera is a real HANDHELD camera held by a person: in every frame there is a small visible shake, irregular drift and a slight tilt, and in quiet beats it sways like breathing. Moves that follow the action are clear: they start half a beat late, overshoot slightly, and settle with a small wobble. On every heavy impact the camera takes a sharp jolt, as if the ground shook, then settles.",
+  "[SECONDARY ACTION — also on ones] Only loose elements already in the scene (hair, clothing, cloth, straps, accessories, fur). They are heavy and pulled down by gravity: they swing with the main action, trail only briefly, drop fast, slap against the body on landing and settle quickly.",
+].join("\n\n");
 const LEGACY =
   "Constraints: stop-motion stepped cadence on ones at 24fps with painterly & line boil, every character, creature and moving object stepping pose to pose, never gliding. NO smooth interpolation, NO motion blur, NO morphing. NO MUSIC, only natural sound. SECONDARY ACTION on ones: whichever loose elements are present (hair, clothing, fabric, straps, accessories, fur) swinging, streaming and settling with follow-through. HANDHELD, quiet and purposeful, alive, never gimbal-smooth, never tripod-locked, not chaotic.";
 
@@ -335,7 +369,7 @@ const words = (t: string) => (t.toLowerCase().match(/[a-z0-9가-힣]{3,}/g) ?? [
  */
 export function dropConstraintRepeats(direction: string, where: string, log: Adjustment[]): string {
   if (!direction.trim()) return direction;
-  const known = new Set([...words(constraintsFor(null)), ...words(LEGACY)]);
+  const known = new Set([...words(constraintsFor(null)), ...words(constraintsFor(null, "heavy", "stepped")), ...words(LEGACY), ...words(LEGACY_BLOCKS)]);
   const paras = direction.split(/\n\s*\n/);
   const kept = paras.filter((p) => {
     const w = words(p.replace(/^\s*[A-Za-z가-힣 &]{2,30}\s*[:：]/, ""));

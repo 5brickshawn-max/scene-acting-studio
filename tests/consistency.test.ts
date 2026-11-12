@@ -216,3 +216,35 @@ describe("safeguards: sketch ↔ text ↔ acting", () => {
     expect(p).toContain("무릎을 꿇은 자세");
   });
 });
+
+describe("Seedance acting doctrine (SH04_3 tests)", () => {
+  it("puts the acting rules, the arc and the result pose in the prompt, and keeps negative wording low", async () => {
+    const { buildVideoHandoff, ACTING_EN, startState } = await import("@/lib/domain/handoff");
+    const { buildEnglishSheet } = await import("@/lib/domain/english");
+    const { preRenderCheck, NEGATIVE_LIMIT } = await import("@/lib/domain/check");
+    let d = setExpressionCount(createProjectData("결의", 1, "storyboard"), 3);
+    d = {
+      ...d,
+      expressions: d.expressions.map((e, i) => ({ ...e, action: `동작 ${i + 1}`, continuity: `시작: 상태 ${i} / 끝: 상태 ${i + 1}` })),
+    };
+    d.english = buildEnglishSheet(d, {
+      language: "English",
+      style: "",
+      arc: "SPENT (brows low, empty eyes) → her fingers find the toy → STRUCK (inner brows lift, a long still stare)",
+      cast: [],
+      beats: [],
+    });
+    const h = buildVideoHandoff(d, "references");
+    expect(h.prompt).toContain(ACTING_EN);
+    expect(h.prompt).toContain("THE EMOTIONAL ARC: THIS IS THE WHOLE POINT.");
+    expect(h.prompt).toContain("→ her fingers find the toy →");
+    expect(h.prompt).toContain("Frame zero: 상태 0.");
+    expect(h.prompt).toContain("Result pose: 상태 3.");
+    expect(h.constraints).toContain("[CAMERA] Handheld from the hand, intimate and alive");
+    const negatives = (h.prompt.match(/\bnever\b|\bno\b|\bnot\b|\bnothing\b/gi) ?? []).length;
+    expect(negatives).toBeLessThanOrEqual(NEGATIVE_LIMIT);
+    expect(preRenderCheck(d, h).find((i) => i.area === "금지 표현")?.level).toBe("ok");
+    expect(startState("시작: 엎드림 / 끝: 무릎")).toBe("엎드림");
+    expect(startState("그냥 상태")).toBe("");
+  });
+});

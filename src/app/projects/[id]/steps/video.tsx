@@ -14,7 +14,7 @@ import { HiggsfieldVideoPack } from "../packs";
 import { EnglishBar, PromptApplyBar, TextDiff, useVideoPrompt, type VideoPrompt } from "../prompt-tools";
 import { englishStale } from "@/lib/domain/english";
 import { VIDEO_MODELS, videoDuration, videoMaxDuration, type VideoModelKey } from "@/lib/higgsfield/models";
-import { WEIGHT_LABEL, WEIGHT_LEVELS } from "@/lib/domain/constraints";
+import { CADENCE_LABEL, CADENCES, WEIGHT_LABEL, WEIGHT_LEVELS } from "@/lib/domain/constraints";
 import type { PromptCheckResult } from "@/lib/ai/schemas";
 
 const short = (t: string, n = 90) => (t.length > n ? t.slice(0, n) + "…" : t);
@@ -403,9 +403,29 @@ export function VideoStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }
               onChange={(v) => setVideo({ weight: v })}
             />
             <p className="field-help">
-              무게감은 숫자가 아니라 눈에 보이는 결과로 지시합니다: 실제 속도(슬로모션 없음), 짧은 체공과 빠른 낙하, 강한 착지와 충격 반응, 미끄러지지 않는 발, 빨리
-              떨어지는 머리카락·옷. ‘과장’은 “중력이 두 배인 것처럼”을 더합니다(우주·행성 같은 이미지가 끼어들면 ‘무겁게’로 바꾸세요). 대사·동작이 짧은 컷(넘어짐·낙하는 0.5초
-              안팎)은 4단계 시간 분배에서 짧게 주고, 나머지 시간은 다른 동작으로 채우세요.
+              숫자는 첫 문장 한 줄에만 넣고(‘무겁게’ = 중력 약 1.5배·동작 시간 약 3분의 2, 팀 시험값), 나머지는 눈에 보이는 결과로 지시합니다: 빠르고 무거운 동작, 느림은
+              동작 사이의 멈춤에만, 바닥에 눌리는 무릎·발, 빨리 떨어져 자리 잡는 머리카락·옷. 대사·동작이 짧은 컷(넘어짐·낙하는 0.5초 안팎)은 4단계 시간 분배에서 짧게 주세요.
+            </p>
+          </div>
+          <div>
+            <Seg
+              label="움직임 박자 (스튜디오 제약사항에 들어감)"
+              value={data.video.cadence}
+              options={CADENCES}
+              labels={CADENCE_LABEL}
+              onChange={(v) => setVideo({ cadence: v })}
+            />
+            <p className="field-help">
+              팀 기본은 <strong>풀 애니메이션</strong>(24fps on ones, 키 포즈 사이를 실제 움직임으로)입니다. 감정의 정점은 프레임 박자가 아니라 무빙 홀드(자세는 멈추고 숨·어깨·눈물만
+              움직임)로 시간을 줍니다. ‘스톱모션 박자’는 계단식 박자와 선 떨림(boil)이 필요한 장면에만 쓰세요.
+            </p>
+          </div>
+          <div className="notice notice-info text-[14px] space-y-1">
+            <p className="font-semibold">시댄스 2.5 팀 레시피 (SH04_3 시험, 2026-11)</p>
+            <p>
+              레퍼런스 방식으로만, 시험은 <strong>480p 일반 생성</strong>(드래프트는 같은 그림이 두 장씩 반복돼 끊겨 보임). 한 시험에 한 가지만 바꾸세요. 참고 그림이 표정과 밝기를
+              끌고 가므로 <strong>캐릭터 시트는 무표정</strong>으로, 배경은 <strong>원하는 영상 밝기에 맞춰 미리 어둡게/밝게</strong> 고친 뒤 올리세요(글로 억누르는 것보다 확실함).
+              추가 지시에 ‘never·no’ 같은 금지 문장을 늘리면 연기가 작아집니다.
             </p>
           </div>
           {/* the director's field was removed; a text left from before still goes into the prompt, so it stays visible and removable */}

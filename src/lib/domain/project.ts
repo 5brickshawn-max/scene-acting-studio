@@ -247,6 +247,8 @@ export const EnglishSheetSchema = z.object({
   style: EnText,
   /** storyboard: the scene's continuity rules (연결 규칙) */
   continuity: EnText.default({ text: "", key: "" }),
+  /** the scene's emotional arc: states with their visible signs, and the trigger between each two */
+  arc: EnText.default({ text: "", key: "" }),
   cast: z.array(
     z.object({
       characterId: z.string(),
@@ -364,6 +366,8 @@ export const ProjectDataSchema = z.object({
       refMode: z.enum(["auto", "conti", "panels"]).default("auto"),
       /** how heavy movement reads in the video (실제 무게 / 무겁게 / 과장: 중력 2배) */
       weight: z.enum(["natural", "heavy", "extra"]).default("heavy"),
+      /** motion cadence: full 24fps feature animation (the team's default) or stop-motion stepped timing */
+      cadence: z.enum(["full", "stepped"]).default("full"),
       /** the director's direction (추가 연출): camera, light, background … kept whole in the video prompt */
       extraDirection: z.string(),
       /**
@@ -465,7 +469,7 @@ export function createProjectData(title = "새 장면", castCount = 1, mode: Sce
     expressions,
     dialogue: { language: "한국어", lines: [] },
     acting: { duration: 8, segments: evenSegments(expressions.map((e) => e.id), 8) },
-    video: { aspectRatio: "16:9", refMode: "auto", weight: "heavy", extraDirection: "", promptFixes: [], startFrameAssetId: null, endFrameAssetId: null, resultAssetIds: [] },
+    video: { aspectRatio: "16:9", refMode: "auto", weight: "heavy", cadence: "full", extraDirection: "", promptFixes: [], startFrameAssetId: null, endFrameAssetId: null, resultAssetIds: [] },
     english: null,
   };
 }

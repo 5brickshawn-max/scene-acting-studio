@@ -56,7 +56,7 @@ describe("storyboard continuity (연결성)", () => {
 
   it("changed rules make the English out of date", () => {
     const d = board();
-    d.english = { language: { text: "", key: "" }, style: { text: "", key: "" }, continuity: { text: "", key: "" }, cast: [], beats: [] };
+    d.english = { language: { text: "", key: "" }, style: { text: "", key: "" }, continuity: { text: "", key: "" }, arc: { text: "", key: "" }, cast: [], beats: [] };
     d.expressionSetup.continuity = "1) 규칙";
     expect(englishStale(d)).toContain("연결 규칙");
   });

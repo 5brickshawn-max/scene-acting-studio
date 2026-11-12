@@ -252,6 +252,11 @@ export const PromptCheckOut = z.object({
 export const EnglishOut = z.object({
   language: z.string().describe("대사 언어의 영어 이름 (예: 고대 아랍어 → Classical Arabic)"),
   style: z.string().describe("장면 전체의 그림체(선·채색·명암), 영어 한 문장 (160자 이내)"),
+  arc: z
+    .string()
+    .describe(
+      "장면의 감정 흐름(EMOTIONAL ARC), 영어 (550자 이내): 중심 인물의 감정 상태 3~5개를 순서대로 대문자 이름으로, 상태마다 괄호 안에 눈썹·이마·눈·몸의 보이는 표시, 상태 사이에는 바꾸는 계기(무엇을 보거나 듣거나 하는 순간)를 '→ 계기 →'로. 예: SPENT (brows heavy and low, forehead slack, empty eyes, slack shoulders) → her fingers find the toy → STRUCK (inner brows lift slightly, forehead tightens, a long still stare) → the sight of it undoes her → GRIEF (...)",
+    ),
   continuity: z.string().describe("스토리보드의 연결 규칙(180도 축·지리·빛·의상/소품 변화·동선)을 영어로 짧게, 번호 목록 그대로 (500자 이내). 스토리보드가 아니거나 규칙이 없으면 빈 문자열"),
   cast: z
     .array(

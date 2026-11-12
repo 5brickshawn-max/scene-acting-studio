@@ -60,12 +60,25 @@ export function sceneCameraSentences(scene: string): string {
 
 const order0 = (d: ProjectData) => timelineOrder(d);
 
+/** How many "never / no" phrases a prompt carries before acting shrinks (the team's final prompt had about 10). */
+export const NEGATIVE_LIMIT = 14;
+
 export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] {
   const items: CheckItem[] = [];
   const add = (level: CheckItem["level"], area: string, text: string, fix?: CheckFix) =>
     items.push(fix ? { level, area, text, fix } : { level, area, text });
   const director = data.video.extraDirection.trim();
   const duration = data.acting.duration;
+
+  // ── negative wording: the team's Seedance tests saw acting shrink as "never/no" lines grew (7 → 12+: movement halved) ──
+  const negatives = (h.prompt.match(/\bnever\b|\bno\b|\bnot\b|\bnothing\b|\bdon'?t\b|하지\s*마|금지|않/gi) ?? []).length;
+  if (negatives > NEGATIVE_LIMIT)
+    add(
+      "warn",
+      "금지 표현",
+      `프롬프트에 금지 표현(never·no·not·금지 …)이 ${negatives}개입니다(권장 ${NEGATIVE_LIMIT}개 이하). 팀 시험에서 금지 문장이 늘자 인물 움직임이 절반 이하로 줄었습니다. 글이나 추가 연출의 ‘…하지 말 것’을 ‘무엇을 할지’로 바꾸세요.`,
+    );
+  else add("ok", "금지 표현", `금지 표현 ${negatives}개 — 권장 범위(${NEGATIVE_LIMIT}개 이하)입니다.`);
 
   // ── the prompt's fixed frame ──
   const shots = shotsOf(data);

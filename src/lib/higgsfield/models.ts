@@ -69,7 +69,9 @@ export const VIDEO_MODELS: Record<VideoModelKey, VideoModel> = {
     minDuration: 4,
     maxDuration: 30,
     resolutions: [
-      { key: "draft", label: "480p 드래프트", params: { resolution: "480p", draft: true } },
+      // the team's test setting (SH04_3, Nov 2026): plain 480p — the draft repeats frames in pairs and looks choppy
+      { key: "480p", label: "480p (시험 추천)", params: { resolution: "480p" } },
+      { key: "draft", label: "480p 드래프트 (끊겨 보임)", params: { resolution: "480p", draft: true } },
       { key: "720p", label: "720p", params: { resolution: "720p" } },
       { key: "1080p", label: "1080p", params: { resolution: "1080p" } },
     ],
@@ -77,7 +79,7 @@ export const VIDEO_MODELS: Record<VideoModelKey, VideoModel> = {
     withReferences: { mode: "omni_reference" },
     startRole: "image_references",
     endRole: null,
-    note: "최대 30초 · 빠른 확인용(480p 드래프트, 7일 안에 1080p로 확정 가능) · 카메라 지시는 약하게 따르는 편",
+    note: "최대 30초 · 팀 시험은 480p 일반 생성(드래프트는 같은 그림이 두 장씩 반복돼 끊겨 보임) · 480p 결과는 확정 기능이 없어 720p·1080p로 새로 생성(연기·카메라가 달라짐)",
   },
   gemini_omni_flash_1_2: {
     label: "Gemini Omni Flash 1.2",

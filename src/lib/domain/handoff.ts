@@ -1063,7 +1063,7 @@ export function buildVideoHandoff(
       const vo = l ? isVoiceOver(l) : false;
       const says = (text: string) =>
         vo
-          ? `${multi ? who : "The character"} is heard in voice-over (${lang}; the speaker is not seen saying it, no lip-sync): "${text}"`
+          ? `${multi ? who : "The character"} is heard in voice-over (${lang}; heard over the picture, lips closed): "${text}"`
           : multi
             ? `${who} says exactly (${lang}): "${text}"`
             : `Say exactly (${lang}): "${text}"`;
@@ -1082,7 +1082,7 @@ export function buildVideoHandoff(
           `${who ? `${who} acts` : "Acting"} (${INTENSITY_EN[original.intensity]}): ${acting.join(" ")}`,
           principleLine(original, "principles" in L ? L.principles : 2),
           ...reactionLines(L),
-          l?.line ? `${says(l.line)}${eb.delivery ? ` — ${eb.delivery}` : ""}` : "No dialogue in this beat.",
+          l?.line ? `${says(l.line)}${eb.delivery ? ` — ${eb.delivery}` : ""}` : "Silent beat.",
         ]
           .filter(Boolean)
           .join("\n");
@@ -1099,7 +1099,7 @@ export function buildVideoHandoff(
         `${who ? `${who} acts` : "Acting"}: ${acting}${move ? ` 다음 표정으로: ${move}.` : ""}`,
         principleLine(original, "principles" in L ? L.principles : 2),
         ...reactionLines(L),
-        l?.line ? `${says(l.line)}${how ? ` — ${how}` : ""}` : "No dialogue in this beat.",
+        l?.line ? `${says(l.line)}${how ? ` — ${how}` : ""}` : "Silent beat.",
       ]
         .filter(Boolean)
         .join("\n");
@@ -1188,7 +1188,9 @@ export function buildVideoHandoff(
               .join("; ")}. Speak only the exact dialogue below; never read direction text aloud.`
           : `Voice: ${((s) => (s ? `${sentence(s)} ` : ""))(clip(voices[0].text, voices[0].fresh ? Math.max(B.voice, 160) : B.voice))}Speak only the exact dialogue below; never read direction text aloud.`),
       lang === "Old English" && OLD_ENGLISH_HINT,
-      `Stay alive between and during the lines (breathing, blinks, small head and shoulder accents). Each expression change is acted, not morphed: it rides on a physical action (a blink, a breath, a small head turn or a hand passing the face) and steps through in-between poses; the face never melts, warps or blends from one expression into the next. Eyes react first, then head, then body.`,
+      arcLine(en.arc),
+      ACTING_EN,
+      `Stay alive between and during the lines (breathing, blinks, small head and shoulder accents). Each expression change is acted, not morphed: it rides on a physical action (a blink, a breath, a small head turn or a hand passing the face) and steps through in-between poses.`,
     ]
       .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
       .join("\n");
@@ -1197,12 +1199,13 @@ export function buildVideoHandoff(
   const directorBlock = director
     ? `DIRECTOR'S DIRECTION (the director's own words: follow exactly; where it differs from the general camera, framing or background lines above, this wins):\n${director}`
     : "";
-  const constraints = constraintsFor(rig, data.video.weight);
+  const constraints = constraintsFor(rig, data.video.weight, data.video.cadence);
   const assemble = (B: Budget) => [headerWith(B), beatsWith(B).join("\n\n"), directorBlock, constraints].filter(Boolean).join("\n\n");
   // a group scene needs room for the cast, the voices and every character's acting per beat
   // the studio block grew (weight, camera, sound): its extra length is not taken from the beats
   const lengthTarget =
-    (enBeats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) + (multi ? VIDEO_PROMPT_EXTRA_PER_CHARACTER * (data.cast.length - 1) : 0) + constraintsExtra(constraints) + keepPainted(styleText).length;
+    (enBeats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) + (multi ? VIDEO_PROMPT_EXTRA_PER_CHARACTER * (data.cast.length - 1) : 0) + constraintsExtra(constraints) + keepPainted(styleText).length +
+    ACTING_EN.length + arcLine(en.arc).length;
   let prompt = "";
   for (const B of BUDGETS) {
     prompt = assemble(B);
@@ -1226,7 +1229,7 @@ export function buildVideoHandoff(
     overrides,
     directorBlock,
     lengthTarget,
-    negativePrompt: negativePrompt(data.video.weight),
+    negativePrompt: negativePrompt(data.video.weight, data.video.cadence),
   };
 }
 
@@ -1302,8 +1305,26 @@ export function endState(state: string): string {
 const PAINTED = /painterly|watercolou?r|gouache|brush|\bink\b|cel[- ]?shad|outline|line art|\blines?\b|hand[- ]painted|회화|수채|과슈|붓|선화|셀/i;
 export const keepPainted = (style: string) =>
   PAINTED.test(style)
-    ? " Every frame keeps the hand-painted surface — visible brushwork, the drawn outlines and the flat cel-shading steps — on the 3D forms; it is never a glossy CG render with smooth plastic skin, subsurface glow or realistic depth of field."
+    ? " Every frame keeps the hand-painted surface — visible brushwork, the drawn outlines and the flat cel-shading steps — on the 3D forms, like a painted feature film rather than a glossy CG render with plastic skin."
     : "";
+/**
+ * The acting doctrine from the team's Seedance 2.5 tests (SH04_3 SHOT 1, Nov 2026): emotion is the protagonist,
+ * every change has a trigger, eyes lead the head and the body, the peak is a moving hold, the face never goes
+ * dead. Written once per prompt; the beats do not repeat it.
+ */
+export const ACTING_EN =
+  "FACE AND BODY: feature-film character acting, broad enough to read at a glance and grounded. Natural blinking; forehead and brows always active and matched to each state, no mask-face, no dead eyes. Eyes stay a natural, moderate size. ORDER RULE: in every change the eyes move first, then the head, then the body, one after another. Eyelines are held steady, never darting. At the emotional peak, a moving hold: the pose stops and only the breath, shoulders, eyes and tears move.";
+
+/** The scene's emotional arc as the prompt's main subject (empty when the English arc is missing or stale). */
+export const arcLine = (arc: string | null) =>
+  arc ? `THE EMOTIONAL ARC: THIS IS THE WHOLE POINT. A live, changing performance, and every change has a trigger: ${noEndDot(arc)}. Play the transitions.` : "";
+
+/** The "시작 / Start" part of a hook-up state ("시작: … / 끝: …"), or "" when it has no such part. */
+export function startState(state: string): string {
+  const m = state.match(/(?:시작|Start|start)\s*[:：]\s*([\s\S]*?)(?:\s*[/|]\s*)?(?:(?:끝|End|end)\s*[:：]|$)/);
+  return m ? clean(m[1]) : "";
+}
+
 export function studioStyle(style: string): string {
   return style.replace(/(^|[^\d.])2D(?!\w)/g, "$13D & 2.5D").replace(/(^|[^\w.])2[- ]?D animation/gi, "$13D & 2.5D animation");
 }
@@ -1448,7 +1469,7 @@ export function buildSketchHandoffs(data: ProjectData): ExpressionHandoff[] {
       endState(t.state) &&
         `The pose to draw (where this moment ends — hands, body position and props exactly like this, e.g. an open hand stays open, a fist stays a fist, kneeling stays kneeling): ${sentence(endState(t.state))}`,
       t.camera && `Camera: ${sentence(t.camera)} Draw one framing only (the framing at the key moment): where the camera stands and how big the figures are.`,
-      `Keep the composition clear: main figures large enough to read, background as a few simple lines (horizon, walls, door, big props). Again: one single frame, not several panels.`,
+      `Keep the composition clear: main figures large enough to read, set off-centre by thirds with open space on the other side (a close-up may sit near the middle); faces turned three-quarters or in profile, looking at something in the scene rather than at the viewer; background as a few simple lines (horizon, walls, door, big props). Again: one single frame, not several panels.`,
     ]
       .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
       .join("\n");
@@ -1572,12 +1593,14 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         cut(camera, B.camera) && `Camera: ${sentence(rig ? cut(camera, B.camera) : heldSteady(cut(camera, B.camera)))}`,
         cut(fixed ? p?.state ?? "" : e?.continuity ?? "", B.state) && `Continuity: ${sentence(cut(fixed ? p?.state ?? "" : e?.continuity ?? "", B.state))}`,
         principleLine(e, B.principles),
+        last && endState(fixed ? p?.state ?? "" : e?.continuity ?? "") && /(?:끝|End|end)\s*[:：]/.test(fixed ? p?.state ?? "" : e?.continuity ?? "") &&
+          `Result pose: ${sentence(clip(endState(fixed ? p?.state ?? "" : e?.continuity ?? ""), 200) || endState(fixed ? p?.state ?? "" : e?.continuity ?? "").slice(0, 200))}`,
         !last && B.transition && cut(transition, B.transition) && `Into the next panel: ${sentence(cut(transition, B.transition))}`,
         l?.line.trim()
-          ? `${e ? castName(data, beatActor(data, e).id) : "The speaker"} ${isVoiceOver(l) ? "is heard in voice-over (the speaker is not seen saying it, no lip-sync)" : "says exactly"} (${lang}): "${l.line}"${
+          ? `${e ? castName(data, beatActor(data, e).id) : "The speaker"} ${isVoiceOver(l) ? "is heard in voice-over (heard over the picture, lips closed)" : "says exactly"} (${lang}): "${l.line}"${
               B.delivery && cut(delivery, B.delivery) ? ` — ${cut(delivery, B.delivery)}` : ""
             }`
-          : "No dialogue in this beat.",
+          : "Silent beat.",
       ]
         .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
         .join("\n");
@@ -1591,7 +1614,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
       ...storyboardCastEn(data, en, B.features, B.features * 50),
       (en.style || data.style.trim()) && `Art style: ${sentence(clip(studioStyle(en.style ?? data.style), 200) || clean(studioStyle(en.style ?? data.style)).slice(0, 200))} Stay in this 3D & 2.5D animation style; never photorealistic.${keepPainted(en.style ?? data.style)}`,
       conti
-        ? `LOOK (most important): every frame is a finished, fully coloured picture with the colour grading, light, atmosphere and brushwork of the scene picture and the art style below. The storyboard sketches are black-and-white layout guides only; nothing in the video looks like a sketch. The character design sheets give identity only (face, hair shape, body, costume design) — where this scene changes how a character looks (e.g. hair bleached by the sun, dust, a washed-out palette), follow the scene's description and the scene picture, not the sheet's colours. The background references give the world; nobody's proportions change and no character is duplicated.`
+        ? `LOOK (most important): every frame is a finished, fully coloured picture with the colour grading, light, atmosphere and brushwork of the scene picture and the art style below. The storyboard sketches are black-and-white layout guides only; every frame of the video is fully painted. The character design sheets give identity only (face, hair shape, body, costume design) — where this scene changes how a character looks (e.g. hair bleached by the sun, dust, a washed-out palette), follow the scene's description and the scene picture over the sheet's colours. The background references give the world; everyone keeps their proportions and appears once.`
         : `Match the reference images exactly: the named characters' faces, hair, colors and costumes, the world, the lighting and the drawing style; nobody's proportions change and no character is duplicated.`,
       continuityRules(data, en) &&
         `Continuity rules (keep them in every shot): ${clip(continuityRules(data, en), B.rules) || continuityRules(data, en).slice(0, B.rules)}${multiShot ? " Across each HARD CUT the screen sides, eyelines, costumes, props and light carry on." : ""}`,
@@ -1608,11 +1631,11 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
             "Reference images (upload in this order):",
             ...refs.map((r, i) =>
               r.role === "identity" && r.characterId
-                ? `${i + 1}. character design sheet of ${castName(data, r.characterId)} — face, hair, body and costume design only (not a pose, composition or background)`
+                ? `${i + 1}. character design sheet of ${castName(data, r.characterId)} — face, hair, body and costume design only`
                 : r.role === "identity"
                 ? `${i + 1}. scene reference drawing — named characters, style and world; identity only`
                 : r.role === "world"
-                  ? `${i + 1}. ${r.assetId === data.baseAssetId ? "scene picture — the world, its light and the finished art style" : "background / asset reference — the place, props and architecture"}; not the composition`
+                  ? `${i + 1}. ${r.assetId === data.baseAssetId ? "scene picture — the world, its light and the finished art style" : "background / asset reference — the place, props and architecture"} only`
                 : r.sketch && r.parts
                   ? `${i + 1}. panels ${r.parts.map((p) => panelNo(p.expressionId)).join(", ")} side by side, left to right — rough storyboard sketches`
                 : r.sketch
@@ -1624,21 +1647,27 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
           ].join("\n")
         : `Use the start frame as the exact first panel.${endFrame ? " The shot ends exactly on the end frame." : ""}`,
       conti &&
-        "The storyboard sketches are rough black-and-white line drawings made for planning: take from them only each panel's composition, where everyone stands, their poses and the camera framing. Render every frame fully in the art style of the design sheets and the scene picture — colour, light and finished lines — never as line art.",
+        "The storyboard sketches are rough black-and-white line drawings made for planning: take from them only each panel's composition, where everyone stands, their poses and the camera framing. Render every frame fully in the art style of the design sheets and the scene picture — colour, light and finished lines — fully painted, as finished animation.",
       refs.some((r) => r.parts) &&
         "Panels shown side by side in one reference are separate moments: each plays in full frame in turn; never show a split screen, grid or side-by-side frames.",
       speaking &&
         (voOnly
-          ? `Dialogue: every line is voice-over — heard over the picture, never spoken on screen; nobody lip-syncs it (a beat that says someone silently mouths words still shows that).`
+          ? `Dialogue: every line is voice-over — heard over the picture only; nobody lip-syncs it (a beat that says someone silently mouths words still shows that).`
           : `Dialogue: only the character named for a line speaks it, with their own voice and lip movement; everyone else keeps their mouth closed unless a beat says they silently mouth words.${
               anyVo ? " Lines marked voice-over are heard over the picture; nobody lip-syncs them." : ""
             }`),
       speaking && data.extras.trim() && "Crowd sound only as quiet natural ambience, never words.",
       voices.length &&
         `Voices: ${voices.map((v) => `${castName(data, v.id)} — ${noEndDot(clip(v.text, 160) || clean(v.text).slice(0, 80))}`).join("; ")}. Speak only the exact dialogue below; never read direction text aloud.`,
-      `Everyone stays alive between the panels (breathing, blinks, small weight shifts); every change ${multiShot ? "inside a shot " : ""}is acted through a physical action and in-between poses, never morphed. Each action reads in order: look, prepare, act, contact, settle; the result pose holds long enough to read.${
+      arcLine(en.arc),
+      ACTING_EN,
+      `Everyone stays alive between the panels (breathing, blinks, small weight shifts); every change ${multiShot ? "inside a shot " : ""}is acted through a physical action and in-between poses. Each action reads in order: look, prepare, act, contact, settle; the result pose holds long enough to read.${
         multiShot ? " Across a cut, the characters, costumes, world and light stay the same." : ""
       }`,
+      // the team's composition rule; with sketches the sketch decides the layout, the faces still turn
+      conti
+        ? "Faces turn three-quarters or in profile; nobody looks into the lens."
+        : "Compositions sit off-centre by thirds (a close-up may sit near the middle); faces turn three-quarters or in profile; nobody looks into the lens.",
     ]
       .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
       .join("\n");
@@ -1646,7 +1675,11 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
   const directorBlock = director
     ? `DIRECTOR'S DIRECTION (the director's own words: follow exactly; where it differs from the general camera, framing or background lines above, this wins):\n${director}`
     : "";
-  const constraints = constraintsFor(rig, data.video.weight);
+  // the very first frame's state, so the action runs from 0 seconds (the first panel's "시작")
+  const firstExp = data.expressions.find((x) => x.id === data.acting.segments[0]?.expressionId);
+  const zero = firstExp ? startState(panelTexts(data, firstExp, en).state) : "";
+  const frameZero = zero ? `Frame zero: ${sentence(clip(zero, 220) || zero.slice(0, 220))}` : "";
+  const constraints = constraintsFor(rig, data.video.weight, data.video.cadence);
   // room for the named characters beyond four (their names, features and voices)
   // each panel past six carries its own action, camera and line
   const lengthTarget =
@@ -1654,10 +1687,12 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
     Math.max(0, data.cast.length - 4) * 200 +
     Math.max(0, data.acting.segments.length - 6) * 250 +
     constraintsExtra(constraints) +
-    keepPainted(en.style ?? data.style).length;
+    keepPainted(en.style ?? data.style).length +
+    // the acting doctrine, the arc, frame zero and the composition rule are written once and never cut
+    ACTING_EN.length + arcLine(en.arc).length + frameZero.length + 150;
   let prompt = "";
   for (const B of STORY_BUDGETS) {
-    prompt = [headerWith(B), beatsWith(B).join("\n\n"), directorBlock, constraints].filter(Boolean).join("\n\n");
+    prompt = [headerWith(B), frameZero, beatsWith(B).join("\n\n"), directorBlock, constraints].filter(Boolean).join("\n\n");
     if (prompt.length <= lengthTarget) break;
   }
   return {
@@ -1676,7 +1711,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
     overrides,
     directorBlock,
     lengthTarget,
-    negativePrompt: negativePrompt(data.video.weight),
+    negativePrompt: negativePrompt(data.video.weight, data.video.cadence),
   };
 }
 
