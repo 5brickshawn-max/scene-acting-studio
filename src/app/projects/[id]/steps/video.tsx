@@ -420,14 +420,6 @@ export function VideoStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }
               움직임)로 시간을 줍니다. ‘스톱모션 박자’는 계단식 박자와 선 떨림(boil)이 필요한 장면에만 쓰세요.
             </p>
           </div>
-          <div className="notice notice-info text-[14px] space-y-1">
-            <p className="font-semibold">시댄스 2.5 팀 레시피 (SH04_3 시험, 2026-11)</p>
-            <p>
-              레퍼런스 방식으로만, 시험은 <strong>480p 일반 생성</strong>(드래프트는 같은 그림이 두 장씩 반복돼 끊겨 보임). 한 시험에 한 가지만 바꾸세요. 참고 그림이 표정과 밝기를
-              끌고 가므로 <strong>캐릭터 시트는 무표정</strong>으로, 배경은 <strong>원하는 영상 밝기에 맞춰 미리 어둡게/밝게</strong> 고친 뒤 올리세요(글로 억누르는 것보다 확실함).
-              추가 지시에 ‘never·no’ 같은 금지 문장을 늘리면 연기가 작아집니다.
-            </p>
-          </div>
           {/* the director's field was removed; a text left from before still goes into the prompt, so it stays visible and removable */}
           {data.video.extraDirection.trim() && (
             <div className="notice notice-warn space-y-2">
