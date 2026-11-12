@@ -48,9 +48,13 @@ describe("weight and positive wording (studio block)", async () => {
   const { constraintsFor, negativePrompt } = await import("@/lib/domain/constraints");
   it("weight levels change the block; the words to avoid go to the negative prompt, not the body", () => {
     expect(constraintsFor(null, "natural")).toContain("[WEIGHT] Bodies and objects have real weight");
-    expect(constraintsFor(null, "heavy")).toContain("about one and a half times as strong");
-    expect(constraintsFor(null, "heavy")).toContain("The slowness lives only in the holds between movements.");
-    expect(constraintsFor(null, "extra")).toContain("As if gravity were twice as strong");
+    expect(constraintsFor(null, "heavy")).toContain("Every ground contact is a hard hit");
+    expect(constraintsFor(null, "extra")).toContain("as if gravity were about one and a half times as strong");
+    // weight never asks for faster movement: real-time speed only
+    for (const w of ["natural", "heavy", "extra"] as const) {
+      expect(constraintsFor(null, w)).toContain("real-time speed");
+      expect(constraintsFor(null, w)).not.toMatch(/two-thirds|half of its real time|finishes in/);
+    }
     // no words that call up space ("on Earth", "moon")
     for (const w of ["natural", "heavy", "extra"] as const) expect(constraintsFor(null, w)).not.toMatch(/on Earth|moon/i);
     expect(constraintsFor(null, "heavy", "stepped")).toContain("Only the timing is stop-motion");

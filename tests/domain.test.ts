@@ -500,7 +500,7 @@ describe("studio constraints and automatic reconciliation", () => {
     // positive wording only: the words to avoid live in the negative prompt
     // the team's Seedance tests: full 24fps cadence, 1.5× gravity in one line, the camera as one line of feel
     expect(STUDIO_CONSTRAINTS).toContain("[MOTION] A stylized 2.5D & 3D animated feature film. Full smooth feature-animation cadence");
-    expect(STUDIO_CONSTRAINTS).toContain("[WEIGHT AND SPEED] As if gravity were about one and a half times as strong");
+    expect(STUDIO_CONSTRAINTS).toContain("[WEIGHT & GRAVITY — HEAVY] Everything is dense and heavy.");
     expect(STUDIO_CONSTRAINTS).toContain("[CAMERA] Handheld from the hand, intimate and alive");
     expect(STUDIO_CONSTRAINTS).not.toMatch(/\bNO |never gliding|streaming/);
   });
