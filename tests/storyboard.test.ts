@@ -168,7 +168,7 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     expect(p).toContain("세라 — 첫째 특징, 둘째 특징;");
     expect(p).not.toContain("셋째 특징");
     const h = buildVideoHandoff(d);
-    expect(h.lengthTarget).toBe(3500 + 3 * 200 + (h.constraints.length - 700) + 150 + keepPainted(d.style).length + ACTING_EN.length + 150);
+    expect(h.lengthTarget).toBe(3500 + 3 * 200 + (h.constraints.length - 700) + 150 + keepPainted(d.style).length + ACTING_EN.length);
     expect(h.prompt.length).toBeLessThanOrEqual(h.lengthTarget);
   });
 
