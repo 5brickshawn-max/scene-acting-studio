@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createProjectData, MAX_DESIGN_REFS } from "@/lib/domain/project";
-import { buildExpressionHandoffs, buildSketchHandoffs, MAX_IMAGE_REFERENCES } from "@/lib/domain/handoff";
+import { buildExpressionHandoffs, buildSketchHandoffs, buildVideoHandoff, MAX_IMAGE_REFERENCES } from "@/lib/domain/handoff";
 
 const board = () => {
   const d = createProjectData("러프", 2, "storyboard");
@@ -40,15 +40,17 @@ describe("러프 콘티 (rough sketches)", () => {
 });
 
 describe("extra reference pictures", () => {
-  it("takes up to five, and image requests stay within the reference cap", () => {
-    expect(MAX_DESIGN_REFS).toBe(5);
+  it("takes up to eight, and image requests stay within the reference cap", () => {
+    expect(MAX_DESIGN_REFS).toBe(8);
     const d = board();
     d.cast = Array.from({ length: 8 }, (_, i) => ({ ...d.cast[0], id: `c${i}`, name: `인물${i}`, refAssetId: `mat-${i}` }));
-    d.designRefAssetIds = ["x1", "x2", "x3", "x4", "x5"];
+    d.designRefAssetIds = ["x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8"];
     d.expressions[1].sketchAssetId = "sketch-2";
     for (const h of buildExpressionHandoffs(d)) expect(h.references.length).toBeLessThanOrEqual(MAX_IMAGE_REFERENCES);
     const few = board();
-    few.designRefAssetIds = ["x1", "x2", "x3", "x4", "x5"];
-    expect(buildExpressionHandoffs(few)[0].references.filter((r) => r.why === "추가 참고 그림")).toHaveLength(5);
+    few.designRefAssetIds = ["x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8"];
+    expect(buildExpressionHandoffs(few)[0].references.filter((r) => r.why === "추가 참고 그림")).toHaveLength(8);
+    // the video keeps within its own cap (seven pictures): extras past it are left out, not sent
+    expect(buildVideoHandoff(few, "references").references.length).toBeLessThanOrEqual(7);
   });
 });
