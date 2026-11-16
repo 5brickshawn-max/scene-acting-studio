@@ -45,6 +45,7 @@ import {
   type ProjectData,
   effectiveText,
   dimensionEn,
+  panelTitle,
 } from "./project";
 
 const FACING_EN: Record<Facing, string> = {
@@ -1290,7 +1291,7 @@ function storyboardCastEn(data: ProjectData, en: ReturnType<typeof freshEnglish>
 function panelTexts(data: ProjectData, e: Expression, en: ReturnType<typeof freshEnglish>) {
   const b = en.beats.get(e.id);
   return {
-    title: b?.emotion || e.emotion,
+    title: panelTitle(b?.emotion || e.emotion),
     action: b?.face || clean(e.action),
     camera: b?.body || clean(e.camera),
     // 연결 상태: screen positions, facing, movement, costume/prop state, light (English where fresh)

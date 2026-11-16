@@ -338,3 +338,18 @@ describe("rough conti redraw loop", () => {
     expect(h.prompt).toContain("its end pose");
   });
 });
+
+describe("panel titles", () => {
+  it("drop time ranges and stay short in the prompts", async () => {
+    const { panelTitle } = await import("@/lib/domain/project");
+    const { buildVideoHandoff } = await import("@/lib/domain/handoff");
+    expect(panelTitle("0~1.5초 · 밤거리 와이드 고정: 코발트블루 별밤과 노란 창문 불빛 건물, 젖은 돌바닥. 화면 왼쪽 가운데 공중의 보라 이모지가")).toBe("밤거리 와이드 고정");
+    expect(panelTitle("4.5~6초 · 같은 구도 홀드")).toBe("같은 구도 홀드");
+    expect(panelTitle("군중이 갈라지며 칼리엘라 등장")).toBe("군중이 갈라지며 칼리엘라 등장");
+    const d = setExpressionCount(createProjectData("제목", 1, "storyboard"), 2);
+    d.expressions = d.expressions.map((e, i) => ({ ...e, emotion: `${i * 2}~${i * 2 + 2}초 · 장면 ${i + 1}`, action: `동작 ${i + 1}` }));
+    const p = buildVideoHandoff(d, "references").prompt;
+    expect(p).not.toMatch(/panel \d+ — \d+~\d+초/);
+    expect(p).toContain("— 장면 1");
+  });
+});

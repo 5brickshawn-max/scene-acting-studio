@@ -38,11 +38,28 @@ export function EditorProvider(props: {
   const { doc, jobs } = props;
 
   const addAsset = useCallback((a: AssetView) => setAssets((m) => new Map(m).set(a.id, a)), []);
+  // whole-project jobs (English, checks): one at a time — a second request while one runs only adds load
+  // (seven cards' "수정 완료" once started seven English write-ups at the same second)
+  const inFlight = useRef(new Map<string, Promise<string | null>>());
   const askAi = useCallback<EditorCtx["askAi"]>(
     async (kind, step, opts) => {
-      const ok = await doc.flush();
-      if (!ok) return null;
-      return jobs.request(kind, step, opts);
+      const single = kind === "write_english" || kind === "check_sheet" || kind === "check_acting";
+      if (single) {
+        const running = jobs.jobs.find((j) => j.kind === kind && (j.status === "queued" || j.status === "running"));
+        if (running) return running.id;
+        const pending = inFlight.current.get(kind);
+        if (pending) return pending;
+      }
+      const run = (async () => {
+        const ok = await doc.flush();
+        if (!ok) return null;
+        return jobs.request(kind, step, opts);
+      })();
+      if (single) {
+        inFlight.current.set(kind, run);
+        void run.finally(() => inFlight.current.delete(kind));
+      }
+      return run;
     },
     [doc, jobs],
   );
