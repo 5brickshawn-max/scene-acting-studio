@@ -1124,3 +1124,16 @@ export function isChildCharacter(text: string): boolean {
 export const RISKY_WITH_CHILD =
   /\bcrop(?:ped)? top\b|\bmidriff\b|\bhips?\b|\bbutt\b|\bthighs?\b|\bcleavage\b|\bbare\b|\bunderwear\b|\bbikini\b|\blatex\b|\bspread(?:ing|s)? (?:her|his|their) (?:knees|legs)\b|\bsquat(?:s|ting)?\b|\bsexy\b|\bseductive\b|엉덩이|크롭|배꼽|허벅지/gi;
 
+
+/**
+ * A panel title as a short label: no time range ("0~2초 ·", "1.5–3s:") — the timeline decides time — and no
+ * whole description (a long title is cut at its first clause).
+ */
+export function panelTitle(t: string, max = 40): string {
+  let c = t.replace(/\s+/g, " ").trim();
+  c = c.replace(/^\(?\s*\d+(?:\.\d+)?\s*(?:초|s|sec)?\s*[~～\-–]\s*\d+(?:\.\d+)?\s*(?:초|s|sec|seconds?)\s*\)?\s*[·:.,\-–—|]?\s*/i, "");
+  if (c.length <= max) return c;
+  const cut = c.slice(0, max + 1).search(/[:：.。,，;；](?=\s|$)|\s[·—–-]\s/);
+  if (cut >= 8) return c.slice(0, cut).trim();
+  return `${c.slice(0, max).replace(/\s+\S*$/, "")}…`;
+}
