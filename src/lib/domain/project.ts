@@ -495,6 +495,15 @@ export const MAX_EXPRESSIONS = 8;
 /** Storyboard scenes keep fewer panels (each one is a whole picture with its own continuity). */
 export const MAX_PANELS_STORYBOARD = 8;
 export const maxPanelsFor = (mode: SceneMode) => (mode === "storyboard" ? MAX_PANELS_STORYBOARD : MAX_EXPRESSIONS);
+/**
+ * Storyboard: a cut needs time for its one main action — at least 4 seconds (5 recommended). A video model
+ * given 1.2–2 s cuts with several actions each skipped or blurred them (몰리송 tests, Nov 2026).
+ */
+export const MIN_SECONDS_PER_CUT = 4;
+export const RECOMMENDED_SECONDS_PER_CUT = 5;
+/** How many storyboard cuts this length holds at 4 s or more each (never fewer than two). */
+export const maxCutsFor = (duration: number) =>
+  Math.min(MAX_PANELS_STORYBOARD, Math.max(MIN_EXPRESSIONS, Math.floor((duration || 0) / MIN_SECONDS_PER_CUT)));
 export const MAX_VIDEO_SECONDS = 60;
 
 /** Contiguous segments for `ids` (in order) sized by `weights`, snapped to 0.1s, ending exactly at `duration`. */
@@ -828,6 +837,10 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
     if (!isStoryboard(data) && data.cast.length > 1 && new Set(pos).size !== pos.length) warn("두 인물의 화면 위치가 같습니다. 겹쳐 서는 연출이 아니라면 위치를 나누세요.");
   }
 
+  if (step === 1 && isStoryboard(data) && data.expressions.length <= maxPanelsFor(data.mode) && data.expressions.length > maxCutsFor(data.acting.duration))
+    warn(
+      `컷 ${data.expressions.length}개는 ${data.acting.duration}초에 너무 많습니다(컷당 ${Math.round((data.acting.duration / data.expressions.length) * 10) / 10}초). 컷당 ${MIN_SECONDS_PER_CUT}초 이상(권장 ${RECOMMENDED_SECONDS_PER_CUT}초)이 되게 ${maxCutsFor(data.acting.duration)}컷 이하로 줄이거나 영상을 늘리세요 — 짧은 컷은 영상 모델이 동작을 건너뛰거나 뭉갭니다.`,
+    );
   if (step === 1 && data.expressions.length > maxPanelsFor(data.mode))
     block(`${isStoryboard(data) ? "컷" : "표정"}이 ${data.expressions.length}개입니다. ${isStoryboard(data) ? "스토리보드" : "한"} 장면은 최대 ${maxPanelsFor(data.mode)}개입니다. 2단계 ①에서 ${maxPanelsFor(data.mode)}개 이하로 줄이세요(뒤쪽부터 빠지니, 줄인 뒤 ‘AI 콘티 설계’를 권장).`);
   if (step === 1 && isStoryboard(data)) {

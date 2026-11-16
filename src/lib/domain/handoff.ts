@@ -1319,7 +1319,7 @@ export const keepPainted = (style: string, dim: Dimension = "3d") =>
  * dead. Written once per prompt; the beats do not repeat it.
  */
 export const ACTING_EN =
-  "FACE AND BODY: feature-film character acting, broad enough to read at a glance and grounded. Natural blinking; forehead and brows always active and matched to each state, no mask-face, no dead eyes. Eyes stay a natural, moderate size. ORDER RULE: in every change the eyes move first, then the head, then the body, one after another. Eyelines are held steady, never darting. At the emotional peak, a moving hold: the pose stops and only the breath, shoulders, eyes and tears move. Everyone in frame is live: whoever is not speaking keeps reacting with small head turns, breathing and small hand actions. A gesture or look written for a word lands exactly on that word; how loud a line is comes from its delivery, and an exclamation mark is punctuation, not volume.";
+  "FACE AND BODY: feature-film acting, broad enough to read at a glance. Natural blinking; brows and forehead always active, no mask-face, no dead eyes; eyes a natural size. ORDER RULE: eyes move first, then the head, then the body. Steady eyelines, never darting. The emotional peak is a moving hold: the pose stops, only breath, shoulders, eyes and tears move. Everyone in frame stays live and reacts. A gesture written for a word lands on that word; loudness comes from the delivery, not from an exclamation mark.";
 
 /**
  * The team's composition rule (storyboard): a face is never frontal in a horizontally symmetrical frame, and
@@ -1472,70 +1472,72 @@ function buildStoryboardHandoffs(data: ProjectData, fixes: Record<string, string
  * drawn from the panel's moment and camera. The scene picture only tells who is who and where things stand.
  * The team can redo any panel or replace it with their own drawing; the finished panel art then follows it.
  */
+/**
+ * 러프 콘티 prompts, kept short (about a third of the earlier length): image models drew the wrong moment and
+ * mixed sets when a sketch prompt carried every rule, every character and six or seven pictures. Each sketch
+ * now gets only the characters in its cut, their sheets, the sketch right before it in its shot (or, for a
+ * shot's first cut, the cut before), the scene picture only at the start of the first shot, and one pose.
+ */
 export function buildSketchHandoffs(data: ProjectData, fixes: Record<string, string> = {}): ExpressionHandoff[] {
   const aspect = data.video.aspectRatio;
   const en = freshEnglish(data);
-  // who is who: the telling shape features (a non-human body shape matters most for a line sketch)
-  const who = data.cast
-    .filter((c) => c.name.trim())
-    .map((c) => {
-      const look = (en.cast.get(c.id)?.look ?? shortLocks(c.locks, 3)).slice(0, 3).join(", ");
-      return look ? `${castName(data, c.id)} (${clip(look, 200) || look.slice(0, 200)})` : castName(data, c.id);
-    })
-    .join("; ");
-  // what each one wears in this scene, as shapes (sleeves, hems, hats): a sketch still shows a costume's outline
-  const costumes = data.cast
-    .map((c) => {
-      const o = en.cast.get(c.id)?.outfit ?? clean(c.outfit);
-      const t = clip(o, 200) || o.slice(0, 200);
-      return t ? `${castName(data, c.id)}: ${noEndDot(t)}` : "";
-    })
-    .filter(Boolean)
-    .join(". ");
   const shots = shotsOf(data);
   const order = shots.flat();
+  const firstShot = shots[0] ?? [];
   return data.expressions.map((e, i) => {
     const t = panelTexts(data, e, en);
-    const references: ReferenceSlot[] = data.baseAssetId
-      ? [{ role: "image reference 1", assetId: data.baseAssetId, why: "장면 기준 그림 — 누가 누구인지·배경 배치만 (색·그림체는 따르지 않음)" }]
-      : [];
+    const no = (id: string) => data.expressions.findIndex((x) => x.id === id) + 1;
+    // the characters this cut names (by name or its first word); none named → everyone
+    const text = `${e.action} ${e.continuity} ${e.camera} ${t.action} ${t.state}`;
+    const named = data.cast.filter((c) => {
+      const n = c.name.trim();
+      return n && (text.includes(n) || (n.split(/\s+/)[0].length >= 2 && text.includes(n.split(/\s+/)[0])));
+    });
+    const cast = named.length ? named : data.cast;
     // the nearest earlier sketch: in this shot (same place and set), else the shot before (same characters)
     const shot = shots.find((sh) => sh.includes(e.id)) ?? [e.id];
     const earlier = order.slice(0, Math.max(0, order.indexOf(e.id))).reverse();
     const sketchOf = (id: string) => data.expressions.find((x) => x.id === id)?.sketchAssetId;
     const prevId = earlier.find((id) => shot.includes(id) && sketchOf(id)) ?? earlier.find((id) => sketchOf(id));
     const prevSameShot = Boolean(prevId && shot.includes(prevId));
-    // the character sheets: body shapes and costume outlines (a heart-shaped emoji, a sock body) the text cannot carry
-    const sheets = data.cast.filter((c) => c.refAssetId);
-    for (const c of sheets)
-      references.push({ role: `image reference ${references.length + 1}`, assetId: c.refAssetId!, why: `${castLabel(data, c.id)} 캐릭터 시트 — 형태·의상 실루엣만` });
-    const sheetLines = sheets.map((c, k) => {
-      const no = (data.baseAssetId ? 2 : 1) + k;
-      return `Image reference ${no} is the design sheet of ${castName(data, c.id)}: copy only the outline — body shape, head and hair shape, costume silhouette (sleeves, hems, hats) and how many hands or feet they have. Not its colours or rendering.`;
-    });
-    const prevNo = prevId ? references.length + 1 : 0;
-    if (prevId) references.push({ role: `image reference ${prevNo}`, assetId: sketchOf(prevId)!, why: `앞 컷(${data.expressions.findIndex((x) => x.id === prevId) + 1}번) 러프 콘티 — 연속성` });
-    const prevLine =
-      prevId &&
-      (prevSameShot
-        ? `Image reference ${prevNo} is the sketch of panel ${data.expressions.findIndex((x) => x.id === prevId) + 1}, earlier in this SAME shot: keep the same place and set, the same characters with the same body shapes, costume outlines and size order, drawn in the same rough line style; change only what this panel's description and camera change.`
-        : `Image reference ${prevNo} is the sketch of panel ${data.expressions.findIndex((x) => x.id === prevId) + 1} from the shot before (a hard cut comes between): keep the same characters with the same body shapes, costume outlines and size order, drawn in the same rough line style; the framing is new, and the place is new when the description says so.`);
+
+    const references: ReferenceSlot[] = [];
+    const lines: string[] = [];
+    const add = (assetId: string, why: string, line: (n: number) => string) => {
+      references.push({ role: `image reference ${references.length + 1}`, assetId, why });
+      lines.push(line(references.length));
+    };
+    // the scene picture shows the first place: only the first shot's opening cut uses it for the set
+    if (data.baseAssetId && firstShot.includes(e.id) && !prevSameShot)
+      add(data.baseAssetId, "장면 기준 그림 — 누가 누구인지·배경 배치만", (n) => `Image ${n}: the scene picture — who is who and the layout of this place. Not its colours or detail.`);
+    for (const c of cast.filter((x) => x.refAssetId))
+      add(c.refAssetId!, `${castLabel(data, c.id)} 캐릭터 시트 — 형태·의상 실루엣만`, (n) => `Image ${n}: ${castName(data, c.id)}'s design sheet — copy only the outline: body shape, head and hair, costume silhouette, hands and feet.`);
+    if (prevId)
+      add(sketchOf(prevId)!, `앞 컷(${no(prevId)}번) 러프 콘티 — 연속성`, (n) =>
+        prevSameShot
+          ? `Image ${n}: the sketch of cut ${no(prevId)}, just before in this same shot — same place, same characters, costumes, props and size order; change only what this cut changes.`
+          : `Image ${n}: the sketch of cut ${no(prevId)} from the shot before — same characters, costumes and size order; new framing, and a new place if the text says so.`,
+      );
+
+    const who = cast
+      .map((c) => {
+        const look = (en.cast.get(c.id)?.look ?? shortLocks(c.locks, 2)).slice(0, 2).join(", ");
+        const wear = en.cast.get(c.id)?.outfit ?? clean(c.outfit);
+        const w = clip(wear, 140) || wear.slice(0, 140);
+        return `${castName(data, c.id)}${look ? ` (${clip(look, 120) || look.slice(0, 120)})` : ""}${w ? `, wearing ${noEndDot(w)}` : ""}`;
+      })
+      .join("; ");
+    const pose = endState(t.state);
     const fix = fixes[e.id]?.trim();
     const prompt = [
-      `A rough sketch of one ${aspect} film frame: ONE single image of ONE moment that fills the whole frame — never a storyboard sheet, a grid, a contact sheet, a comic page or a sequence of small frames; exactly one camera view. Quick loose black pencil lines on a plain white background. Simple lines only — no colour, no shading, no grey fills, no texture, no rendering; simple gesture figures with readable poses, faces only as simple shapes and eye lines, like a director's thumbnail. No borders, no text, no arrows, no numbers.`,
-      `The description below may list several steps of an action (look → prepare → act → contact → settle) and a camera move from a start to an end framing: draw only the single moment the action arrives at (its end pose), in one framing — do not draw each step or each framing as a separate picture, and do not draw anything that happens after the description ends.`,
-      data.baseAssetId &&
-        "Image reference 1 is the finished scene picture: use it ONLY to know who is who (silhouettes, hair shapes, sizes) and, when this panel is in the same place, how the set is laid out. When the description or continuity puts this panel somewhere else or at another time (another street, night), draw THAT place instead — never the set of the picture. Do NOT copy its colours, shading, detail or art style — this must stay a rough line sketch.",
-      ...sheetLines,
-      prevLine,
-      who && `Characters who may appear: ${who}. Draw only those this moment needs, each with the same body shape and size order in every panel.`,
-      costumes && `What they wear in this scene (draw the outline; the continuity below says what changes, e.g. a hat put on): ${costumes}.`,
-      fix && `Corrections from the review of the previous sketch of this panel (fix these; keep everything else): ${sentence(clean(fix).slice(0, 900))}`,
-      t.action ? `This moment: ${sentence(t.action)}` : "",
-      endState(t.state) &&
-        `The pose to draw (where this moment ends — hands, body position, props and costume exactly like this, e.g. an open hand stays open, a fist stays a fist, kneeling stays kneeling): ${sentence(endState(t.state))}`,
-      t.camera && `Camera: ${sentence(t.camera)} Draw one framing only (the framing at the key moment): where the camera stands and how big the figures are.`,
-      `Keep the composition clear: main figures large enough to read, background as a few simple lines (horizon, walls, door, big props). A face is never drawn frontal in a horizontally symmetrical frame, and nobody looks into the lens from a symmetrical frame. Again: one single frame, not several panels.`,
+      `Rough pencil storyboard sketch: ONE ${aspect} frame, ONE moment, one camera view. Loose black lines on plain white; no colour, no shading, no text, no panels or borders.`,
+      ...lines,
+      who && `In this cut: ${who}. Nobody else.`,
+      t.action && `Moment (draw where it ends, not each step): ${sentence(clip(t.action, 320) || t.action.slice(0, 320))}`,
+      pose && `End pose to draw — hands, body, props and costume exactly like this: ${sentence(clip(pose, 260) || pose.slice(0, 260))}`,
+      t.camera && `Camera: ${sentence(clip(t.camera, 200) || t.camera.slice(0, 200))}`,
+      fix && `Fix from the review: ${sentence(clean(fix).slice(0, 500))}`,
+      `Figures large and readable; background as a few simple lines. A face is never drawn frontal in a horizontally symmetrical frame, and nobody looks into the lens from a symmetrical frame.`,
     ]
       .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
       .join("\n");
@@ -1680,7 +1682,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
       ...storyboardCastEn(data, en, B.features, B.features * 50),
       (en.style || data.style.trim()) && `Art style: ${sentence(clip(studioStyle(en.style ?? data.style, data.dimension), 200) || clean(studioStyle(en.style ?? data.style, data.dimension)).slice(0, 200))} Stay in this ${dimensionEn(data)} animation style; never photorealistic.${keepPainted(en.style ?? data.style, data.dimension)}`,
       conti
-        ? `LOOK (most important): every frame is a finished, fully coloured picture with the colour grading, light, atmosphere and brushwork of the scene picture and the art style below. The storyboard sketches are black-and-white layout guides only; every frame of the video is fully painted. The character design sheets give identity only (face, hair shape, body, costume design) — where this scene changes how a character looks (e.g. hair bleached by the sun, dust, a washed-out palette), follow the scene's description and the scene picture over the sheet's colours. The background references give the world; everyone keeps their proportions and appears once.`
+        ? `LOOK (most important): every frame is fully painted with the light, colour grading and brushwork of the scene picture and the art style. Design sheets give identity only (face, hair, body, costume design); where the scene changes a look (sun-bleached hair, dust), the scene wins. Everyone keeps their proportions and appears once.`
         : `Match the reference images exactly: the named characters' faces, hair, colors and costumes, the world, the lighting and the drawing style; nobody's proportions change and no character is duplicated.`,
       continuityRules(data, en) &&
         `Continuity rules (keep them in every shot): ${clip(continuityRules(data, en), B.rules) || continuityRules(data, en).slice(0, B.rules)}${multiShot ? " Across each HARD CUT the screen sides, eyelines, costumes, props and light carry on." : ""}`,
@@ -1713,7 +1715,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
           ].join("\n")
         : `Use the start frame as the exact first panel.${endFrame ? " The shot ends exactly on the end frame." : ""}`,
       conti &&
-        "The storyboard sketches are rough black-and-white line drawings made for planning: take from them only each panel's composition, where everyone stands, their poses and the camera framing. Render every frame fully in the art style of the design sheets and the scene picture — colour, light and finished lines — fully painted, as finished animation.",
+        "The rough black-and-white sketches are layout guides: take only each panel's composition, blocking, poses and framing — every frame is fully painted, as finished animation.",
       refs.some((r) => r.parts) &&
         "Panels shown side by side in one reference are separate moments: each plays in full frame in turn; never show a split screen, grid or side-by-side frames.",
       speaking &&
@@ -1727,7 +1729,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         `Voices: ${voices.map((v) => `${castName(data, v.id)} — ${noEndDot(clip(v.text, 160) || clean(v.text).slice(0, 80))}`).join("; ")}. Speak only the exact dialogue below; never read direction text aloud.`,
       arcLine(en.arc),
       ACTING_EN,
-      `Everyone stays alive between the panels (breathing, blinks, small weight shifts); every change ${multiShot ? "inside a shot " : ""}is acted through a physical action and in-between poses. Each action reads in order: look, prepare, act, contact, settle; the result pose holds long enough to read. Whoever is in a shot stays in it until a beat says they leave (when the camera pans, they stay at the edge of the frame).${
+      `Every change ${multiShot ? "inside a shot " : ""}is acted through a physical action and in-between poses: look, prepare, act, contact, settle; the result pose holds long enough to read. Whoever is in a shot stays in it until a beat says they leave.${
         multiShot ? " Across a cut, the characters, costumes, world and light stay the same." : ""
       }`,
       COMPOSITION_EN,

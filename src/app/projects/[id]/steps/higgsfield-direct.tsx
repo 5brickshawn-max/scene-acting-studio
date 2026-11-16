@@ -308,37 +308,36 @@ export function SketchGenerator() {
 
   const runningFor = (id: string) => h.running.some((j) => (j.input as { expressionId?: string }).expressionId === id);
 
-  // 2라운드 생성: ① the first cut of every shot, together; ② every other cut, together — each drawn while it sees
-  // the earlier sketch of its own shot (same place, characters, costumes, sizes). Continuity of a cut-by-cut
-  // sequence at about the speed of one batch (7 cuts one by one took 5–7 minutes; two rounds take 2–3).
+  // 라운드 생성: round 1 = the first cut of every shot, round 2 = the second cut of every shot, … — cuts of
+  // different shots are drawn together, and every cut sees the sketch right before it in its own shot (a hat put
+  // on, a character who came in). As fast as a batch when shots are short (cuts are 4 s or more each).
   const order = shotsOf(doc.data).flat().filter((id) => drawable.some((e) => e.id === id));
   const no = (id: string) => exps.findIndex((e) => e.id === id) + 1;
-  const [rounds, setRounds] = useState<{ phase: 1 | 2; ids: string[]; rest: string[]; since: number } | null>(null);
+  const [rounds, setRounds] = useState<{ round: number; total: number; ids: string[]; queue: string[][]; since: number } | null>(null);
   const [roundsNote, setRoundsNote] = useState<string | null>(null);
-  const [pendingRounds, setPendingRounds] = useState<{ first: string[]; rest: string[] } | null>(null);
-  /** split targets: a cut goes first when no earlier cut of its shot is drawn or being drawn now */
+  const [pendingRounds, setPendingRounds] = useState<string[][] | null>(null);
+  /** a cut's round = how many earlier cuts of its shot are drawn in this run */
   const split = (targets: string[]) => {
     const shots = shotsOf(doc.data);
-    const first: string[] = [];
-    const rest: string[] = [];
+    const out: string[][] = [];
     for (const id of order.filter((x) => targets.includes(x))) {
       const shot = shots.find((sh) => sh.includes(id)) ?? [id];
-      const before = shot.slice(0, shot.indexOf(id));
-      const seen = before.some((b) => (targets.includes(b) ? true : Boolean(exps.find((e) => e.id === b)?.sketchAssetId)));
-      (seen ? rest : first).push(id);
+      const depth = shot.slice(0, shot.indexOf(id)).filter((b) => targets.includes(b)).length;
+      (out[depth] ??= []).push(id);
     }
-    return { first, rest };
+    return out.filter((r) => r?.length);
   };
   const startRounds = (targets: string[]) => {
     const r = split(targets);
-    if (!r.first.length) return;
+    if (!r.length) return;
     setRoundsNote(null);
     setPendingRounds(r);
-    void ask(r.first);
+    void ask(r[0]);
   };
   const roundsConfirmed = () => {
     if (!pendingRounds) return;
-    setRounds({ phase: 1, ids: pendingRounds.first, rest: pendingRounds.rest, since: Date.now() - 30_000 });
+    const [first, ...queue] = pendingRounds;
+    setRounds({ round: 1, total: pendingRounds.length, ids: first, queue, since: Date.now() - 30_000 });
     setPendingRounds(null);
   };
   useEffect(() => {
@@ -353,24 +352,20 @@ export function SketchGenerator() {
     });
     if (state.some((x) => x === "running" || x === "applying")) return;
     const failed = rounds.ids.filter((_, k) => state[k] === "failed");
-    if (rounds.phase === 1 && rounds.rest.length) {
-      const rest = rounds.rest;
-      setRounds({ phase: 2, ids: rest, rest: [], since: Date.now() - 5_000 });
-      void h.generate({ target: "sketch", model, expressionIds: rest }).then((ok) => {
+    const [next, ...queue] = rounds.queue;
+    if (failed.length) setRoundsNote(`${failed.map(no).join("·")}번 컷이 실패했습니다. 카드에서 그 컷만 다시 그리세요(앞 컷의 콘티를 보고 그립니다).`);
+    if (next?.length) {
+      setRounds({ round: rounds.round + 1, total: rounds.total, ids: next, queue, since: Date.now() - 5_000 });
+      void h.generate({ target: "sketch", model, expressionIds: next }).then((ok) => {
         if (!ok) {
           setRounds(null);
-          setRoundsNote("나머지 컷을 요청하지 못해 멈췄습니다. ‘스케치 없는 컷만’으로 이어서 그리세요.");
+          setRoundsNote("다음 라운드를 요청하지 못해 멈췄습니다. ‘스케치 없는 컷만’으로 이어서 그리세요.");
         }
       });
-      if (failed.length) setRoundsNote(`${failed.map(no).join("·")}번 컷이 실패했습니다(그 쇼트의 나머지는 앞 컷 없이 그립니다). 카드에서 그 컷만 다시 그리세요.`);
       return;
     }
     setRounds(null);
-    setRoundsNote(
-      failed.length
-        ? `${failed.map(no).join("·")}번 컷이 실패했습니다. 카드에서 그 컷만 다시 그리세요(앞 컷의 콘티를 보고 그립니다).`
-        : "러프 콘티를 모두 그렸습니다. 마음에 안 드는 컷은 카드에서 그 컷만 다시 그리세요(앞 컷의 콘티를 보고 그립니다).",
-    );
+    if (!failed.length) setRoundsNote("러프 콘티를 모두 그렸습니다. 마음에 안 드는 컷은 카드에서 그 컷만 다시 그리세요(앞 컷의 콘티를 보고 그립니다).");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobs.jobs, doc.data.expressions, rounds, canEdit]);
 
@@ -379,9 +374,9 @@ export function SketchGenerator() {
       <div>
         <div id="hf-sketch" className="font-semibold">러프 콘티 바로 생성 (Higgsfield)</div>
         <p className="field-help">
-          컷마다 장면 묘사·카메라대로 <strong>흰 배경에 단순한 선으로만</strong> 러프 콘티를 그립니다. <strong>두 라운드</strong>로 빠르게: ① 쇼트마다 첫 컷을
-          한꺼번에, ② 나머지 컷을 한꺼번에 — 나머지 컷은 같은 쇼트의 앞 컷 콘티를 보고 그려서 장소·인물·의상·크기가 이어집니다(모두 약 2~3분). 결과는 각 컷의
-          ‘러프 스케치’ 칸에 바로 들어갑니다. 마음에 안 드는 컷은 카드에서 그 컷만 다시 그리세요. 구독 크레딧이 컷 수만큼 차감됩니다.
+          컷마다 장면 묘사·카메라대로 <strong>흰 배경에 단순한 선으로만</strong> 러프 콘티를 그립니다. <strong>쇼트 순서대로 라운드</strong>로: 1라운드에 쇼트마다 첫
+          컷을, 2라운드에 쇼트마다 둘째 컷을 … 한꺼번에 그리고, 각 컷은 같은 쇼트의 바로 앞 컷 콘티를 보고 그려서 장소·인물·의상·소품이 이어집니다(라운드당 약
+          1분). 결과는 각 컷의 ‘러프 스케치’ 칸에 바로 들어갑니다. 마음에 안 드는 컷은 카드에서 그 컷만 다시 그리세요. 구독 크레딧이 컷 수만큼 차감됩니다.
         </p>
       </div>
       <p className="text-[13px] text-muted">생성 모델: <strong className="text-ink">{IMAGE_MODELS[model].label}</strong> (러프 콘티는 이 모델로 고정)</p>
@@ -399,9 +394,7 @@ export function SketchGenerator() {
       )}
       {rounds && (
         <p className="notice notice-info" aria-live="polite">
-          {rounds.phase === 1
-            ? `1라운드: 쇼트마다 첫 컷(${rounds.ids.map(no).join("·")}번)을 그리는 중…${rounds.rest.length ? ` 끝나면 나머지 ${rounds.rest.length}컷을 이어서 그립니다.` : ""}`
-            : `2라운드: 나머지 ${rounds.ids.length}컷(${rounds.ids.map(no).join("·")}번)을 앞 컷을 보며 그리는 중…`}
+          라운드 {rounds.round}/{rounds.total}: {rounds.ids.map(no).join("·")}번 컷을 그리는 중…{rounds.queue.length ? ` 끝나면 다음 라운드를 이어서 그립니다.` : ""}
         </p>
       )}
       {roundsNote && <p className="notice notice-info">{roundsNote}</p>}
@@ -414,8 +407,8 @@ export function SketchGenerator() {
         onConfirmed={roundsConfirmed}
         onCancel={() => setPendingRounds(null)}
         note={
-          pendingRounds?.rest.length
-            ? `1라운드(쇼트 첫 컷 ${pendingRounds.first.length}장) 비용입니다. 이어서 나머지 ${pendingRounds.rest.length}장을 그려 모두 ${pendingRounds.first.length + pendingRounds.rest.length}장만큼 차감됩니다.`
+          pendingRounds && pendingRounds.length > 1
+            ? `1라운드(${pendingRounds[0].length}장) 비용입니다. 라운드 ${pendingRounds.length}번에 걸쳐 모두 ${pendingRounds.flat().length}장을 그려 그만큼 차감됩니다.`
             : null
         }
       />
