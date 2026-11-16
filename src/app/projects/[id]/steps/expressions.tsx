@@ -793,6 +793,11 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
 
       <section className="space-y-4">
         <h3 className="section-title">② AI 콘티 설계</h3>
+        {d.previous && (
+          <p className="notice notice-info text-[14px]">
+            <strong>앞 장면 ‘{d.previous.name}’의 끝 상태에서 이어집니다:</strong> {d.previous.endState || "(앞 장면에 기록된 끝 상태가 없습니다)"} — AI 콘티 설계가 첫 컷의 ‘시작’을 여기에 맞춥니다.
+          </p>
+        )}
         <AiAction
           kind="design_expressions"
           step={1}

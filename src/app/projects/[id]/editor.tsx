@@ -14,6 +14,7 @@ import { VideoStep } from "./steps/video";
 import { ConsultPanel } from "./consult";
 import { VersionHistory } from "./history";
 import { ReviewLinkDialog } from "./review-link";
+import { NextSceneButton } from "./next-scene";
 
 const STATUS: Record<SaveStatus, { label: string; cls: string }> = {
   saved: { label: "저장됨", cls: "pill-ok" },
@@ -83,7 +84,14 @@ export function Editor(props: {
       <header className="sticky top-0 z-20 bg-white border-b border-line">
         <div className="mx-auto max-w-[1500px] px-4 sm:px-6 py-2 min-h-16 flex flex-wrap items-center gap-x-3 gap-y-2">
           <Link href="/projects" className="btn btn-sm btn-ghost" aria-label="작업 목록으로">← 목록</Link>
-          <h1 className="font-bold text-lg truncate flex-1 min-w-[140px]">{doc.data.title || "이름 없음"}</h1>
+          <div className="flex-1 min-w-[140px]">
+            <h1 className="font-bold text-lg truncate">{doc.data.title || "이름 없음"}</h1>
+            {doc.data.previous && (
+              <Link href={`/projects/${doc.data.previous.projectId}`} className="text-[13px] text-muted underline truncate block">
+                ← 이전 장면: {doc.data.previous.name} ({doc.data.previous.index}번째 장면)
+              </Link>
+            )}
+          </div>
           {/* One status area: save state + AI jobs */}
           <div className="flex items-center gap-2" aria-live="polite">
             <span className={`pill ${st.cls}`}>{st.label} · v{doc.version}</span>
@@ -94,6 +102,7 @@ export function Editor(props: {
           {props.canEdit && (
             <button className="btn btn-sm" onClick={() => setShowReview(true)}>검토용 링크</button>
           )}
+          <NextSceneButton />
           <button className="btn btn-sm" aria-pressed={showChat} onClick={() => toggleChat(!showChat)}>
             {showChat ? "상의 닫기" : "AI와 상의"}
           </button>

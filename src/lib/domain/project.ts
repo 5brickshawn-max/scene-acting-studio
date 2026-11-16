@@ -306,6 +306,14 @@ export const ProjectDataSchema = z.object({
   /** the look's dimension: hand-drawn 2D, or the studio's 3D & 2.5D (the default) */
   dimension: z.enum(["2d", "3d"]).default("3d"),
   /**
+   * 시퀀스: the scene this one follows ("다음 장면 만들기") — its name, and the state its last cut ended in,
+   * which this scene's first cut starts from (null for a scene that starts a sequence).
+   */
+  previous: z
+    .object({ projectId: z.string(), name: z.string(), endState: z.string(), index: z.number().int().default(1) })
+    .nullable()
+    .default(null),
+  /**
    * 장면 기준 그림: ONE drawing with the whole cast together (for one character, that character's drawing).
    * Identity, relative sizes and art style of every character come from it.
    */
@@ -453,6 +461,7 @@ export function createProjectData(title = "새 장면", castCount = 1, mode: Sce
     opening: "",
     style: "",
     dimension: "3d",
+    previous: null,
     baseAssetId: null,
     designRefAssetIds: [],
     cast,
@@ -1129,4 +1138,57 @@ export function panelTitle(t: string, max = 40): string {
   const cut = c.slice(0, max + 1).search(/[:：.。,，;；](?=\s|$)|\s[·—–-]\s/);
   if (cut >= 8) return c.slice(0, cut).trim();
   return `${c.slice(0, max).replace(/\s+\S*$/, "")}…`;
+}
+
+/** Where the scene ends: its last cut's "끝" state (or its description), for the scene that follows it. */
+export function sceneEndState(data: ProjectData): string {
+  const lastId = data.acting.segments[data.acting.segments.length - 1]?.expressionId;
+  const last = data.expressions.find((e) => e.id === lastId) ?? data.expressions[data.expressions.length - 1];
+  if (!last) return "";
+  const parts = last.continuity.split(/(?:끝|End|end)\s*[:：]/);
+  const end = (parts.length > 1 ? parts[parts.length - 1] : "").replace(/\s+/g, " ").trim();
+  return end || last.action.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * 다음 장면 만들기: a new scene that continues this one. It keeps what a sequence shares — the cast with their
+ * sheets, looks, costumes and voices, the art style and dimension, the scene picture and references, the
+ * continuity rules and the video settings — and starts empty for what is the scene's own (scenario, cuts,
+ * lines, timing, results). Its first cut starts from this scene's last state.
+ */
+export function nextSceneData(prev: ProjectData, prevProjectId: string, title: string): ProjectData {
+  const base = createProjectData(title, prev.cast.length, prev.mode);
+  const cast = prev.cast.map((c) => ({ ...c, questions: c.questions.filter((q) => q.answer.trim()) }));
+  const lead = cast[0]?.id;
+  const expressions = base.expressions.map((e, i) => withReactionsFor(cast, { ...e, characterId: cast[i % cast.length]?.id ?? lead }));
+  const english = prev.english
+    ? { ...prev.english, beats: [], arc: { text: "", key: "" }, continuity: prev.english.continuity }
+    : null;
+  return {
+    ...base,
+    extras: prev.extras,
+    style: prev.style,
+    dimension: prev.dimension,
+    previous: { projectId: prevProjectId, name: prev.title, endState: sceneEndState(prev), index: (prev.previous?.index ?? 1) + 1 },
+    baseAssetId: prev.baseAssetId,
+    designRefAssetIds: [...prev.designRefAssetIds],
+    cast,
+    expressionSetup: {
+      ...base.expressionSetup,
+      framing: prev.expressionSetup.framing,
+      continuity: prev.expressionSetup.continuity,
+      transfer: prev.expressionSetup.transfer,
+    },
+    expressions,
+    dialogue: { language: prev.dialogue.language, lines: [] },
+    acting: { duration: prev.acting.duration, segments: evenSegments(expressions.map((e) => e.id), prev.acting.duration) },
+    video: {
+      ...base.video,
+      aspectRatio: prev.video.aspectRatio,
+      refMode: prev.video.refMode,
+      weight: prev.video.weight,
+      cadence: prev.video.cadence,
+    },
+    english,
+  };
 }

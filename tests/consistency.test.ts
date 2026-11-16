@@ -54,7 +54,8 @@ function invariants(d: ProjectData, where: string) {
   buildSceneImageHandoff(d);
   const panels = buildExpressionHandoffs(d);
   if (d.mode === "storyboard") buildSketchHandoffs(d);
-  for (const h of panels) expect(h.prompt, at("panel prompts never ask for 2D")).not.toMatch(/(^|[^\d.])2D(?!\w)/);
+  // a 3D & 2.5D project never asks for 2D (a 2D project does, on purpose)
+  if (d.dimension !== "2d") for (const h of panels) expect(h.prompt, at("panel prompts never ask for 2D")).not.toMatch(/(^|[^\d.])2D(?!\w)/);
   for (const source of ["references", "start_frame"] as const) {
     const h = buildVideoHandoff(d, source);
     const p = h.prompt;
@@ -63,7 +64,7 @@ function invariants(d: ProjectData, where: string) {
     // the studio block closes the prompt and is written positively
     expect(p.endsWith(h.constraints), at("constraints close the prompt")).toBe(true);
     expect(h.constraints, at("constraints have no 'never/NO' phrasing")).not.toMatch(/never gliding|\bNO [A-Z]|streaming/);
-    expect(p, at("prompt never asks for 2D")).not.toMatch(/(^|[^\d.])2D(?!\w)/);
+    if (d.dimension !== "2d") expect(p, at("prompt never asks for 2D")).not.toMatch(/(^|[^\d.])2D(?!\w)/);
     expect(p, at("prompt never forbids 3D")).not.toMatch(/never photorealistic or 3D|switch to photorealism or 3D/);
     // a cut storyboard is never told it is one continuous take, and the other way round
     if (d.mode === "storyboard" && shotsOf(d).length > 1) expect(p, at("cut scene not called one take")).not.toContain("ONE single continuous shot with no cuts");
@@ -380,5 +381,36 @@ describe("short storyboard cuts (guidance only)", () => {
     const issue = stepIssues(d, 1).find((i) => i.message.includes("컷당 약"));
     expect(issue?.level).toBe("warn");
     expect(cutLengthNotice(setExpressionCount(d, 2))).toBe("");
+  });
+});
+
+describe("다음 장면 만들기 (sequence)", () => {
+  it("keeps what a sequence shares, starts the scene's own work fresh and remembers where the last scene ended", async () => {
+    const { nextSceneData, readProjectData } = await import("@/lib/domain/project");
+    const { projectContext } = await import("@/lib/ai/prompts");
+    const prev = setExpressionCount(createProjectData("몰리송", 2, "storyboard"), 3);
+    prev.style = "2D 셀 애니메이션";
+    prev.dimension = "2d";
+    prev.baseAssetId = "scene-1";
+    prev.cast = prev.cast.map((c, i) => ({ ...c, name: `인물${i + 1}`, refAssetId: `sheet-${i + 1}`, voice: "밝은 목소리" }));
+    prev.expressionSetup.continuity = "1) 하나는 화면 왼쪽";
+    prev.expressions = prev.expressions.map((e, i) => ({ ...e, action: `동작 ${i + 1}`, continuity: `시작: 상태 ${i} / 끝: 상태 ${i + 1}` }));
+    prev.dialogue.lines = [{ expressionId: prev.expressions[0].id, line: "안녕", meaning: "", delivery: "" }];
+    prev.video.weight = "extra";
+    const next = nextSceneData(prev, "prev-id", "몰리송 #2");
+    expect(next.title).toBe("몰리송 #2");
+    expect(next.cast.map((c) => c.refAssetId)).toEqual(["sheet-1", "sheet-2"]);
+    expect(next.style).toBe(prev.style);
+    expect(next.dimension).toBe("2d");
+    expect(next.baseAssetId).toBe("scene-1");
+    expect(next.expressionSetup.continuity).toBe(prev.expressionSetup.continuity);
+    expect(next.video.weight).toBe("extra");
+    expect(next.video.resultAssetIds).toEqual([]);
+    expect(next.dialogue.lines).toEqual([]);
+    expect(next.expressions.every((e) => !e.action && !e.sketchAssetId)).toBe(true);
+    expect(next.previous).toEqual({ projectId: "prev-id", name: "몰리송", endState: "상태 3", index: 2 });
+    expect(readProjectData(next).recovered).toBe(false);
+    expect(projectContext(next, 1)).toContain("앞 장면은 이렇게 끝났습니다: 상태 3");
+    invariants(next, "next scene");
   });
 });

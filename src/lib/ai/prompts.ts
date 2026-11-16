@@ -57,6 +57,11 @@ export function projectContext(d: ProjectData, step: number): string {
   if (story && d.extras.trim()) lines.push(`군중·배경 인물: ${d.extras.trim()}`);
   lines.push(`화풍 차원: ${d.dimension === "2d" ? "2D 애니메이션" : "3D & 2.5D 애니메이션"} (그림체는 이 차원을 따름)`);
   lines.push(`그림체(장면 공통): ${d.style || "(없음)"}`);
+  if (d.previous)
+    lines.push(
+      `시퀀스: 이 장면은 앞 장면 '${d.previous.name}'에 이어지는 ${d.previous.index}번째 장면입니다. 앞 장면은 이렇게 끝났습니다: ${d.previous.endState || "(기록 없음)"}. ` +
+        `이 장면의 첫 컷 '시작'은 이 상태에서 이어지게(같은 의상·소품·위치·빛, 바뀐다면 컷 분할과 시간 경과로 설명되게) 설계하세요.`,
+    );
   const actor = (id: string) => (multi ? `${castLabel(d, id)} · ` : "");
   if (step >= 1 && story) {
     lines.push(`컷 수: ${d.expressionSetup.count} · 컷 그림 비율 ${imageAspectFor(d)}`);
