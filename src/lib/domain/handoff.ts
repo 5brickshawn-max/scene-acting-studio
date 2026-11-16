@@ -45,6 +45,7 @@ import {
   type ProjectData,
   effectiveText,
   dimensionEn,
+  panelTitle,
 } from "./project";
 
 const FACING_EN: Record<Facing, string> = {
@@ -1290,7 +1291,7 @@ function storyboardCastEn(data: ProjectData, en: ReturnType<typeof freshEnglish>
 function panelTexts(data: ProjectData, e: Expression, en: ReturnType<typeof freshEnglish>) {
   const b = en.beats.get(e.id);
   return {
-    title: b?.emotion || e.emotion,
+    title: panelTitle(b?.emotion || e.emotion),
     action: b?.face || clean(e.action),
     camera: b?.body || clean(e.camera),
     // 연결 상태: screen positions, facing, movement, costume/prop state, light (English where fresh)
@@ -1726,7 +1727,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         `Voices: ${voices.map((v) => `${castName(data, v.id)} — ${noEndDot(clip(v.text, 160) || clean(v.text).slice(0, 80))}`).join("; ")}. Speak only the exact dialogue below; never read direction text aloud.`,
       arcLine(en.arc),
       ACTING_EN,
-      `Everyone stays alive between the panels (breathing, blinks, small weight shifts); every change ${multiShot ? "inside a shot " : ""}is acted through a physical action and in-between poses. Each action reads in order: look, prepare, act, contact, settle; the result pose holds long enough to read.${
+      `Everyone stays alive between the panels (breathing, blinks, small weight shifts); every change ${multiShot ? "inside a shot " : ""}is acted through a physical action and in-between poses. Each action reads in order: look, prepare, act, contact, settle; the result pose holds long enough to read. Whoever is in a shot stays in it until a beat says they leave (when the camera pans, they stay at the edge of the frame).${
         multiShot ? " Across a cut, the characters, costumes, world and light stay the same." : ""
       }`,
       COMPOSITION_EN,
