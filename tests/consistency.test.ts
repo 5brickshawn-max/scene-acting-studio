@@ -262,3 +262,13 @@ describe("dialogue acting cues (Z_1–Z_4 references)", () => {
     expect(ACTING_EN).toContain("Everyone in frame is live");
   });
 });
+
+describe("composition rule (storyboard)", () => {
+  it("forbids a frontal face and a lens stare in a horizontally symmetrical frame, in the video and sketch prompts", async () => {
+    const { buildVideoHandoff, buildSketchHandoffs, COMPOSITION_EN } = await import("@/lib/domain/handoff");
+    const d = setExpressionCount(createProjectData("구도", 1, "storyboard"), 2);
+    d.expressions = d.expressions.map((e, i) => ({ ...e, action: `동작 ${i + 1}` }));
+    expect(buildVideoHandoff(d, "references").prompt).toContain(COMPOSITION_EN);
+    expect(buildSketchHandoffs(d)[0].prompt).toContain("never drawn frontal in a horizontally symmetrical frame");
+  });
+});

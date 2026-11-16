@@ -1315,6 +1315,14 @@ export const keepPainted = (style: string) =>
 export const ACTING_EN =
   "FACE AND BODY: feature-film character acting, broad enough to read at a glance and grounded. Natural blinking; forehead and brows always active and matched to each state, no mask-face, no dead eyes. Eyes stay a natural, moderate size. ORDER RULE: in every change the eyes move first, then the head, then the body, one after another. Eyelines are held steady, never darting. At the emotional peak, a moving hold: the pose stops and only the breath, shoulders, eyes and tears move. Everyone in frame is live: whoever is not speaking keeps reacting with small head turns, breathing and small hand actions. A gesture or look written for a word lands exactly on that word; how loud a line is comes from its delivery, and an exclamation mark is punctuation, not volume.";
 
+/**
+ * The team's composition rule (storyboard): a face is never frontal in a horizontally symmetrical frame, and
+ * nobody stares into the lens from one. Off-centre or turned faces, and a look into the lens from an
+ * asymmetric frame, stay allowed.
+ */
+export const COMPOSITION_EN =
+  "Composition: a face is never shown frontal in a horizontally symmetrical frame, and nobody stares into the lens from a symmetrical frame; turn the face or set the frame off its mirror line.";
+
 /** The scene's emotional arc as the prompt's main subject (empty when the English arc is missing or stale). */
 export const arcLine = (arc: string | null) =>
   arc ? `THE EMOTIONAL ARC: THIS IS THE WHOLE POINT. A live, changing performance, and every change has a trigger: ${noEndDot(arc)}. Play the transitions.` : "";
@@ -1469,7 +1477,7 @@ export function buildSketchHandoffs(data: ProjectData): ExpressionHandoff[] {
       endState(t.state) &&
         `The pose to draw (where this moment ends — hands, body position and props exactly like this, e.g. an open hand stays open, a fist stays a fist, kneeling stays kneeling): ${sentence(endState(t.state))}`,
       t.camera && `Camera: ${sentence(t.camera)} Draw one framing only (the framing at the key moment): where the camera stands and how big the figures are.`,
-      `Keep the composition clear: main figures large enough to read, background as a few simple lines (horizon, walls, door, big props). Again: one single frame, not several panels.`,
+      `Keep the composition clear: main figures large enough to read, background as a few simple lines (horizon, walls, door, big props). A face is never drawn frontal in a horizontally symmetrical frame, and nobody looks into the lens from a symmetrical frame. Again: one single frame, not several panels.`,
     ]
       .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
       .join("\n");
@@ -1664,6 +1672,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
       `Everyone stays alive between the panels (breathing, blinks, small weight shifts); every change ${multiShot ? "inside a shot " : ""}is acted through a physical action and in-between poses. Each action reads in order: look, prepare, act, contact, settle; the result pose holds long enough to read.${
         multiShot ? " Across a cut, the characters, costumes, world and light stay the same." : ""
       }`,
+      COMPOSITION_EN,
     ]
       .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
       .join("\n");
@@ -1685,7 +1694,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
     constraintsExtra(constraints) +
     keepPainted(en.style ?? data.style).length +
     // the acting doctrine, the arc and frame zero are written once and never cut
-    ACTING_EN.length + arcLine(en.arc).length + frameZero.length;
+    ACTING_EN.length + arcLine(en.arc).length + frameZero.length + COMPOSITION_EN.length;
   let prompt = "";
   for (const B of STORY_BUDGETS) {
     prompt = [headerWith(B), frameZero, beatsWith(B).join("\n\n"), directorBlock, constraints].filter(Boolean).join("\n\n");
