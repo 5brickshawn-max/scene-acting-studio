@@ -202,7 +202,11 @@ export const DialogueOut = z.object({
       line: z.string(),
       meaning: z.string(),
       delivery: z.string(),
-      vo: z.boolean().describe("보이스오버(속마음·내레이션·화면 밖 목소리)면 true — 화면 속 입은 움직이지 않음. 시나리오에 V.O.·속마음이라고 되어 있으면 true"),
+      vo: z
+        .boolean()
+        .describe(
+          "보이스오버면 true — 화면 속 입은 움직이지 않음. true는 시나리오에 V.O.·속마음·내레이션이라고 되어 있거나, 말하는 인물이 그 컷 화면에 보이지 않을 때만. 화면에 보이는 인물이 소리 내어 말하면(구호·노래·외침 포함) false",
+        ),
     }),
   ),
 });

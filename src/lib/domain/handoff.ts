@@ -798,7 +798,11 @@ const clip = (t: string, max: number) => {
   const minKeep = Math.min(12, max / 3);
   const sentenceEnd = lastEnd(/[.!?。](?=\s|$)/g);
   if (sentenceEnd >= minKeep) return c.slice(0, sentenceEnd).trim();
-  const clauseEnd = lastEnd(/[,，;；](?=\s)/g);
+  // a semicolon closes a whole thought; a comma may sit inside a list ("the coral, sky-blue and yellow crest")
+  const semiEnd = lastEnd(/[;；](?=\s)/g);
+  if (semiEnd >= Math.max(minKeep, max / 2)) return `${c.slice(0, semiEnd - 1).trim()}.`;
+  // a comma followed by one to three words and then "and"/"or" or another comma is inside a list: never cut there
+  const clauseEnd = lastEnd(/[,，](?!\s+(?:[\w'-]+\s+){0,2}[\w'-]+(?:,|\s+(?:and|or)\b))(?=\s)|[;；](?=\s)/g);
   if (clauseEnd >= minKeep) return `${c.slice(0, clauseEnd - 1).trim()}.`;
   // not even one clause fits: leave the field out rather than send a fragment
   return "";
@@ -1417,7 +1421,10 @@ function buildStoryboardHandoffs(data: ProjectData, fixes: Record<string, string
     const prevEnd = prev ? endState(panelTexts(data, prev, en).state) : "";
     const fix = clean(fixes[e.id] ?? "");
     const rules = continuityRules(data, en);
-    const line = data.dialogue.lines.find((l) => l.expressionId === e.id)?.line.trim();
+    const lineRow = data.dialogue.lines.find((l) => l.expressionId === e.id);
+    const line = lineRow?.line.trim();
+    // a voice-over line is heard over the picture: the image keeps every mouth closed (the video does the same)
+    const lineVo = lineRow ? isVoiceOver(lineRow) : false;
     const prompt = [
       `One finished ${aspect} frame of the animation (moment ${i + 1} of ${n} in this scene): ONE single image of ONE moment that fills the whole frame — never a storyboard sheet, a grid, a contact sheet, a comic page or a sequence of small frames; exactly one camera view. Not a rough sketch; no borders, no text, no speech bubbles.`,
       `The description below may list several steps of an action (look → prepare → act → contact → settle) and a camera move from a start to an end framing: draw only the single moment the action arrives at (its end pose), in one framing — do not draw each step or each framing as a separate picture, and do not draw anything that happens after the description ends.`,
@@ -1453,7 +1460,10 @@ function buildStoryboardHandoffs(data: ProjectData, fixes: Record<string, string
         `Image reference ${sketchNo} is a rough storyboard sketch of this panel: follow its composition, character placement, poses and camera angle; do NOT copy its rough lines or missing details — render it fully in the art style above.`,
       t.action ? `This moment: ${sentence(t.action)}` : sketchNo ? "This moment: exactly as in the sketch." : "",
       t.camera && `Camera (again, this panel's own framing): ${sentence(t.camera)}`,
-      line && `${castName(data, beatActor(data, e).id)} is speaking in this moment (mouth open mid-word); everyone else keeps their mouth closed.`,
+      line &&
+        (lineVo
+          ? `${castName(data, beatActor(data, e).id)}'s line in this moment is a voice-over heard over the picture: every mouth stays closed or follows the acting above.`
+          : `${castName(data, beatActor(data, e).id)} is speaking in this moment (mouth open mid-word); everyone else keeps their mouth closed.`),
       data.expressionSetup.instruction && `Additional direction: ${clean(data.expressionSetup.instruction)}`,
       `Background: the world of the scene as in the references and the description (not an empty white background) unless the description says otherwise.`,
       `Staging: the faces, the hands and what they act on are clearly readable and not hidden behind bodies or props; hands drawn clearly with natural anatomy.`,
