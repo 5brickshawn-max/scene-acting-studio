@@ -79,6 +79,15 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
       `프롬프트에 금지 표현(never·no·not·금지 …)이 ${negatives}개입니다(권장 ${NEGATIVE_LIMIT}개 이하). 팀 시험에서 금지 문장이 늘자 인물 움직임이 절반 이하로 줄었습니다. 글이나 추가 연출의 ‘…하지 말 것’을 ‘무엇을 할지’로 바꾸세요.`,
     );
   else add("ok", "금지 표현", `금지 표현 ${negatives}개 — 권장 범위(${NEGATIVE_LIMIT}개 이하)입니다.`);
+  // the team's composition rule: no mirror-symmetrical frontal face, no straight-on lens stare from one
+  if (/Face angle:|horizontally symmetrical frame/.test(h.prompt)) {
+    const frontal = data.mode !== "storyboard" && data.expressions.some((e) => e.direction.facing === "front");
+    add(
+      "ok",
+      "구도",
+      `대칭 정면 얼굴·그 얼굴로 렌즈 응시를 피하는 구도 규칙이 들어갑니다.${frontal ? " 얼굴 방향 ‘정면’인 표정은 고개를 살짝 돌리거나 기울인 비대칭 정면으로 그립니다. 이미 만든 표정 그림이 좌우 대칭 정면이면 다시 생성하세요(참고 그림이 영상을 끌고 감)." : ""}`,
+    );
+  }
 
   // ── the prompt's fixed frame ──
   const shots = shotsOf(data);

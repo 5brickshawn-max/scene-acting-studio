@@ -272,3 +272,20 @@ describe("composition rule (storyboard)", () => {
     expect(buildSketchHandoffs(d)[0].prompt).toContain("never drawn frontal in a horizontally symmetrical frame");
   });
 });
+
+describe("composition rule (cast mode)", () => {
+  it("draws a 'front' head slightly off-axis and adds the face-angle line to images, frames and the video", async () => {
+    const { buildVideoHandoff, buildExpressionHandoffs, buildFrameHandoff, FACE_ANGLE_EN } = await import("@/lib/domain/handoff");
+    const { preRenderCheck } = await import("@/lib/domain/check");
+    const d = createProjectData("정면", 1, "cast");
+    d.expressions = d.expressions.map((e) => ({ ...e, direction: { ...e.direction, facing: "front" as const, body: "front" as const } }));
+    const img = buildExpressionHandoffs(d)[0].prompt;
+    expect(img).toContain(FACE_ANGLE_EN);
+    expect(img).toContain("Head toward the viewer, turned or tilted slightly off-axis");
+    expect(img).toContain("body facing the viewer");
+    expect(buildFrameHandoff(d, d.expressions[0].id, "bust").prompt).toContain(FACE_ANGLE_EN);
+    const h = buildVideoHandoff(d, "references");
+    expect(h.prompt).toContain(FACE_ANGLE_EN);
+    expect(preRenderCheck(d, h).find((i) => i.area === "구도")?.text).toContain("비대칭 정면");
+  });
+});

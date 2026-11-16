@@ -52,6 +52,19 @@ const FACING_EN: Record<Facing, string> = {
   right_3q: "three-quarter view turned toward screen-right",
   right_profile: "full profile facing screen-right",
 };
+/**
+ * Head direction. "front" is drawn slightly off-front (the team's rule: no mirror-symmetrical frontal face,
+ * no straight-on lens stare from one); the body keeps FACING_EN.
+ */
+const HEAD_EN: Record<Facing, string> = {
+  ...FACING_EN,
+  front: "toward the viewer, turned or tilted slightly off-axis so the face reads asymmetrical",
+};
+
+/** The same rule as one line for every cast-mode image and video prompt (written without "never"). */
+export const FACE_ANGLE_EN =
+  "Face angle: the head is always turned or tilted at least a little, so the face reads asymmetrical; a look at the viewer comes from that turned head.";
+
 const GAZE_EN: Record<Gaze, string> = {
   camera: "eyes looking at the viewer",
   left: "eyes looking screen-left",
@@ -133,7 +146,7 @@ function bodyLanguageShortEn(p: Pick<Performance, "emotion">, framing: Framing, 
 /** Head, gaze and body direction in English (from the checked direction values, never from free text). */
 function directionEn(e: Pick<Performance, "direction">): string {
   const d = e.direction;
-  return `Head ${FACING_EN[d.facing]}, ${PITCH_EN[d.pitch]}${TILT_EN[d.tilt] ? `, ${TILT_EN[d.tilt]}` : ""}; ${GAZE_EN[d.gaze]}; body ${FACING_EN[d.body]}.`;
+  return `Head ${HEAD_EN[d.facing]}, ${PITCH_EN[d.pitch]}${TILT_EN[d.tilt] ? `, ${TILT_EN[d.tilt]}` : ""}; ${GAZE_EN[d.gaze]}; body ${FACING_EN[d.body]}.`;
 }
 
 const FACING_SHORT: Record<Facing, string> = {
@@ -297,7 +310,7 @@ export function expressionLine(e: Expression, i: number, lang: "en" | "ko"): str
     e.brows && `Brows: ${e.brows}.`,
     e.eyes && `Eyes: ${e.eyes}.`,
     e.mouth && `Mouth: ${e.mouth}.`,
-    `Head ${FACING_EN[d.facing]}, ${PITCH_EN[d.pitch]}${TILT_EN[d.tilt] ? `, ${TILT_EN[d.tilt]}` : ""}; ${GAZE_EN[d.gaze]}; shoulders/body ${FACING_EN[d.body]}.`,
+    `Head ${HEAD_EN[d.facing]}, ${PITCH_EN[d.pitch]}${TILT_EN[d.tilt] ? `, ${TILT_EN[d.tilt]}` : ""}; ${GAZE_EN[d.gaze]}; shoulders/body ${FACING_EN[d.body]}.`,
     e.notes && e.notes,
   ];
   return clean(parts.filter(Boolean).join(" "));
@@ -372,7 +385,7 @@ export function buildExpressionHandoffs(data: ProjectData, fixes: Record<string,
       usesRef &&
       `Image reference ${refIndex} is a grid of ${s.refColumns}x${s.refRows} expression panels drawn in another style. Use ONLY panel ${e.panel} (counting left to right, top to bottom) as a guide for ${
         multi ? `${actorName}'s` : "the"
-      } facial acting${s.transfer === "expression_and_pose" ? " and head pose" : ""}. Do NOT copy its drawing style, line weight, colors, proportions or character design.`;
+      } facial acting${s.transfer === "expression_and_pose" ? " and head pose (follow the panel's pose; only when the panel is fully frontal, turn the head slightly)" : ""}. Do NOT copy its drawing style, line weight, colors, proportions or character design.`;
     const styleLine = style && `Art style: ${style.replace(/[.。]+$/, "")}. Keep this 3D & 2.5D animation style${multi ? " for every character" : ""}; never photorealistic.`;
 
     if (!multi) {
@@ -391,6 +404,7 @@ export function buildExpressionHandoffs(data: ProjectData, fixes: Record<string,
         styleLine,
         refSheet,
         `Expression: ${expression}`,
+        FACE_ANGLE_EN,
         bodyLanguageEn(e, framing, eb ? eb.body : e.gesture),
         s.instruction && `Additional direction: ${clean(s.instruction)}`,
         `Keep exactly the same shot size, head size and position, and white background as the other expression images of this character so they work as a matching set; only the face, head direction${
@@ -430,6 +444,7 @@ export function buildExpressionHandoffs(data: ProjectData, fixes: Record<string,
       refSheet,
       `Acting in this moment — every character at once (the listeners keep their mouths closed unless their line says otherwise):`,
       ...lines,
+      FACE_ANGLE_EN.replace("the head is", "every head is").replace("so the face reads", "so each face reads"),
       hands && `Arms, hands and shoulders act together with each face; hands drawn clearly with natural anatomy (five fingers, no fused or extra fingers).`,
       s.instruction && `Additional direction: ${clean(s.instruction)}`,
       `Keep exactly the same camera, character positions and sizes, and white background as the other frames of this scene so they work as a matching set; only the faces, head directions${
@@ -481,6 +496,7 @@ export function buildFrameHandoff(data: ProjectData, expressionId: string, shot:
     momentRef
       ? `Image reference ${momentRef} is the exact moment to draw: the same facial expressions, head directions, arms and hands${multi ? " of every character" : ""}. Only the camera framing changes to this shot size; never change the acting.`
       : `${multi ? `${actorName} acts this moment. ` : ""}Expression: ${INTENSITY_EN[e.intensity]} ${eb?.emotion ?? e.emotion}. ${eb ? sentence(eb.face) : ""} ${directionEn(e)}`,
+    FACE_ANGLE_EN,
     ...castLookEn(data, en, { appearance: false, outfit: false, max: multi ? 5 : 8 }),
     style && `Art style: ${style.replace(/[.。]+$/, "")}. Keep ${multi ? "every character" : "the character"} in this 3D & 2.5D animation style; never photorealistic.`,
     directorBackground(director) ? `Background as in this direction: ${clip(director, 400) || director.slice(0, 400)}` : "Plain white background.",
@@ -1190,6 +1206,7 @@ export function buildVideoHandoff(
       lang === "Old English" && OLD_ENGLISH_HINT,
       arcLine(en.arc),
       ACTING_EN,
+      multi ? FACE_ANGLE_EN.replace("the head is", "every head is").replace("so the face reads", "so each face reads") : FACE_ANGLE_EN,
       `Stay alive between and during the lines (breathing, blinks, small head and shoulder accents). Each expression change is acted, not morphed: it rides on a physical action (a blink, a breath, a small head turn or a hand passing the face) and steps through in-between poses.`,
     ]
       .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
@@ -1205,7 +1222,7 @@ export function buildVideoHandoff(
   // the studio block grew (weight, camera, sound): its extra length is not taken from the beats
   const lengthTarget =
     (enBeats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) + (multi ? VIDEO_PROMPT_EXTRA_PER_CHARACTER * (data.cast.length - 1) : 0) + constraintsExtra(constraints) + keepPainted(styleText).length +
-    ACTING_EN.length + arcLine(en.arc).length;
+    ACTING_EN.length + arcLine(en.arc).length + FACE_ANGLE_EN.length;
   let prompt = "";
   for (const B of BUDGETS) {
     prompt = assemble(B);

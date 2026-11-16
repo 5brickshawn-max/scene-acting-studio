@@ -111,6 +111,9 @@ function DirectionEditor({
         <TopDown d={d} />
         <div className="space-y-2 min-w-0">
           <Seg label="얼굴이 향한 쪽" value={d.facing} options={FACING} labels={FACING_SHORT} onChange={(v) => set({ facing: v })} />
+          {d.facing === "front" && (
+            <p className="field-help">‘정면’은 팀 구도 규칙에 따라 고개를 살짝 돌리거나 기울인 비대칭 정면으로 그립니다(좌우 대칭 정면 얼굴·그 얼굴로 렌즈 응시는 쓰지 않음). 몸 방향은 그대로입니다.</p>
+          )}
           <Seg label="몸(어깨)이 향한 쪽" value={d.body} options={FACING} labels={FACING_SHORT} onChange={(v) => set({ body: v })} />
         </div>
       </div>
