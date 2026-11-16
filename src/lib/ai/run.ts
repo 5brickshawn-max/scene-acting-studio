@@ -3,7 +3,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { z } from "zod";
 import sharp from "sharp";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { readProjectData, dimensionEn, usesConti, castLabel, effectiveText, maxCastFor, MAX_EXPRESSIONS, MAX_PANELS_STORYBOARD, MIN_SECONDS_PER_CUT, RECOMMENDED_SECONDS_PER_CUT, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
+import { readProjectData, dimensionEn, usesConti, castLabel, effectiveText, maxCastFor, MAX_EXPRESSIONS, MAX_PANELS_STORYBOARD, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
 import {
   ActingOut,
   CharacterOut,
@@ -259,7 +259,7 @@ async function buildRequest(job: JobRow, data: ProjectData) {
                 ? `  이 장면은 2D 애니메이션입니다. 그림체는 반드시 '2D' 애니메이션으로 쓰세요(3D·2.5D라고 쓰지 마세요). 사실적인 실사는 아닙니다.\n`
                 : `  그림체는 반드시 '3D & 2.5D' 애니메이션으로 쓰세요(2D라고 쓰지 마세요). 사실적인 실사는 아닙니다.\n`) +
               (data.mode === "storyboard"
-                ? `- shots: 시나리오를 쇼트(컷 분할)로 나누세요. 쇼트 사이는 컷으로 끊깁니다. 시나리오가 '세 컷이 1초씩', '완전 부감', '클로즈업으로' 처럼 화면을 바꾸면 새 쇼트, 한 쇼트 안에서 카메라가 움직여 구도가 바뀌면 그 쇼트의 패널을 늘리세요(머무는 쇼트는 패널 1개). 패널 합계는 2~${MAX_PANELS_STORYBOARD}개이고, 패널 하나는 핵심 동작 하나에 ${MIN_SECONDS_PER_CUT}초 이상(권장 ${RECOMMENDED_SECONDS_PER_CUT}초)입니다 — 패널 수는 duration ÷ ${MIN_SECONDS_PER_CUT}을 넘지 않게(예: 12초면 최대 3패널). 시나리오에 짧은 컷이 많으면 비슷한 순간을 한 패널로 묶으세요. seconds는 쇼트 길이, 합이 duration과 같게.\n`
+                ? `- shots: 시나리오를 쇼트(컷 분할)로 나누세요. 쇼트 사이는 컷으로 끊깁니다. 시나리오가 '세 컷이 1초씩', '완전 부감', '클로즈업으로' 처럼 화면을 바꾸면 새 쇼트, 한 쇼트 안에서 카메라가 움직여 구도가 바뀌면 그 쇼트의 패널을 늘리세요(머무는 쇼트는 패널 1개). 패널 합계는 2~${MAX_PANELS_STORYBOARD}개입니다(스토리보드는 최대 ${MAX_PANELS_STORYBOARD}컷 — 시나리오가 길면 비슷한 순간을 한 컷으로 묶으세요). seconds는 쇼트 길이, 합이 duration과 같게.\n`
                 : `- shots: 인물별 연기 방식은 컷 없는 한 쇼트입니다. 쇼트 1개에 표정 비트(감정이 바뀌는 순간)를 패널로 2~${MAX_EXPRESSIONS}개 적으세요.\n`) +
               `- duration: 장면 길이(초). 시나리오에 타임코드(예: 02:02~02:18)가 있으면 그 길이로, 60초를 넘기지 마세요.\n` +
               `- extras: 이름 없는 사람들(군중·행인·병사 등)만. 사람이 없으면 빈 문자열로 두고, 배경·풍경은 opening에 쓰세요.\n` +
@@ -329,7 +329,6 @@ async function buildRequest(job: JobRow, data: ProjectData) {
               text:
                 `이 장면을 콘티처럼 컷 ${n}개로 나눠 설계하세요. panels 배열 길이는 정확히 ${n}개이고, 컷 1이 장면의 처음, 컷 ${n}이 끝입니다. 컷(콘티 칸)끼리는 카메라가 이어서 움직이거나(continuous), 컷 분할로 새 쇼트가 시작됩니다(cut) — link로 정하세요. 어디서 끊을지는 시나리오에 맞게 정하세요.\n` +
                 `- 반드시 시나리오 전체(처음부터 끝까지, 모든 기초 대사 포함)를 이 컷 ${n}개·${data.acting.duration}초 안에 담으세요. 컷 수가 시나리오의 장면 전환보다 적으면 비슷한 순간을 합치고, 시나리오 뒷부분을 빼지 마세요.\n` +
-                `- 한 컷 = 핵심 동작 하나(컷당 약 ${Math.round((data.acting.duration / Math.max(1, n)) * 10) / 10}초). 한 컷에 동작을 여러 개 늘어놓지 말고, 그 동작을 시선 → 준비 → 행동 → 접촉 → 정착으로 풀어 쓰세요. 다른 동작은 다른 컷으로.\n` +
                 (job.input.instruction?.includes("[처음부터 다시]")
                   ? `- 지금 있는 컷 제목·장면 묘사·연결은 무시하고 처음부터 다시 나누세요.\n`
                   : `- 현재 입력값의 컷 제목과 연결([컷 분할]/[이어짐])이 시나리오 전체를 담는 구성이면 따르고 내용만 채우세요. 시나리오 일부만 담고 있으면(예: 컷 수를 줄인 뒤 뒤쪽 컷이 잘림) 무시하고 다시 나누세요.\n`) +
@@ -488,7 +487,7 @@ async function buildRequest(job: JobRow, data: ProjectData) {
               `duration은 반드시 ${data.acting.duration}으로 두고, 구간은 0초에서 시작해 빈틈없이 이어져 ${data.acting.duration}초에서 끝나야 합니다. 모든 표정을 한 번씩 쓰세요. ` +
               `대사를 말할 시간이 충분하도록 하고(한국어 기준 1초에 약 4~5음절), transition에는 다음 표정으로 넘어가는 연기를 짧게 적으세요. 넘어짐·낙하·충돌처럼 빠른 동작만 있는 구간은 짧게 주어(0.5초 안팎) 영상 모델이 슬로모션으로 늘이지 않게 하세요.` +
               (data.mode === "storyboard"
-                ? ` 스토리보드 방식이라 컷 순서는 2단계 순서(컷 1, 2, 3 …) 그대로 두고 시간만 나누세요 — 순서를 바꾸면 컷 사이 연결이 깨집니다. 컷마다 ${MIN_SECONDS_PER_CUT}초 이상(권장 ${RECOMMENDED_SECONDS_PER_CUT}초)을 주세요(전체 길이가 모자라면 고르게). transition은 다음 컷으로 넘어가는 방식입니다: 다음 컷이 [컷 분할]이면 무엇에서 끊기는지(예: 숨이 끝나는 순간 컷), [이어짐]이면 카메라·몸이 어떻게 이어지는지. 초 단위 시각은 쓰지 마세요. transition은 이 컷의 장면 묘사·연결 상태 '끝'의 자세에서 출발해 다음 컷 '시작'의 자세로 이어져야 합니다 — 설계(그리고 그것으로 그린 러프 콘티)에 없는 새 자세·손 모양·동작을 만들지 마세요. 컷 길이는 그 컷 action의 동작을 모두 보여 줄 수 있게 주세요(동작이 많은 컷을 너무 짧게 주지 않기). 동작은 실제 속도로 무게 있게 하고, 남는 시간은 감정의 정점의 무빙 홀드(자세는 멈추고 숨·어깨·눈물만 움직임)와 동작 사이 멈춤에 주세요 — 동작을 느리게 늘이지 마세요.`
+                ? ` 스토리보드 방식이라 컷 순서는 2단계 순서(컷 1, 2, 3 …) 그대로 두고 시간만 나누세요 — 순서를 바꾸면 컷 사이 연결이 깨집니다. transition은 다음 컷으로 넘어가는 방식입니다: 다음 컷이 [컷 분할]이면 무엇에서 끊기는지(예: 숨이 끝나는 순간 컷), [이어짐]이면 카메라·몸이 어떻게 이어지는지. 초 단위 시각은 쓰지 마세요. transition은 이 컷의 장면 묘사·연결 상태 '끝'의 자세에서 출발해 다음 컷 '시작'의 자세로 이어져야 합니다 — 설계(그리고 그것으로 그린 러프 콘티)에 없는 새 자세·손 모양·동작을 만들지 마세요. 컷 길이는 그 컷 action의 동작을 모두 보여 줄 수 있게 주세요(동작이 많은 컷을 너무 짧게 주지 않기). 동작은 실제 속도로 무게 있게 하고, 남는 시간은 감정의 정점의 무빙 홀드(자세는 멈추고 숨·어깨·눈물만 움직임)와 동작 사이 멈춤에 주세요 — 동작을 느리게 늘이지 마세요.`
                 : ` transition에서 고개가 돌아가는 동안에도 정면 대칭 얼굴로 렌즈를 똑바로 보는 순간을 만들지 마세요 — 고개를 조금 돌리거나 기울인 채로 넘어가게 하세요.`) +
               (data.expressionSetup.scene.trim() ? ` '상황 설정·기초 대사'의 흐름(순서와 템포, 숨을 고르는 순간)을 따르세요.` : "") +
               `\n\n${ctx}${extra}`,

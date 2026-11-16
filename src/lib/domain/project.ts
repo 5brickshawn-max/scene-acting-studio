@@ -495,15 +495,6 @@ export const MAX_EXPRESSIONS = 8;
 /** Storyboard scenes keep fewer panels (each one is a whole picture with its own continuity). */
 export const MAX_PANELS_STORYBOARD = 8;
 export const maxPanelsFor = (mode: SceneMode) => (mode === "storyboard" ? MAX_PANELS_STORYBOARD : MAX_EXPRESSIONS);
-/**
- * Storyboard: a cut needs time for its one main action — at least 4 seconds (5 recommended). A video model
- * given 1.2–2 s cuts with several actions each skipped or blurred them (몰리송 tests, Nov 2026).
- */
-export const MIN_SECONDS_PER_CUT = 4;
-export const RECOMMENDED_SECONDS_PER_CUT = 5;
-/** How many storyboard cuts this length holds at 4 s or more each (never fewer than two). */
-export const maxCutsFor = (duration: number) =>
-  Math.min(MAX_PANELS_STORYBOARD, Math.max(MIN_EXPRESSIONS, Math.floor((duration || 0) / MIN_SECONDS_PER_CUT)));
 export const MAX_VIDEO_SECONDS = 60;
 
 /** Contiguous segments for `ids` (in order) sized by `weights`, snapped to 0.1s, ending exactly at `duration`. */
@@ -837,12 +828,8 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
     if (!isStoryboard(data) && data.cast.length > 1 && new Set(pos).size !== pos.length) warn("두 인물의 화면 위치가 같습니다. 겹쳐 서는 연출이 아니라면 위치를 나누세요.");
   }
 
-  if (step === 1 && isStoryboard(data) && data.expressions.length <= maxPanelsFor(data.mode) && data.expressions.length > maxCutsFor(data.acting.duration))
-    warn(
-      `컷 ${data.expressions.length}개는 ${data.acting.duration}초에 너무 많습니다(컷당 ${Math.round((data.acting.duration / data.expressions.length) * 10) / 10}초). 컷당 ${MIN_SECONDS_PER_CUT}초 이상(권장 ${RECOMMENDED_SECONDS_PER_CUT}초)이 되게 ${maxCutsFor(data.acting.duration)}컷 이하로 줄이거나 영상을 늘리세요 — 짧은 컷은 영상 모델이 동작을 건너뛰거나 뭉갭니다.`,
-    );
   if (step === 1 && data.expressions.length > maxPanelsFor(data.mode))
-    block(`${isStoryboard(data) ? "컷" : "표정"}이 ${data.expressions.length}개입니다. ${isStoryboard(data) ? "스토리보드" : "한"} 장면은 최대 ${maxPanelsFor(data.mode)}개입니다. 2단계 ①에서 ${maxPanelsFor(data.mode)}개 이하로 줄이세요(뒤쪽부터 빠지니, 줄인 뒤 ‘AI 콘티 설계’를 권장).`);
+    block(`${isStoryboard(data) ? "컷" : "표정"}이 ${data.expressions.length}개입니다. ${isStoryboard(data) ? "스토리보드" : "한"} 장면은 최대 ${maxPanelsFor(data.mode)}개입니다. 2단계 ①에서 ${maxPanelsFor(data.mode)}개 이하로 줄이세요(뒤쪽부터 빠지니, 줄인 뒤 ‘처음부터 다시 설계’를 권장).`);
   if (step === 1 && isStoryboard(data)) {
     // storyboard: each panel is described as a whole; no per-character acting or direction checks
     if (data.expressions.length !== data.expressionSetup.count) block("컷 수가 설정과 다릅니다.");
@@ -856,21 +843,8 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
       const noSketch = data.expressions.filter((e) => !e.sketchAssetId).length;
       if (noSketch) warn(`러프 콘티가 없는 컷이 ${noSketch}개 있습니다. 콘티 방식 영상에는 컷마다 러프 콘티가 들어갑니다.`);
       const changed = data.expressions.map((e, i) => (sketchIsStale(e) ? i + 1 : 0)).filter(Boolean);
-      if (data.cast.some((c) => isChildCharacter(`${c.locks} ${c.appearance}`))) {
-        const risky = data.expressions
-          .map((e, i) => ({ i, words: [...new Set(`${e.action} ${e.continuity}`.match(RISKY_WITH_CHILD) ?? [])] }))
-          .filter((x) => x.words.length);
-        if (risky.length)
-          warn(
-            `어린 인물이 나오는 장면입니다. ${risky.map((x) => `${x.i + 1}번 컷(${x.words.join("·")})`).join(", ")}의 몸 묘사가 그림·영상 검수(nsfw)에 걸릴 수 있습니다. 예: 엉덩이를 흔들며 → 몸을 좌우로 흔들며, 크롭 → 짧은 상의, 쪼그려 → 무릎을 굽혀 낮게.`,
-          );
-      }
       if (changed.length)
-        warn(`${changed.join("·")}번 컷: 러프 콘티를 그린 뒤 장면 묘사·카메라·연결 상태 글이 바뀌었습니다. 그림과 글이 다르면 영상이 한쪽을 무시합니다 — 콘티를 다시 그리거나 글을 그림에 맞추세요.`);
-    } else if (data.video.refMode === "auto" && data.expressions.some((e) => e.sketchAssetId)) {
-      // auto, some sketches drawn: the team is on the conti route — name the cuts still without one
-      const noSketch = data.expressions.map((e, i) => (e.sketchAssetId ? 0 : i + 1)).filter(Boolean);
-      warn(`러프 콘티가 없는 컷: ${noSketch.join("·")}번. 모든 컷에 러프 콘티가 있어야 콘티 방식으로 영상을 만듭니다(②의 ‘스케치 없는 컷만’).`);
+        warn(`${changed.join("·")}번 컷: 러프 콘티를 그린 뒤 장면 묘사·카메라·연결 상태 글이 바뀌었습니다. 그림과 글이 다르면 영상이 한쪽을 무시합니다 — 콘티를 다시 그리거나 AI 콘티 검사로 글을 그림에 맞추세요.`);
     } else {
       const missing = data.expressions.filter((e) => !e.imageAssetId).length;
       if (missing) warn(`그림이 없는 컷이 ${missing}개 있습니다. Higgsfield로 생성하거나 직접 올리세요. (러프 콘티만으로 영상을 만들려면 모든 컷에 러프 콘티를 넣으세요 — 콘티 방식)`);
@@ -1127,26 +1101,3 @@ export type Dimension = ProjectData["dimension"];
 export const DIMENSION_LABEL: Record<Dimension, string> = { "2d": "2D", "3d": "2.5D & 3D" };
 /** How the prompts name the look ("2D animation" / "3D & 2.5D animation"). */
 export const dimensionEn = (d: Pick<ProjectData, "dimension">) => (d.dimension === "2d" ? "2D" : "3D & 2.5D");
-
-/** A cast member described as a child (an age under 13, or words like 아이·소녀·child). */
-export function isChildCharacter(text: string): boolean {
-  const age = text.match(/(\d{1,2})\s*(?:[~～\-–]\s*\d{1,2}\s*)?(?:세|살|years?\s*old|yo\b)/i);
-  if (age && Number(age[1]) < 13) return true;
-  return /어린\s*(?:아이|여자|남자|소녀|소년)|여자\s*아이|남자\s*아이|꼬마|유아|초등|\bchild\b|\bkid\b|\btoddler\b|little (?:girl|boy)/i.test(text);
-}
-export const RISKY_WITH_CHILD =
-  /\bcrop(?:ped)? top\b|\bmidriff\b|\bhips?\b|\bbutt\b|\bthighs?\b|\bcleavage\b|\bbare\b|\bunderwear\b|\bbikini\b|\blatex\b|\bspread(?:ing|s)? (?:her|his|their) (?:knees|legs)\b|\bsquat(?:s|ting)?\b|\bsexy\b|\bseductive\b|엉덩이|크롭|배꼽|허벅지/gi;
-
-
-/**
- * A panel title as a short label: no time range ("0~2초 ·", "1.5–3s:") — the timeline decides time — and no
- * whole description (a long title is cut at its first clause).
- */
-export function panelTitle(t: string, max = 40): string {
-  let c = t.replace(/\s+/g, " ").trim();
-  c = c.replace(/^\(?\s*\d+(?:\.\d+)?\s*(?:초|s|sec)?\s*[~～\-–]\s*\d+(?:\.\d+)?\s*(?:초|s|sec|seconds?)\s*\)?\s*[·:.,\-–—|]?\s*/i, "");
-  if (c.length <= max) return c;
-  const cut = c.slice(0, max + 1).search(/[:：.。,，;；](?=\s|$)|\s[·—–-]\s/);
-  if (cut >= 8) return c.slice(0, cut).trim();
-  return `${c.slice(0, max).replace(/\s+\S*$/, "")}…`;
-}

@@ -6,7 +6,7 @@
  */
 import { hasCameraMove } from "./constraints";
 import { VIDEO_PROMPT_TARGET, cameraTextMoves, shownBeats, type VideoHandoff } from "./handoff";
-import { castLabel, continuityAnchor, imageAspectFor, imageIsStale, sketchIsStale, shotsOf, isChildCharacter, RISKY_WITH_CHILD, timelineOrder, usesConti, type ProjectData } from "./project";
+import { castLabel, continuityAnchor, imageAspectFor, imageIsStale, sketchIsStale, shotsOf, timelineOrder, usesConti, type ProjectData } from "./project";
 import { estimateSpeechSeconds } from "./speech";
 import { retime, timingMismatch } from "./timing";
 import { englishStale } from "./english";
@@ -59,6 +59,15 @@ export function sceneCameraSentences(scene: string): string {
 }
 
 const order0 = (d: ProjectData) => timelineOrder(d);
+
+/** A cast member described as a child (an age under 13, or words like 아이·소녀·child). */
+export function isChildCharacter(text: string): boolean {
+  const age = text.match(/(\d{1,2})\s*(?:[~～\-–]\s*\d{1,2}\s*)?(?:세|살|years?\s*old|yo\b)/i);
+  if (age && Number(age[1]) < 13) return true;
+  return /어린\s*(?:아이|여자|남자|소녀|소년)|여자\s*아이|남자\s*아이|꼬마|유아|초등|\bchild\b|\bkid\b|\btoddler\b|little (?:girl|boy)/i.test(text);
+}
+const RISKY_WITH_CHILD =
+  /\bcrop(?:ped)? top\b|\bmidriff\b|\bhips?\b|\bbutt\b|\bthighs?\b|\bcleavage\b|\bbare\b|\bunderwear\b|\bbikini\b|\blatex\b|\bspread(?:ing|s)? (?:her|his|their) (?:knees|legs)\b|\bsquat(?:s|ting)?\b|\bsexy\b|\bseductive\b|엉덩이|크롭|배꼽|허벅지/gi;
 
 /** How many "never / no" phrases a prompt carries before acting shrinks (the team's final prompt had about 10). */
 export const NEGATIVE_LIMIT = 14;
@@ -249,7 +258,7 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
       label: "4단계 시간 분배로",
     });
   const n = data.acting.segments.length;
-  if (n && duration / n < (data.mode === "storyboard" ? 4 : 2)) {
+  if (n && duration / n < 2) {
     const u = data.mode === "storyboard" ? "컷" : "표정";
     add("warn", `${u}당 시간`, `${u}당 ${r1(duration / n)}초로 짧아 전환이 급해질 수 있습니다.`, { kind: "goto", step: 1, label: `2단계 길이·${u} 수로` });
   }
@@ -261,15 +270,15 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
       const i = data.expressions.findIndex((e) => e.id === seg.expressionId);
       const e = data.expressions[i];
       const len = seg.end - seg.start;
-      if (!e || len >= 4) return [];
-      const busy = len < 1.5 ? cameraTextMoves(e.camera) || e.action.trim().length > 160 : true;
+      if (!e || len >= 1.5) return [];
+      const busy = cameraTextMoves(e.camera) || e.action.trim().length > 160;
       return busy ? [`${i + 1}번 컷 ${r1(len)}초`] : [];
     });
     if (crowded.length)
       add(
         "warn",
         "짧은 컷",
-        `${crowded.join(" · ")}: 컷당 4초(권장 5초)보다 짧아 영상 모델이 동작을 건너뛰거나 뭉갤 수 있습니다. 시간을 늘리거나(4단계), 컷 수를 줄이거나(2단계), 동작을 하나로 줄이세요.`,
+        `${crowded.join(" · ")}: 1.5초도 안 되는 컷에 카메라 움직임이나 여러 동작이 있어 영상 모델이 다 하지 못하고 건너뛰거나 뭉갤 수 있습니다. 시간을 늘리거나(4단계), 동작을 하나로 줄이거나, 고정 샷으로 바꾸세요.`,
         { kind: "goto", step: 3, label: "4단계 시간 분배로" },
       );
   }
@@ -312,7 +321,7 @@ export function guideIssues(data: ProjectData): CheckItem[] {
     if (data.mode === "storyboard" && data.expressions.length > 1) {
       const noHu = data.expressions.filter((e) => !e.continuity.trim());
       if (noHu.length === data.expressions.length || !data.expressionSetup.continuity.trim())
-        add("warn", "연결 상태(HU)", "장면 연결 규칙이나 컷마다의 연결 상태(시작/끝)가 비어 있습니다. 2단계 ‘AI 콘티 설계’로 채우면 컷 사이 좌우·위치·소품·시선이 이어지게 그리고 지시합니다.", { kind: "goto", step: 1, label: "2단계 설계로" });
+        add("warn", "연결 상태(HU)", "장면 연결 규칙이나 컷마다의 연결 상태(시작/끝)가 비어 있습니다. 2단계 ‘처음부터 다시 설계’로 채우면 컷 사이 좌우·위치·소품·시선이 이어지게 그리고 지시합니다.", { kind: "goto", step: 1, label: "2단계 설계로" });
       else if (noHu.length)
         add("warn", "연결 상태(HU)", `${noHu.map((e) => `${no(e.id)}번`).join(", ")} 컷의 연결 상태(시작/끝)가 비어 있습니다.`, { kind: "goto", step: 1, label: "2단계 컷 카드로" });
     }
@@ -320,5 +329,3 @@ export function guideIssues(data: ProjectData): CheckItem[] {
 
   return items;
 }
-
-export { isChildCharacter } from "./project";

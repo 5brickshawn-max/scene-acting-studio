@@ -16,16 +16,16 @@ describe("러프 콘티 (rough sketches)", () => {
     const hs = buildSketchHandoffs(d);
     expect(hs).toHaveLength(d.expressions.length);
     const p = hs[0].prompt;
-    expect(p).toContain("Loose black lines on plain white");
+    expect(p).toContain("black pencil lines on a plain white background");
     // one moment in one picture: never a sheet of small panels
-    expect(p).toContain("ONE 16:9 frame, ONE moment, one camera view");
-    expect(p).toContain("draw where it ends, not each step");
+    expect(p).toContain("ONE single image of ONE moment");
+    expect(p).toContain("draw only the single moment the action arrives at (its end pose), in one framing");
     expect(p).not.toMatch(/panel \d+ of \d+/);
     expect(p).toContain("no colour, no shading");
-    expect(p).toContain("Not its colours or detail");
-    expect(p).toContain("1번 순간: 샤리가 돌아선다");
-    expect(p).toContain("Camera: 로우 앵글 와이드.");
-    expect(p).toContain("샤리 (긴 금발 곱슬");
+    expect(p).toContain("Do NOT copy its colours");
+    expect(p).toContain("This moment: 1번 순간: 샤리가 돌아선다");
+    expect(p).toContain("Camera: 로우 앵글 와이드. Draw one framing only");
+    expect(p).toContain("샤리 (긴 금발 곱슬)");
     expect(hs[0].aspectRatio).toBe("16:9");
     expect(hs[0].references.map((r) => r.assetId)).toEqual(["scene-1"]);
   });

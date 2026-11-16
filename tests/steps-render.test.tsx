@@ -97,7 +97,7 @@ describe("step screens render for one and for several characters", () => {
     const acting = render(d, createElement(ActingStep, nav));
     expect(acting).toContain("컷 순서는 2단계 콘티 순서 그대로입니다");
     expect(acting).not.toContain('aria-label="앞으로"');
-    expect(s2).toContain("러프 콘티 바로 생성");
+    expect(s2).toContain("러프 콘티 전부 생성 (0컷)");
     expect(s2).toContain("앞 컷과의 연결");
     expect(s2).toContain("✂ 컷 분할 (새 쇼트)");
     expect(s2).toContain("쇼트 1");
@@ -146,6 +146,6 @@ describe("step screens render for one and for several characters", () => {
     const uploaded = render(d, createElement(CharacterStep, nav), [asset("gen-1", "my-drawing.png")]);
     expect(uploaded).toMatch(/aria-pressed="true"[^>]*>그림 올리기/);
     const s2 = render(d, createElement(ExpressionStep, nav));
-    expect(s2).not.toContain("처음부터 다시 설계");
+    expect(s2).toContain("컷 6개·8초로 처음부터 다시 설계");
   });
 });
