@@ -353,3 +353,15 @@ describe("panel titles", () => {
     expect(p).toContain("— 장면 1");
   });
 });
+
+describe("short storyboard cuts (guidance only)", () => {
+  it("warns under about 4 s a cut and never blocks", async () => {
+    const { cutLengthNotice, suggestedCutsFor, stepIssues } = await import("@/lib/domain/project");
+    const d = setDuration(setExpressionCount(createProjectData("길이", 1, "storyboard"), 5), 8);
+    expect(cutLengthNotice(d)).toContain("컷당 약 1.6초");
+    expect(suggestedCutsFor(8)).toBe(2);
+    const issue = stepIssues(d, 1).find((i) => i.message.includes("컷당 약"));
+    expect(issue?.level).toBe("warn");
+    expect(cutLengthNotice(setExpressionCount(d, 2))).toBe("");
+  });
+});

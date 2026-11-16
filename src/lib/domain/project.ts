@@ -495,6 +495,21 @@ export const MAX_EXPRESSIONS = 8;
 /** Storyboard scenes keep fewer panels (each one is a whole picture with its own continuity). */
 export const MAX_PANELS_STORYBOARD = 8;
 export const maxPanelsFor = (mode: SceneMode) => (mode === "storyboard" ? MAX_PANELS_STORYBOARD : MAX_EXPRESSIONS);
+/**
+ * Storyboard guidance only (nothing is blocked): a cut reads best with about 4 seconds or more for its one main
+ * action — at 1.2–2 s a video model skipped or blurred actions (몰리송 tests, Nov 2026).
+ */
+export const SUGGESTED_SECONDS_PER_CUT = 4;
+/** The cut count this length holds at about 4 s each (at least two). */
+export const suggestedCutsFor = (duration: number) =>
+  Math.min(MAX_PANELS_STORYBOARD, Math.max(MIN_EXPRESSIONS, Math.floor((duration || 0) / SUGGESTED_SECONDS_PER_CUT)));
+/** The short-cut notice for a storyboard (empty when the cuts have time enough). */
+export function cutLengthNotice(data: Pick<ProjectData, "mode" | "expressions" | "acting">): string {
+  if (data.mode !== "storyboard" || !data.expressions.length) return "";
+  const per = data.acting.duration / data.expressions.length;
+  if (per >= SUGGESTED_SECONDS_PER_CUT) return "";
+  return `컷당 약 ${Math.round(per * 10) / 10}초입니다(${data.acting.duration}초에 ${data.expressions.length}컷). 컷이 짧으면 영상 모델이 동작을 건너뛰거나 뭉갤 수 있으니, 컷당 ${SUGGESTED_SECONDS_PER_CUT}초 이상이 되게 ${suggestedCutsFor(data.acting.duration)}컷 안팎으로 줄이거나 영상을 늘리는 것을 권합니다(그대로 진행해도 됩니다).`;
+}
 export const MAX_VIDEO_SECONDS = 60;
 
 /** Contiguous segments for `ids` (in order) sized by `weights`, snapped to 0.1s, ending exactly at `duration`. */
@@ -828,6 +843,7 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
     if (!isStoryboard(data) && data.cast.length > 1 && new Set(pos).size !== pos.length) warn("두 인물의 화면 위치가 같습니다. 겹쳐 서는 연출이 아니라면 위치를 나누세요.");
   }
 
+  if (step === 1 && cutLengthNotice(data)) warn(cutLengthNotice(data));
   if (step === 1 && data.expressions.length > maxPanelsFor(data.mode))
     block(`${isStoryboard(data) ? "컷" : "표정"}이 ${data.expressions.length}개입니다. ${isStoryboard(data) ? "스토리보드" : "한"} 장면은 최대 ${maxPanelsFor(data.mode)}개입니다. 2단계 ①에서 ${maxPanelsFor(data.mode)}개 이하로 줄이세요(뒤쪽부터 빠지니, 줄인 뒤 ‘처음부터 다시 설계’를 권장).`);
   if (step === 1 && isStoryboard(data)) {

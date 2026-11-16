@@ -18,6 +18,7 @@ import {
   TILT_LABEL,
   MAX_EXPRESSIONS,
   MAX_PANELS_STORYBOARD,
+  cutLengthNotice,
   usesConti,
   sketchIsStale,
   withSketch,
@@ -763,6 +764,7 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
               </button>
             ))}
           </div>
+          {cutLengthNotice(d) && <p className="notice notice-warn text-[14px] mt-2">{cutLengthNotice(d)}</p>}
         </div>
         <DurationField />
         <div>
