@@ -38,11 +38,13 @@ import {
   INTENSITY_LABEL,
   PITCH_LABEL,
   TILT_LABEL,
+  type Dimension,
   type Expression,
   type Facing,
   type Gaze,
   type ProjectData,
   effectiveText,
+  dimensionEn,
 } from "./project";
 
 const FACING_EN: Record<Facing, string> = {
@@ -344,7 +346,7 @@ export function buildExpressionHandoffs(data: ProjectData, fixes: Record<string,
   const anchorNo = anchor ? data.expressions.findIndex((x) => x.id === anchor.id) + 1 : 0;
   // 영어 정리: short English for the parts that still match the design (the Korean is used otherwise)
   const en = freshEnglish(data);
-  const style = studioStyle(en.style ?? clean(data.style));
+  const style = studioStyle(en.style ?? clean(data.style), data.dimension);
   return data.expressions.map((e, i) => {
     const eb = en.beats.get(e.id);
     const actor = beatActor(data, e);
@@ -373,7 +375,7 @@ export function buildExpressionHandoffs(data: ProjectData, fixes: Record<string,
       `Image reference ${refIndex} is a grid of ${s.refColumns}x${s.refRows} expression panels drawn in another style. Use ONLY panel ${e.panel} (counting left to right, top to bottom) as a guide for ${
         multi ? `${actorName}'s` : "the"
       } facial acting${s.transfer === "expression_and_pose" ? " and head pose" : ""}. Do NOT copy its drawing style, line weight, colors, proportions or character design.`;
-    const styleLine = style && `Art style: ${style.replace(/[.。]+$/, "")}. Keep this 3D & 2.5D animation style${multi ? " for every character" : ""}; never photorealistic.`;
+    const styleLine = style && `Art style: ${style.replace(/[.。]+$/, "")}. Keep this ${dimensionEn(data)} animation style${multi ? " for every character" : ""}; never photorealistic.`;
 
     if (!multi) {
       const prompt = [
@@ -470,7 +472,7 @@ export function buildFrameHandoff(data: ProjectData, expressionId: string, shot:
   const references = identityRefs(data);
   const momentRef = e.imageAssetId ? references.length + 1 : 0;
   if (e.imageAssetId) references.push({ role: `image reference ${momentRef}`, assetId: e.imageAssetId, why: "이 순간의 표정·자세" });
-  const style = studioStyle(en.style ?? clean(data.style));
+  const style = studioStyle(en.style ?? clean(data.style), data.dimension);
   const actorName = castName(data, beatActor(data, e).id);
   const prompt = [
     multi
@@ -482,7 +484,7 @@ export function buildFrameHandoff(data: ProjectData, expressionId: string, shot:
       ? `Image reference ${momentRef} is the exact moment to draw: the same facial expressions, head directions, arms and hands${multi ? " of every character" : ""}. Only the camera framing changes to this shot size; never change the acting.`
       : `${multi ? `${actorName} acts this moment. ` : ""}Expression: ${INTENSITY_EN[e.intensity]} ${eb?.emotion ?? e.emotion}. ${eb ? sentence(eb.face) : ""} ${directionEn(e)}`,
     ...castLookEn(data, en, { appearance: false, outfit: false, max: multi ? 5 : 8 }),
-    style && `Art style: ${style.replace(/[.。]+$/, "")}. Keep ${multi ? "every character" : "the character"} in this 3D & 2.5D animation style; never photorealistic.`,
+    style && `Art style: ${style.replace(/[.。]+$/, "")}. Keep ${multi ? "every character" : "the character"} in this ${dimensionEn(data)} animation style; never photorealistic.`,
     directorBackground(director) ? `Background as in this direction: ${clip(director, 400) || director.slice(0, 400)}` : "Plain white background.",
     multi
       ? `Composition: the characters in their screen positions; every head and any headwear inside the frame with a little headroom; fill the ${data.video.aspectRatio} frame at this shot size (no white bars or padding).`
@@ -1037,7 +1039,7 @@ export function buildVideoHandoff(
     directorCamera && !rig && (hasCameraMove([director]) ? "카메라 움직임: 추가 연출을 따름 (제약사항대로 핸드헬드)" : "카메라: 추가 연출을 따름"),
     angle && "카메라 각도: 추가 연출을 따름 (앱의 ‘눈높이’ 문장 뺌)",
     background && "배경: 추가 연출을 따름 (앱의 ‘흰 배경’ 문장 뺌). 참고 그림이 흰 배경이라 영상도 흰 배경으로 나올 수 있습니다",
-    realBackground && "그림체: 인물은 3D & 2.5D 애니메이션 그대로, 배경만 추가 연출의 실사 스타일을 따름 (앱의 ‘never photorealistic’은 인물에만 적용)",
+    realBackground && `그림체: 인물은 ${dimensionEn(data)} 애니메이션 그대로, 배경만 추가 연출의 실사 스타일을 따름 (앱의 ‘never photorealistic’은 인물에만 적용)`,
   ].filter((x): x is string => Boolean(x));
 
   /** `fixed` = the texts for the model (English where fresh, reconciled); otherwise the team's original wording (for the summary). */
@@ -1130,18 +1132,18 @@ export function buildVideoHandoff(
       return look ? `${who}${noEndDot(look)}` : "";
     }).filter(Boolean);
   };
-  const styleText = studioStyle(en.style ?? data.style);
+  const styleText = studioStyle(en.style ?? data.style, data.dimension);
   const headerWith = (B: Budget) =>
     [
       `ONE single continuous shot with no cuts: a ${data.acting.duration}-second ${multi ? `${data.cast.length}-character scene` : "character acting shot"}, ${data.video.aspectRatio}. Every beat below is a moment of this same shot; never cut away or change the shot.`,
       multi && `Cast (exactly these ${data.cast.length} characters, always in these screen positions; nobody else): ${blockingEn(data)}.`,
       lookFor(B).length && `Keep visible${multi ? " — " : ": "}${lookFor(B).join(multi ? " | " : "; ")}.`,
       styleText.trim() &&
-        `Art style: ${((s) => (s ? `${sentence(s)} ` : ""))(en.style ? clip(studioStyle(en.style), Math.max(B.style, 160)) : clip(studioStyle(data.style), B.style))}${
+        `Art style: ${((s) => (s ? `${sentence(s)} ` : ""))(en.style ? clip(studioStyle(en.style, data.dimension), Math.max(B.style, 160)) : clip(studioStyle(data.style, data.dimension), B.style))}${
           realBackground
-            ? "Keep the character in this 3D & 2.5D animation style (never photorealistic); only the background follows the DIRECTOR'S DIRECTION."
-            : "Stay in this 3D & 2.5D animation style; never photorealistic."
-        }${keepPainted(styleText)}`,
+            ? `Keep the character in this ${dimensionEn(data)} animation style (never photorealistic); only the background follows the DIRECTOR'S DIRECTION.`
+            : `Stay in this ${dimensionEn(data)} animation style; never photorealistic.`
+        }${keepPainted(styleText, data.dimension)}`,
       multi
         ? `Match the reference images exactly: every character keeps their own face, hair, colors, costume and the shared drawing style; never swap or blend features between characters. Each character's face shape, eye shape and size, nose, hairline and body proportions stay identical in every beat; only the expression muscles (brows, eyelids, mouth) and the poses change.`
         : `Match the reference images exactly: same face, hair, colors, costume and drawing style. Only one character appears. The face shape, eye shape and size, nose, hairline and body proportions stay identical in every beat; only the expression muscles (brows, eyelids, mouth) and the pose change.`,
@@ -1203,12 +1205,12 @@ export function buildVideoHandoff(
   const directorBlock = director
     ? `DIRECTOR'S DIRECTION (the director's own words: follow exactly; where it differs from the general camera, framing or background lines above, this wins):\n${director}`
     : "";
-  const constraints = constraintsFor(rig, data.video.weight, data.video.cadence);
+  const constraints = constraintsFor(rig, data.video.weight, data.video.cadence, data.dimension);
   const assemble = (B: Budget) => [headerWith(B), beatsWith(B).join("\n\n"), directorBlock, constraints].filter(Boolean).join("\n\n");
   // a group scene needs room for the cast, the voices and every character's acting per beat
   // the studio block grew (weight, camera, sound): its extra length is not taken from the beats
   const lengthTarget =
-    (enBeats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) + (multi ? VIDEO_PROMPT_EXTRA_PER_CHARACTER * (data.cast.length - 1) : 0) + constraintsExtra(constraints) + keepPainted(styleText).length +
+    (enBeats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) + (multi ? VIDEO_PROMPT_EXTRA_PER_CHARACTER * (data.cast.length - 1) : 0) + constraintsExtra(constraints) + keepPainted(styleText, data.dimension).length +
     ACTING_EN.length + arcLine(en.arc).length;
   let prompt = "";
   for (const B of BUDGETS) {
@@ -1233,7 +1235,7 @@ export function buildVideoHandoff(
     overrides,
     directorBlock,
     lengthTarget,
-    negativePrompt: negativePrompt(data.video.weight, data.video.cadence),
+    negativePrompt: negativePrompt(data.video.weight, data.video.cadence, data.dimension),
   };
 }
 
@@ -1304,12 +1306,11 @@ export function endState(state: string): string {
   return clean(m.length > 1 ? m[m.length - 1] : state);
 }
 
-/** The studio works in 3D & 2.5D: a style text that says "2D" (an older AI guess, or typed by hand) is read that way. */
 /** A painted style (brushwork, lines, cel shading) on 3D forms: video models tend to render it as glossy CG instead. */
 const PAINTED = /painterly|watercolou?r|gouache|brush|\bink\b|cel[- ]?shad|outline|line art|\blines?\b|hand[- ]painted|회화|수채|과슈|붓|선화|셀/i;
-export const keepPainted = (style: string) =>
+export const keepPainted = (style: string, dim: Dimension = "3d") =>
   PAINTED.test(style)
-    ? " Every frame keeps the hand-painted surface — visible brushwork, the drawn outlines and the flat cel-shading steps — on the 3D forms, like a painted feature film rather than a glossy CG render with plastic skin."
+    ? ` Every frame keeps the hand-painted surface — visible brushwork, the drawn outlines and the flat cel-shading steps — ${dim === "2d" ? "on every drawing" : "on the 3D forms"}, like a painted feature film rather than a glossy CG render with plastic skin.`
     : "";
 /**
  * The acting doctrine from the team's Seedance 2.5 tests (SH04_3 SHOT 1, Nov 2026): emotion is the protagonist,
@@ -1337,7 +1338,15 @@ export function startState(state: string): string {
   return m ? clean(m[1]) : "";
 }
 
-export function studioStyle(style: string): string {
+/**
+ * The look's dimension wins over loose words in the style text: in a 3D & 2.5D project a style that says "2D"
+ * (an older AI guess, or typed by hand) is read as 3D & 2.5D; in a 2D project "3D" wording is read as 2D.
+ */
+export function studioStyle(style: string, dim: Dimension = "3d"): string {
+  if (dim === "2d")
+    return style
+      .replace(/3D\s*(?:&|and|\/)\s*2\.5D|2\.5D\s*(?:&|and|\/)\s*3D/gi, "2D")
+      .replace(/(^|[^\w.])(?:2\.5D|3D)(?= animation| animated| look| style)/gi, "$12D");
   return style.replace(/(^|[^\d.])2D(?!\w)/g, "$13D & 2.5D").replace(/(^|[^\w.])2[- ]?D animation/gi, "$13D & 2.5D animation");
 }
 
@@ -1365,7 +1374,7 @@ function storyboardRefs(data: ProjectData): ReferenceSlot[] {
 function buildStoryboardHandoffs(data: ProjectData, fixes: Record<string, string> = {}): ExpressionHandoff[] {
   const aspect = data.video.aspectRatio;
   const en = freshEnglish(data);
-  const style = studioStyle(en.style ?? clean(data.style));
+  const style = studioStyle(en.style ?? clean(data.style), data.dimension);
   const anchor = continuityAnchor(data);
   const n = data.expressions.length;
   const shots = shotsOf(data);
@@ -1422,7 +1431,7 @@ function buildStoryboardHandoffs(data: ProjectData, fixes: Record<string, string
         `Image reference 1 is the scene reference drawing: use it for the look of the named characters, their relative sizes, the art style, the colors and the world of this scene — NOT for its composition, camera angle, framing or poses. This panel must not be a copy of that picture: frame it as described for this panel.`,
       ...storyboardCastEn(data, en),
       ...extraRefsEn(data, references),
-      style && `Art style: ${style.replace(/[.。]+$/, "")}. Keep this 3D & 2.5D animation style for everyone in the frame; never photorealistic.`,
+      style && `Art style: ${style.replace(/[.。]+$/, "")}. Keep this ${dimensionEn(data)} animation style for everyone in the frame; never photorealistic.`,
       usesAnchor &&
         (shotAnchor
           ? `Image reference ${references.findIndex((r) => r.why.startsWith("연결 기준")) + 1} is panel ${anchorNoHere}, earlier in this same shot: keep its world, lighting, line quality and character designs; follow this panel's own composition, camera and the states below.`
@@ -1503,7 +1512,7 @@ function buildStoryboardFrame(data: ProjectData, expressionId: string, shot: Fra
   const references = storyboardRefs(data);
   const momentRef = e.imageAssetId ? references.length + 1 : 0;
   if (e.imageAssetId) references.push({ role: `image reference ${momentRef}`, assetId: e.imageAssetId, why: "이 컷의 순간" });
-  const style = studioStyle(en.style ?? clean(data.style));
+  const style = studioStyle(en.style ?? clean(data.style), data.dimension);
   const prompt = [
     `One frame of a ${data.video.aspectRatio} ${data.video.aspectRatio === "9:16" ? "vertical" : "horizontal"} video, ${FRAMING_FRAME_EN[shot].split(":")[0]} framing of the moment below. No panels, no text.`,
     data.baseAssetId && `Image reference 1 is the scene reference drawing (named characters, style, world).`,
@@ -1511,7 +1520,7 @@ function buildStoryboardFrame(data: ProjectData, expressionId: string, shot: Fra
     momentRef
       ? `Image reference ${momentRef} is the exact moment to draw: the same poses and acting of everyone in it; only the camera framing changes to this shot size.`
       : t.action && `This moment: ${sentence(t.action)}`,
-    style && `Art style: ${style.replace(/[.。]+$/, "")}. 3D & 2.5D animation; never photorealistic.`,
+    style && `Art style: ${style.replace(/[.。]+$/, "")}. ${dimensionEn(data)} animation; never photorealistic.`,
     `Fill the ${data.video.aspectRatio} frame (no white bars or padding).`,
   ]
     .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
@@ -1630,7 +1639,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         ? `A ${data.acting.duration}-second animated scene, ${data.video.aspectRatio}, edited in ${shots.length} shots: ${shots.map((sh, i) => `shot ${i + 1} = ${rangeOf(sh)}`).join("; ")}. Cut ONLY where a beat says HARD CUT; inside a shot the camera travels continuously from one panel's framing to the next.`
         : `ONE single continuous shot with no cuts: a ${data.acting.duration}-second animated scene, ${data.video.aspectRatio}. The beats below follow storyboard panels — successive moments of this same shot; the camera travels continuously from one panel's framing to the next and never cuts.`,
       ...storyboardCastEn(data, en, B.features, B.features * 50),
-      (en.style || data.style.trim()) && `Art style: ${sentence(clip(studioStyle(en.style ?? data.style), 200) || clean(studioStyle(en.style ?? data.style)).slice(0, 200))} Stay in this 3D & 2.5D animation style; never photorealistic.${keepPainted(en.style ?? data.style)}`,
+      (en.style || data.style.trim()) && `Art style: ${sentence(clip(studioStyle(en.style ?? data.style, data.dimension), 200) || clean(studioStyle(en.style ?? data.style, data.dimension)).slice(0, 200))} Stay in this ${dimensionEn(data)} animation style; never photorealistic.${keepPainted(en.style ?? data.style, data.dimension)}`,
       conti
         ? `LOOK (most important): every frame is a finished, fully coloured picture with the colour grading, light, atmosphere and brushwork of the scene picture and the art style below. The storyboard sketches are black-and-white layout guides only; every frame of the video is fully painted. The character design sheets give identity only (face, hair shape, body, costume design) — where this scene changes how a character looks (e.g. hair bleached by the sun, dust, a washed-out palette), follow the scene's description and the scene picture over the sheet's colours. The background references give the world; everyone keeps their proportions and appears once.`
         : `Match the reference images exactly: the named characters' faces, hair, colors and costumes, the world, the lighting and the drawing style; nobody's proportions change and no character is duplicated.`,
@@ -1694,7 +1703,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
   const firstExp = data.expressions.find((x) => x.id === data.acting.segments[0]?.expressionId);
   const zero = firstExp ? startState(panelTexts(data, firstExp, en).state) : "";
   const frameZero = zero ? `Frame zero: ${sentence(clip(zero, 220) || zero.slice(0, 220))}` : "";
-  const constraints = constraintsFor(rig, data.video.weight, data.video.cadence);
+  const constraints = constraintsFor(rig, data.video.weight, data.video.cadence, data.dimension);
   // room for the named characters beyond four (their names, features and voices)
   // each panel past six carries its own action, camera and line
   const lengthTarget =
@@ -1702,7 +1711,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
     Math.max(0, data.cast.length - 4) * 200 +
     Math.max(0, data.acting.segments.length - 6) * 250 +
     constraintsExtra(constraints) +
-    keepPainted(en.style ?? data.style).length +
+    keepPainted(en.style ?? data.style, data.dimension).length +
     // the acting doctrine, the arc and frame zero are written once and never cut
     ACTING_EN.length + arcLine(en.arc).length + frameZero.length + COMPOSITION_EN.length;
   let prompt = "";
@@ -1726,7 +1735,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
     overrides,
     directorBlock,
     lengthTarget,
-    negativePrompt: negativePrompt(data.video.weight, data.video.cadence),
+    negativePrompt: negativePrompt(data.video.weight, data.video.cadence, data.dimension),
   };
 }
 
@@ -1751,7 +1760,7 @@ export function buildSceneImageHandoff(data: ProjectData): SceneImageHandoff {
   for (const id of extraRefsFitting(data, references, 0))
     references.push({ role: `image reference ${references.length + 1}`, assetId: id, why: "추가 참고 그림" });
   const refOf = (id: string) => references.findIndex((r) => r.characterId === id) + 1;
-  const style = studioStyle(en.style ?? clean(data.style));
+  const style = studioStyle(en.style ?? clean(data.style), data.dimension);
   const scene = clean(data.opening) || clip(data.expressionSetup.scene, 600) || clean(data.expressionSetup.scene).slice(0, 600);
   const people = data.cast.map((c) => {
     const f = en.cast.get(c.id);
@@ -1771,7 +1780,7 @@ export function buildSceneImageHandoff(data: ProjectData): SceneImageHandoff {
     ...people,
     ...extraRefsEn(data, references).filter((l) => !l.includes("design sheet")),
     story && data.extras.trim() && `Crowd and background people (unnamed): ${noEndDot(clean(data.extras))}.`,
-    style && `Art style: ${style.replace(/[.。]+$/, "")}. 3D & 2.5D animation style; never photorealistic.`,
+    style && `Art style: ${style.replace(/[.。]+$/, "")}. ${dimensionEn(data)} animation style; never photorealistic.`,
     scene && (story || multi) && `The moment: ${sentence(scene)}`,
     !story && multi && `Background: plain and light so every character reads clearly.`,
     `No text, no labels, no name tags, no borders.`,

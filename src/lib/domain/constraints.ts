@@ -75,8 +75,9 @@ const SECONDARY: Record<WeightLevel, string> = {
 };
 
 /** For models with a negative-prompt field (e.g. Kling on its own site); the app does not put these words in the prompt itself. */
-export function negativePrompt(weight: WeightLevel = "heavy", cadence: Cadence = "full"): string {
+export function negativePrompt(weight: WeightLevel = "heavy", cadence: Cadence = "full", dimension: "2d" | "3d" = "3d"): string {
   const common =
+    (dimension === "2d" ? "3D render, CGI, plastic 3D look, " : "") +
     (cadence === "stepped" ? "smooth interpolation, " : "") +
     "motion blur, morphing, melting shapes, gimbal-smooth camera, tripod shot, locked-off shot, background music, text, subtitles";
   const light =
@@ -91,9 +92,17 @@ export const STUDIO_CONSTRAINTS = constraintsFor(null);
  * The constraints block for one video. The camera part follows the director's rig when they name one other
  * than handheld (Steadicam, gimbal, tripod, dolly …), instead of contradicting it.
  */
-export function constraintsFor(rig: string | null, weight: WeightLevel = "heavy", cadence: Cadence = "full"): string {
+export function constraintsFor(rig: string | null, weight: WeightLevel = "heavy", cadence: Cadence = "full", dimension: "2d" | "3d" = "3d"): string {
   const secondary = cadence === "stepped" ? SECONDARY[weight].replace("[SECONDARY ACTION]", "[SECONDARY ACTION — also on ones]") : SECONDARY[weight];
-  return [MOTION[cadence], WEIGHT[weight], rig ? cameraRig(rig, cadence) : CAMERA_HANDHELD[cadence], SOUND, secondary].join("\n\n");
+  // a 2D project: the same cadence, drawn — a hand-drawn 2D film, drawings that keep their volume
+  const motion =
+    dimension === "2d"
+      ? MOTION[cadence]
+          .replace("A stylized 2.5D & 3D animated feature film.", "A hand-drawn 2D animated feature film.")
+          .replace("2.5D & 3D animation.", "2D animation.")
+          .replace("Shapes keep their volume and design from frame to frame", "Every drawing keeps the characters' volume and design from frame to frame")
+      : MOTION[cadence];
+  return [motion, WEIGHT[weight], rig ? cameraRig(rig, cadence) : CAMERA_HANDHELD[cadence], SOUND, secondary].join("\n\n");
 }
 
 /** The studio's earlier wording, still in many directors' texts: paragraphs repeating it are left out too. */

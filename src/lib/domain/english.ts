@@ -24,7 +24,8 @@ export function textKey(s: string): string {
 export function englishSources(d: ProjectData) {
   return {
     language: d.dialogue.language.trim(),
-    style: d.style.trim(),
+    // a 2D project's English style is written for 2D (3D & 2.5D keeps the older key)
+    style: d.dimension === "2d" && d.style.trim() ? `2d|${d.style.trim()}` : d.style.trim(),
     continuity: d.mode === "storyboard" ? d.expressionSetup.continuity.trim() : "",
     /** the arc follows the whole design: any panel, transition or line change makes it stale */
     arc: d.expressions.length ? `arc1|${d.expressionSetup.scene.trim()}|${beatSources(d).join("|")}` : "",

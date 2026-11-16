@@ -3,7 +3,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { z } from "zod";
 import sharp from "sharp";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { readProjectData, usesConti, castLabel, effectiveText, maxCastFor, MAX_EXPRESSIONS, MAX_PANELS_STORYBOARD, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
+import { readProjectData, dimensionEn, usesConti, castLabel, effectiveText, maxCastFor, MAX_EXPRESSIONS, MAX_PANELS_STORYBOARD, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
 import {
   ActingOut,
   CharacterOut,
@@ -253,8 +253,10 @@ async function buildRequest(job: JobRow, data: ProjectData) {
                 ? `- ${pictured.join(", ")}은(는) 위에 설정화(참고 그림)가 있습니다. 이 인물들의 locks·appearance·outfit은 반드시 그 그림에 보이는 그대로 쓰세요: 머리 색·길이·모양, 눈 색, 피부, 의상의 색·모양·장신구, 체형. 아래 '팀이 적어 둔 인물 메모'가 그림과 다르면(이전 AI 제안이 남아 있을 수 있음) 메모를 버리고 그림을 따르세요. 메모를 실제로 고친 경우에만 무엇을 고쳤는지 questions에 한 줄로 남기고, 메모가 비었거나 그림과 같아 고친 것이 없으면 그 내용은 questions에 쓰지 마세요. 시나리오가 요구하는 이 장면만의 소품·상태(예: 건네받는 숄, 모래 묻은 머리)는 그림의 의상 위에 덧붙이세요. 단, 팀의 확인 답변이 정한 의상·변장은 그 답을 따르세요.\n`
                 : "") +
               `- 설정화가 없는 인물은 팀 메모를 따르고, 없는 부분은 시나리오의 시대·장소·분위기에 맞게 정하되 지어낸 핵심 결정은 questions에 '…로 정했습니다, 맞나요?'처럼 남기세요.\n` +
-              `- style: ${data.baseAssetId || refs.length ? "참고 그림의 그림체를 따라" : "시나리오의 장르·분위기에 맞는 3D & 2.5D 애니메이션 그림체로"} 선·채색·명암·색감을 구체적으로.\n` +
-              `  그림체는 반드시 '3D & 2.5D' 애니메이션으로 쓰세요(2D라고 쓰지 마세요). 사실적인 실사는 아닙니다.\n` +
+              `- style: ${data.baseAssetId || refs.length ? "참고 그림의 그림체를 따라" : `시나리오의 장르·분위기에 맞는 ${dimensionEn(data)} 애니메이션 그림체로`} 선·채색·명암·색감을 구체적으로.\n` +
+              (data.dimension === "2d"
+                ? `  이 장면은 2D 애니메이션입니다. 그림체는 반드시 '2D' 애니메이션으로 쓰세요(3D·2.5D라고 쓰지 마세요). 사실적인 실사는 아닙니다.\n`
+                : `  그림체는 반드시 '3D & 2.5D' 애니메이션으로 쓰세요(2D라고 쓰지 마세요). 사실적인 실사는 아닙니다.\n`) +
               (data.mode === "storyboard"
                 ? `- shots: 시나리오를 쇼트(컷 분할)로 나누세요. 쇼트 사이는 컷으로 끊깁니다. 시나리오가 '세 컷이 1초씩', '완전 부감', '클로즈업으로' 처럼 화면을 바꾸면 새 쇼트, 한 쇼트 안에서 카메라가 움직여 구도가 바뀌면 그 쇼트의 패널을 늘리세요(머무는 쇼트는 패널 1개). 패널 합계는 2~${MAX_PANELS_STORYBOARD}개입니다(스토리보드는 최대 ${MAX_PANELS_STORYBOARD}컷 — 시나리오가 길면 비슷한 순간을 한 컷으로 묶으세요). seconds는 쇼트 길이, 합이 duration과 같게.\n`
                 : `- shots: 인물별 연기 방식은 컷 없는 한 쇼트입니다. 쇼트 1개에 표정 비트(감정이 바뀌는 순간)를 패널로 2~${MAX_EXPRESSIONS}개 적으세요.\n`) +
@@ -613,7 +615,9 @@ async function buildRequest(job: JobRow, data: ProjectData) {
             text:
               `아래 설계를 그림·영상 생성 모델에 넣을 짧은 영어로 정리하세요. 번역문을 늘어놓지 말고, 생성 모델이 바로 따를 수 있게 보이는 것과 움직임만 압축하세요. 설계에 없는 내용은 더하지 마세요.\n` +
               `- language: 대사 언어의 영어 이름\n` +
-              `- style: 장면 그림체를 영어 한 문장 ('3D & 2.5D animation'으로 표기, 2D라고 쓰지 말 것)\n` +
+              (data.dimension === "2d"
+                ? `- style: 장면 그림체를 영어 한 문장 ('2D animation'으로 표기, 3D·2.5D라고 쓰지 말 것)\n`
+                : `- style: 장면 그림체를 영어 한 문장 ('3D & 2.5D animation'으로 표기, 2D라고 쓰지 말 것)\n`) +
               `- cast: 인물마다 하나씩(character = 인물 번호). look은 '유지할 특징'과 '외형'에서 그림에 보이는 식별 요소를 색·모양·위치까지 구체적인 영어 명사구로, 중요한 순서로 최대 8개${
                 multi ? " (다른 인물과 구별되는 요소를 앞에)" : ""
               }. outfit, voice는 각각 영어 한 문장\n` +
