@@ -1101,3 +1101,16 @@ export type Dimension = ProjectData["dimension"];
 export const DIMENSION_LABEL: Record<Dimension, string> = { "2d": "2D", "3d": "2.5D & 3D" };
 /** How the prompts name the look ("2D animation" / "3D & 2.5D animation"). */
 export const dimensionEn = (d: Pick<ProjectData, "dimension">) => (d.dimension === "2d" ? "2D" : "3D & 2.5D");
+
+/**
+ * A panel title as a short label: no time range ("0~2초 ·", "1.5–3s:") — the timeline decides time — and no
+ * whole description (a long title is cut at its first clause).
+ */
+export function panelTitle(t: string, max = 40): string {
+  let c = t.replace(/\s+/g, " ").trim();
+  c = c.replace(/^\(?\s*\d+(?:\.\d+)?\s*(?:초|s|sec)?\s*[~～\-–]\s*\d+(?:\.\d+)?\s*(?:초|s|sec|seconds?)\s*\)?\s*[·:.,\-–—|]?\s*/i, "");
+  if (c.length <= max) return c;
+  const cut = c.slice(0, max + 1).search(/[:：.。,，;；](?=\s|$)|\s[·—–-]\s/);
+  if (cut >= 8) return c.slice(0, cut).trim();
+  return `${c.slice(0, max).replace(/\s+\S*$/, "")}…`;
+}

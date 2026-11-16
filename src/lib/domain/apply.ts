@@ -21,6 +21,7 @@ import {
   type Expression,
   type ProjectData,
   panelBasis,
+  panelTitle,
 } from "./project";
 
 export type CharacterField = "locks" | "appearance" | "outfit" | "style" | "questions";
@@ -108,7 +109,7 @@ export function applyComposition(data: ProjectData, out: SceneComposeOutT, field
       const p = st.panels[i];
       const opensShot = i > 0 && p.shot !== st.panels[i - 1].shot;
       return st.story
-        ? { ...e, emotion: p.title, link: opensShot ? ("cut" as const) : ("continuous" as const) }
+        ? { ...e, emotion: panelTitle(p.title), link: opensShot ? ("cut" as const) : ("continuous" as const) }
         : { ...e, notes: e.notes.trim() || p.title, link: "continuous" as const };
     });
     const ids = expressions.map((e) => e.id);
@@ -198,7 +199,7 @@ export function applyStoryboard(data: ProjectData, out: StoryboardOutT, indexes?
     return withReactionsFor(data.cast, {
       ...prev,
       characterId: speaker,
-      emotion: o.title,
+      emotion: panelTitle(o.title),
       action: o.action,
       camera: o.camera,
       continuity: o.state ?? prev.continuity,

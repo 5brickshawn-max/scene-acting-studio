@@ -63,7 +63,7 @@ export const SceneComposeOut = z.object({
         title: z.string().describe("쇼트 내용 한 줄 (예: 입술 특대 클로즈업)"),
         seconds: z.number().describe("이 쇼트의 길이(초)"),
         panels: z
-          .array(z.string().describe("패널(콘티 칸) 한 줄 설명: 이 쇼트 안에서 카메라나 연기가 크게 달라지는 순간"))
+          .array(z.string().describe("패널(콘티 칸) 제목, 짧게 25자 안팎(예: 가로등 기둥을 돌아 자리 바꾸기). 초 단위 시간(0~2초 등)·카메라 설명·긴 묘사는 쓰지 말 것 — 내용은 다음 단계의 장면 묘사에"))
           .describe("이 쇼트 안의 패널, 순서대로. 카메라가 한 구도에 머무는 쇼트는 1개, 쇼트 안에서 카메라가 움직여 구도가 바뀌면 바뀌는 구도마다 1개"),
       }),
     )
@@ -129,7 +129,7 @@ export const StoryboardOut = z.object({
     ),
   panels: z.array(
     z.object({
-      title: z.string().describe("컷 제목, 짧게 (예: 군중이 갈라지며 칼리엘라 등장)"),
+      title: z.string().describe("컷 제목, 짧게 25자 안팎 (예: 군중이 갈라지며 칼리엘라 등장). 초 단위 시간·카메라 설명은 쓰지 말 것"),
       action: z.string().describe("이 순간 화면 전체에서 일어나는 일: 누가 어디서 무엇을 하는지, 군중·소품, 표정과 자세의 핵심 (2~4문장)"),
       camera: z.string().describe("이 컷의 카메라: 샷 크기·앵글·다음 컷까지의 움직임 (한 문장)"),
       state: z

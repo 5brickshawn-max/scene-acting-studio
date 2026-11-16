@@ -298,7 +298,8 @@ const LEASE_MS = 90_000;
 
 async function lockWorkspace(workspaceId: string) {
   const sb = supabaseAdmin();
-  for (let i = 0; i < 60; i++) {
+  // wait up to two minutes: several pictures finishing at once queue here briefly (30 s turned that into failures)
+  for (let i = 0; i < 240; i++) {
     const now = new Date();
     const { data } = await sb
       .from("higgsfield_connections")
