@@ -6,7 +6,7 @@
  */
 import { hasCameraMove } from "./constraints";
 import { VIDEO_PROMPT_TARGET, cameraTextMoves, shownBeats, type VideoHandoff } from "./handoff";
-import { castLabel, continuityAnchor, imageAspectFor, imageIsStale, sketchIsStale, shotsOf, timelineOrder, usesConti, type ProjectData } from "./project";
+import { castLabel, continuityAnchor, imageAspectFor, imageIsStale, sketchIsStale, shotsOf, isChildCharacter, RISKY_WITH_CHILD, timelineOrder, usesConti, type ProjectData } from "./project";
 import { estimateSpeechSeconds } from "./speech";
 import { retime, timingMismatch } from "./timing";
 import { englishStale } from "./english";
@@ -59,15 +59,6 @@ export function sceneCameraSentences(scene: string): string {
 }
 
 const order0 = (d: ProjectData) => timelineOrder(d);
-
-/** A cast member described as a child (an age under 13, or words like 아이·소녀·child). */
-export function isChildCharacter(text: string): boolean {
-  const age = text.match(/(\d{1,2})\s*(?:[~～\-–]\s*\d{1,2}\s*)?(?:세|살|years?\s*old|yo\b)/i);
-  if (age && Number(age[1]) < 13) return true;
-  return /어린\s*(?:아이|여자|남자|소녀|소년)|여자\s*아이|남자\s*아이|꼬마|유아|초등|\bchild\b|\bkid\b|\btoddler\b|little (?:girl|boy)/i.test(text);
-}
-const RISKY_WITH_CHILD =
-  /\bcrop(?:ped)? top\b|\bmidriff\b|\bhips?\b|\bbutt\b|\bthighs?\b|\bcleavage\b|\bbare\b|\bunderwear\b|\bbikini\b|\blatex\b|\bspread(?:ing|s)? (?:her|his|their) (?:knees|legs)\b|\bsquat(?:s|ting)?\b|\bsexy\b|\bseductive\b|엉덩이|크롭|배꼽|허벅지/gi;
 
 /** How many "never / no" phrases a prompt carries before acting shrinks (the team's final prompt had about 10). */
 export const NEGATIVE_LIMIT = 14;
@@ -312,7 +303,7 @@ export function guideIssues(data: ProjectData): CheckItem[] {
     if (data.mode === "storyboard" && data.expressions.length > 1) {
       const noHu = data.expressions.filter((e) => !e.continuity.trim());
       if (noHu.length === data.expressions.length || !data.expressionSetup.continuity.trim())
-        add("warn", "연결 상태(HU)", "장면 연결 규칙이나 컷마다의 연결 상태(시작/끝)가 비어 있습니다. 2단계 ‘처음부터 다시 설계’로 채우면 컷 사이 좌우·위치·소품·시선이 이어지게 그리고 지시합니다.", { kind: "goto", step: 1, label: "2단계 설계로" });
+        add("warn", "연결 상태(HU)", "장면 연결 규칙이나 컷마다의 연결 상태(시작/끝)가 비어 있습니다. 2단계 ‘AI 콘티 설계’로 채우면 컷 사이 좌우·위치·소품·시선이 이어지게 그리고 지시합니다.", { kind: "goto", step: 1, label: "2단계 설계로" });
       else if (noHu.length)
         add("warn", "연결 상태(HU)", `${noHu.map((e) => `${no(e.id)}번`).join(", ")} 컷의 연결 상태(시작/끝)가 비어 있습니다.`, { kind: "goto", step: 1, label: "2단계 컷 카드로" });
     }
@@ -320,3 +311,5 @@ export function guideIssues(data: ProjectData): CheckItem[] {
 
   return items;
 }
+
+export { isChildCharacter } from "./project";

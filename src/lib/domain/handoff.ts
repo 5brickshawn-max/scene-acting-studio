@@ -1491,11 +1491,19 @@ export function buildSketchHandoffs(data: ProjectData, fixes: Record<string, str
     })
     .filter(Boolean)
     .join(". ");
+  const shots = shotsOf(data);
+  const order = shots.flat();
   return data.expressions.map((e, i) => {
     const t = panelTexts(data, e, en);
     const references: ReferenceSlot[] = data.baseAssetId
       ? [{ role: "image reference 1", assetId: data.baseAssetId, why: "장면 기준 그림 — 누가 누구인지·배경 배치만 (색·그림체는 따르지 않음)" }]
       : [];
+    // the nearest earlier sketch: in this shot (same place and set), else the shot before (same characters)
+    const shot = shots.find((sh) => sh.includes(e.id)) ?? [e.id];
+    const earlier = order.slice(0, Math.max(0, order.indexOf(e.id))).reverse();
+    const sketchOf = (id: string) => data.expressions.find((x) => x.id === id)?.sketchAssetId;
+    const prevId = earlier.find((id) => shot.includes(id) && sketchOf(id)) ?? earlier.find((id) => sketchOf(id));
+    const prevSameShot = Boolean(prevId && shot.includes(prevId));
     // the character sheets: body shapes and costume outlines (a heart-shaped emoji, a sock body) the text cannot carry
     const sheets = data.cast.filter((c) => c.refAssetId);
     for (const c of sheets)
@@ -1504,13 +1512,21 @@ export function buildSketchHandoffs(data: ProjectData, fixes: Record<string, str
       const no = (data.baseAssetId ? 2 : 1) + k;
       return `Image reference ${no} is the design sheet of ${castName(data, c.id)}: copy only the outline — body shape, head and hair shape, costume silhouette (sleeves, hems, hats) and how many hands or feet they have. Not its colours or rendering.`;
     });
+    const prevNo = prevId ? references.length + 1 : 0;
+    if (prevId) references.push({ role: `image reference ${prevNo}`, assetId: sketchOf(prevId)!, why: `앞 컷(${data.expressions.findIndex((x) => x.id === prevId) + 1}번) 러프 콘티 — 연속성` });
+    const prevLine =
+      prevId &&
+      (prevSameShot
+        ? `Image reference ${prevNo} is the sketch of panel ${data.expressions.findIndex((x) => x.id === prevId) + 1}, earlier in this SAME shot: keep the same place and set, the same characters with the same body shapes, costume outlines and size order, drawn in the same rough line style; change only what this panel's description and camera change.`
+        : `Image reference ${prevNo} is the sketch of panel ${data.expressions.findIndex((x) => x.id === prevId) + 1} from the shot before (a hard cut comes between): keep the same characters with the same body shapes, costume outlines and size order, drawn in the same rough line style; the framing is new, and the place is new when the description says so.`);
     const fix = fixes[e.id]?.trim();
     const prompt = [
       `A rough sketch of one ${aspect} film frame: ONE single image of ONE moment that fills the whole frame — never a storyboard sheet, a grid, a contact sheet, a comic page or a sequence of small frames; exactly one camera view. Quick loose black pencil lines on a plain white background. Simple lines only — no colour, no shading, no grey fills, no texture, no rendering; simple gesture figures with readable poses, faces only as simple shapes and eye lines, like a director's thumbnail. No borders, no text, no arrows, no numbers.`,
       `The description below may list several steps of an action (look → prepare → act → contact → settle) and a camera move from a start to an end framing: draw only the single moment the action arrives at (its end pose), in one framing — do not draw each step or each framing as a separate picture, and do not draw anything that happens after the description ends.`,
       data.baseAssetId &&
-        "Image reference 1 is the finished scene picture: use it ONLY to know who is who (silhouettes, hair shapes, sizes) and how the set is laid out. Do NOT copy its colours, shading, detail or art style — this must stay a rough line sketch.",
+        "Image reference 1 is the finished scene picture: use it ONLY to know who is who (silhouettes, hair shapes, sizes) and, when this panel is in the same place, how the set is laid out. When the description or continuity puts this panel somewhere else or at another time (another street, night), draw THAT place instead — never the set of the picture. Do NOT copy its colours, shading, detail or art style — this must stay a rough line sketch.",
       ...sheetLines,
+      prevLine,
       who && `Characters who may appear: ${who}. Draw only those this moment needs, each with the same body shape and size order in every panel.`,
       costumes && `What they wear in this scene (draw the outline; the continuity below says what changes, e.g. a hat put on): ${costumes}.`,
       fix && `Corrections from the review of the previous sketch of this panel (fix these; keep everything else): ${sentence(clean(fix).slice(0, 900))}`,

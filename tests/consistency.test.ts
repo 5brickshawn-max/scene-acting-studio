@@ -338,3 +338,21 @@ describe("rough conti redraw loop", () => {
     expect(h.prompt).toContain("its end pose");
   });
 });
+
+describe("rough conti in two rounds", () => {
+  it("a later cut of a shot sees the earlier sketch of its shot; a shot start sees the shot before", async () => {
+    const { buildSketchHandoffs } = await import("@/lib/domain/handoff");
+    let d = setExpressionCount(createProjectData("라운드", 1, "storyboard"), 4);
+    d.expressions = d.expressions.map((e, i) => ({ ...e, action: `동작 ${i + 1}`, link: i === 2 ? ("cut" as const) : ("continuous" as const), sketchAssetId: i === 0 ? "sk-1" : i === 2 ? "sk-3" : null }));
+    const hs = buildSketchHandoffs(d);
+    expect(hs[1].references.map((r) => r.assetId)).toContain("sk-1");
+    expect(hs[1].prompt).toContain("earlier in this SAME shot");
+    expect(hs[3].references.map((r) => r.assetId)).toContain("sk-3");
+    // a shot start redrawn later sees the previous shot (a hard cut between)
+    d = { ...d, expressions: d.expressions.map((e, i) => (i === 1 ? { ...e, sketchAssetId: "sk-2" } : e)) };
+    const again = buildSketchHandoffs(d)[2];
+    expect(again.references.map((r) => r.assetId)).toContain("sk-2");
+    expect(again.prompt).toContain("from the shot before");
+    expect(buildSketchHandoffs(d)[0].references.some((r) => r.assetId.startsWith("sk-"))).toBe(false);
+  });
+});
