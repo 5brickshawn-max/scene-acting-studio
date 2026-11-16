@@ -753,8 +753,8 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
         <h3 className="section-title">① 컷 수·영상 길이·화면 비율</h3>
         {d.expressions.length > MAX_PANELS_STORYBOARD && (
           <p className="notice notice-warn">
-            지금 컷이 {d.expressions.length}개입니다. 스토리보드 장면은 최대 {MAX_PANELS_STORYBOARD}컷이라 줄여야 합니다. 아래에서 컷 수를 고르면 뒤쪽 컷부터 빠지니, 그다음 ‘처음부터 다시
-            설계’로 시나리오 전체를 새 컷 수에 맞춰 나누세요.
+            지금 컷이 {d.expressions.length}개입니다. 스토리보드 장면은 최대 {MAX_PANELS_STORYBOARD}컷이라 줄여야 합니다. 아래에서 컷 수를 고르면 뒤쪽 컷부터 빠지니, 그다음 ‘AI
+            콘티 설계’로 시나리오 전체를 새 컷 수에 맞춰 나누세요.
           </p>
         )}
         <div>
@@ -799,20 +799,6 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
           disabledReason="1단계에서 장면 기준 그림을 먼저 올리세요."
           description={`시나리오 전체를 컷 ${s.count}개·${d.acting.duration}초에 담아 제목·장면 묘사·카메라·연결·말하는 인물을 제안합니다. 러프 스케치를 올린 컷은 그 구도를 따릅니다.`}
         />
-        <div className="rounded-lg border border-line bg-[#f7f8fa] p-3 space-y-2">
-          <p className="text-[14px]">
-            컷 수나 영상 길이를 바꾸면 지금 컷 내용은 그대로 남습니다(컷 수를 줄이면 <strong>뒤쪽 컷이 빠집니다</strong>). 시나리오 전체를 지금 컷 수·길이로 새로 나누려면
-            처음부터 다시 설계하세요. 그 뒤 대사(3단계)·타임라인(4단계)도 다시 맞추는 것이 좋습니다.
-          </p>
-          <AiAction
-            kind="design_expressions"
-            step={1}
-            label={`컷 ${s.count}개·${d.acting.duration}초로 처음부터 다시 설계`}
-            instruction={`[처음부터 다시] 지금 컷 수 ${s.count}개와 영상 길이 ${d.acting.duration}초에 맞춰 시나리오 전체를 다시 나눠 주세요.`}
-            disabled={!d.baseAssetId}
-            disabledReason="1단계에서 장면 기준 그림을 먼저 올리세요."
-          />
-        </div>
         <PendingProposal step={1} except={["check_sheet"]} />
         <Field
           label="장면 연결 규칙 (모든 컷이 지킴: 180도 축·화면 좌우, 장소 지리, 빛 방향, 의상·소품 변화, 동선)"
@@ -834,7 +820,6 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
         <ShotStrip />
         <GuidePanel />
         <SketchGenerator />
-        {conti && <PendingProposal step={1} kinds={["check_sheet"]} />}
         <ol className="grid xl:grid-cols-2 gap-4">
           {d.expressions.map((e, i) => (
             <PanelCard key={e.id} e={e} index={i} />
@@ -859,26 +844,6 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
         </div>
       </details>
 
-      <section className="space-y-4">
-        <h3 className="section-title">④ {conti ? "러프 콘티 검사" : "컷 그림 검사"}</h3>
-        <AiAction
-          kind="check_sheet"
-          step={1}
-          label={conti ? "AI로 러프 콘티 검사 (구도·배치·연결)" : "AI로 컷 그림 검사"}
-          disabled={!d.expressions.some((e) => (conti ? e.sketchAssetId : e.imageAssetId))}
-          disabledReason={conti ? "러프 콘티를 만들면 검사할 수 있습니다." : "컷 그림을 생성하거나 올리면 검사할 수 있습니다."}
-          description={
-            conti
-              ? "러프 콘티가 장면 묘사·카메라대로인지, 컷끼리 좌우·위치·시선·소품이 이어지는지 확인합니다(선 그림이라 그림체·색은 보지 않음)."
-              : "장면 묘사대로인지, 주요 인물이 섞이지 않았는지, 컷끼리 한 쇼트처럼 이어지는지 확인합니다."
-          }
-        />
-        {conti ? (
-          <p className="field-help">검사 결과(글 보정 제안)는 ③ 러프 콘티 생성 바로 아래에 뜹니다.</p>
-        ) : (
-          <PendingProposal step={1} kinds={["check_sheet"]} />
-        )}
-      </section>
     </StepFrame>
   );
 }
@@ -948,7 +913,7 @@ function PanelCard({ e, index }: { e: Expression; index: number }) {
           />
           {sketchIsStale(e) && (
             <p className="notice notice-warn text-[13px]">
-              이 콘티를 그린 뒤 장면 묘사·카메라·연결 상태 글이 바뀌었습니다. 그림과 글이 다르면 영상이 한쪽을 무시합니다 — 콘티를 다시 그리거나, ④ AI 콘티 검사로 글을 그림에 맞추세요.
+              이 콘티를 그린 뒤 장면 묘사·카메라·연결 상태 글이 바뀌었습니다. 그림과 글이 다르면 영상이 한쪽을 무시합니다 — 콘티를 다시 그리거나 글을 그림에 맞추세요.
             </p>
           )}
           <SketchRedoButton expressionId={e.id} hasSketch={Boolean(e.sketchAssetId)} />

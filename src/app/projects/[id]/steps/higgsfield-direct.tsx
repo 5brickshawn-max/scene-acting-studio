@@ -13,7 +13,7 @@ import {
 } from "@/lib/higgsfield/models";
 import type { AssetView, JobView } from "@/lib/types";
 import { AssetPicker } from "../ui";
-import { FRAMING_LABEL, ratioLabel, castLabel, continuityAnchor, imageAspectFor, imageIsStale, timelineOrder, usesConti, withSketch, type Framing } from "@/lib/domain/project";
+import { FRAMING_LABEL, ratioLabel, castLabel, continuityAnchor, imageAspectFor, imageIsStale, timelineOrder, usesConti, withSketch, shotsOf, type Framing } from "@/lib/domain/project";
 import { useEditor } from "../editor-context";
 
 /** The team's fixed models: rough conti sketches with Nano Banana, every finished picture with GPT Image. */
@@ -263,7 +263,7 @@ export function SceneImageGenerator({ onUse }: { onUse: (assetId: string) => voi
  * its panel's 러프 스케치 slot (newest wins); a panel can then be redone alone or replaced by hand.
  */
 export function SketchGenerator() {
-  const { doc, canEdit, jobs, assets, askAi } = useEditor();
+  const { doc, canEdit, jobs } = useEditor();
   const h = useHfJobs("hf_sketch");
   const model: ImageModelKey = SKETCH_MODEL;
   const exps = doc.data.expressions;
@@ -294,70 +294,119 @@ export function SketchGenerator() {
 
   const runningFor = (id: string) => h.running.some((j) => (j.input as { expressionId?: string }).expressionId === id);
 
-  // Once every cut has its sketch (nothing generating), the AI conti check runs by itself — after a full set, not
-  // after one or two redrawn cuts: re-checking every redraw found new small things each time and never ended.
-  const lastCheck = jobs.jobs.find((j) => j.kind === "check_sheet");
-  const sketches = drawable.map((e) => (e.sketchAssetId ? assets.get(e.sketchAssetId) : undefined));
-  const newestSketch = Math.max(0, ...sketches.map((a) => (a ? Date.parse(a.createdAt) : 0)));
-  const sketchKey = drawable.map((e) => e.sketchAssetId ?? "").join(",");
-  const checkDue =
-    canEdit &&
-    usesConti(doc.data) &&
-    drawable.length > 0 &&
-    sketches.every(Boolean) &&
-    !h.running.length &&
-    !h.pending.length &&
-    !h.quote &&
-    lastCheck?.status !== "queued" &&
-    lastCheck?.status !== "running" &&
-    (!lastCheck || Date.parse(lastCheck.created_at) < newestSketch) &&
-    // most of the set is new since the last check (a full generation), or there was no check yet
-    (!lastCheck ||
-      sketches.filter((a) => a && Date.parse(a.createdAt) > Date.parse(lastCheck.created_at)).length >= Math.ceil(drawable.length / 2));
-  const autoChecked = useRef(new Set<string>());
+  // 2라운드 생성: ① the first cut of every shot, together; ② every other cut, together — each drawn while it sees
+  // the earlier sketch of its own shot (same place, characters, costumes, sizes). Continuity of a cut-by-cut
+  // sequence at about the speed of one batch (7 cuts one by one took 5–7 minutes; two rounds take 2–3).
+  const order = shotsOf(doc.data).flat().filter((id) => drawable.some((e) => e.id === id));
+  const no = (id: string) => exps.findIndex((e) => e.id === id) + 1;
+  const [rounds, setRounds] = useState<{ phase: 1 | 2; ids: string[]; rest: string[]; since: number } | null>(null);
+  const [roundsNote, setRoundsNote] = useState<string | null>(null);
+  const [pendingRounds, setPendingRounds] = useState<{ first: string[]; rest: string[] } | null>(null);
+  /** split targets: a cut goes first when no earlier cut of its shot is drawn or being drawn now */
+  const split = (targets: string[]) => {
+    const shots = shotsOf(doc.data);
+    const first: string[] = [];
+    const rest: string[] = [];
+    for (const id of order.filter((x) => targets.includes(x))) {
+      const shot = shots.find((sh) => sh.includes(id)) ?? [id];
+      const before = shot.slice(0, shot.indexOf(id));
+      const seen = before.some((b) => (targets.includes(b) ? true : Boolean(exps.find((e) => e.id === b)?.sketchAssetId)));
+      (seen ? rest : first).push(id);
+    }
+    return { first, rest };
+  };
+  const startRounds = (targets: string[]) => {
+    const r = split(targets);
+    if (!r.first.length) return;
+    setRoundsNote(null);
+    setPendingRounds(r);
+    void ask(r.first);
+  };
+  const roundsConfirmed = () => {
+    if (!pendingRounds) return;
+    setRounds({ phase: 1, ids: pendingRounds.first, rest: pendingRounds.rest, since: Date.now() - 30_000 });
+    setPendingRounds(null);
+  };
   useEffect(() => {
-    if (!checkDue || autoChecked.current.has(sketchKey)) return;
-    autoChecked.current.add(sketchKey);
-    void askAi("check_sheet", 1);
-  }, [checkDue, sketchKey, askAi]);
-  const checking = lastCheck && (lastCheck.status === "queued" || lastCheck.status === "running");
+    if (!rounds || !canEdit) return;
+    const mine = (j: (typeof jobs.jobs)[number], id: string) =>
+      j.kind === "hf_sketch" && (j.input as { expressionId?: string }).expressionId === id && Date.parse(j.created_at) >= rounds.since;
+    const state = rounds.ids.map((id) => {
+      const js = jobs.jobs.filter((j) => mine(j, id));
+      const done = js.find((j) => j.status === "done" && jobAssetId(j));
+      if (done) return doc.data.expressions.find((e) => e.id === id)?.sketchAssetId === jobAssetId(done) ? "done" : "applying";
+      return js.some((j) => j.status === "failed") ? "failed" : "running";
+    });
+    if (state.some((x) => x === "running" || x === "applying")) return;
+    const failed = rounds.ids.filter((_, k) => state[k] === "failed");
+    if (rounds.phase === 1 && rounds.rest.length) {
+      const rest = rounds.rest;
+      setRounds({ phase: 2, ids: rest, rest: [], since: Date.now() - 5_000 });
+      void h.generate({ target: "sketch", model, expressionIds: rest }).then((ok) => {
+        if (!ok) {
+          setRounds(null);
+          setRoundsNote("나머지 컷을 요청하지 못해 멈췄습니다. ‘스케치 없는 컷만’으로 이어서 그리세요.");
+        }
+      });
+      if (failed.length) setRoundsNote(`${failed.map(no).join("·")}번 컷이 실패했습니다(그 쇼트의 나머지는 앞 컷 없이 그립니다). 카드에서 그 컷만 다시 그리세요.`);
+      return;
+    }
+    setRounds(null);
+    setRoundsNote(
+      failed.length
+        ? `${failed.map(no).join("·")}번 컷이 실패했습니다. 카드에서 그 컷만 다시 그리세요(앞 컷의 콘티를 보고 그립니다).`
+        : "러프 콘티를 모두 그렸습니다. 마음에 안 드는 컷은 카드에서 그 컷만 다시 그리세요(앞 컷의 콘티를 보고 그립니다).",
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs.jobs, doc.data.expressions, rounds, canEdit]);
 
   return (
     <div className="rounded-lg border border-line bg-[#f7fbf5] p-4 space-y-3" aria-labelledby="hf-sketch">
       <div>
         <div id="hf-sketch" className="font-semibold">러프 콘티 바로 생성 (Higgsfield)</div>
         <p className="field-help">
-          컷마다 장면 묘사·카메라대로 <strong>흰 배경에 단순한 선으로만</strong> 그린 러프 콘티를 한 번에 만들어 각 컷의 ‘러프 스케치’ 칸에 넣습니다. 마음에 안
-          드는 컷은 카드에서 그 컷만 다시 생성하거나 직접 그린 그림으로 바꾸세요. 컷 그림은 이 구도를 따릅니다. 구독 크레딧이 차감됩니다(품질 낮음으로 저렴하게).
+          컷마다 장면 묘사·카메라대로 <strong>흰 배경에 단순한 선으로만</strong> 러프 콘티를 그립니다. <strong>두 라운드</strong>로 빠르게: ① 쇼트마다 첫 컷을
+          한꺼번에, ② 나머지 컷을 한꺼번에 — 나머지 컷은 같은 쇼트의 앞 컷 콘티를 보고 그려서 장소·인물·의상·크기가 이어집니다(모두 약 2~3분). 결과는 각 컷의
+          ‘러프 스케치’ 칸에 바로 들어갑니다. 마음에 안 드는 컷은 카드에서 그 컷만 다시 그리세요. 구독 크레딧이 컷 수만큼 차감됩니다.
         </p>
       </div>
       <p className="text-[13px] text-muted">생성 모델: <strong className="text-ink">{IMAGE_MODELS[model].label}</strong> (러프 콘티는 이 모델로 고정)</p>
-      {!h.quote && (
+      {!h.quote && !rounds && order.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          <button className="btn btn-dark" disabled={!ready || !drawable.length} onClick={() => ask(drawable.map((e) => e.id))}>
-            {h.busy ? "비용 확인 중…" : `러프 콘티 전부 생성 (${drawable.length}컷)`}
+          <button className="btn btn-dark" disabled={!ready} onClick={() => startRounds(order)}>
+            {h.busy && pendingRounds ? "비용 확인 중…" : `러프 콘티 전부 생성 (${order.length}컷)`}
           </button>
-          {missing.length > 0 && missing.length < drawable.length && (
-            <button className="btn btn-sm" disabled={!ready} onClick={() => ask(missing)}>
+          {missing.length > 0 && missing.length < order.length && (
+            <button className="btn btn-sm" disabled={!ready} onClick={() => startRounds(missing)}>
               스케치 없는 컷만 ({missing.length}컷)
             </button>
           )}
         </div>
       )}
+      {rounds && (
+        <p className="notice notice-info" aria-live="polite">
+          {rounds.phase === 1
+            ? `1라운드: 쇼트마다 첫 컷(${rounds.ids.map(no).join("·")}번)을 그리는 중…${rounds.rest.length ? ` 끝나면 나머지 ${rounds.rest.length}컷을 이어서 그립니다.` : ""}`
+            : `2라운드: 나머지 ${rounds.ids.length}컷(${rounds.ids.map(no).join("·")}번)을 앞 컷을 보며 그리는 중…`}
+        </p>
+      )}
+      {roundsNote && <p className="notice notice-info">{roundsNote}</p>}
       {!drawable.length && <p className="field-help">컷마다 장면 묘사나 카메라를 먼저 쓰세요(②의 AI 콘티 설계).</p>}
       {drawable.length < exps.length && drawable.length > 0 && (
         <p className="field-help">장면 묘사·카메라가 비어 있는 컷 {exps.length - drawable.length}개는 건너뜁니다.</p>
       )}
-      <QuoteBox h={h} />
-      <Status h={h} typical="20초~1분" />
-      {h.running.length > 0 && <p className="field-help" aria-live="polite">생성 중: {exps.filter((e) => runningFor(e.id)).map((e) => `${exps.indexOf(e) + 1}번`).join(", ")} 컷</p>}
-      {usesConti(doc.data) && (
-        <p className="field-help" aria-live="polite">
-          {checking
-            ? "AI가 러프 콘티와 컷 글을 비교하는 중… 끝나면 아래에 글 보정 제안이 뜹니다."
-            : "러프 콘티를 전부 생성하면 AI가 그림과 컷 글(장면 묘사·카메라·연결 상태)을 자동으로 한 번 비교해 제안을 띄웁니다. 컷 몇 개만 다시 그린 뒤에는 자동으로 다시 검사하지 않습니다(필요하면 ④에서 검사)."}
-        </p>
-      )}
+      <QuoteBox
+        h={h}
+        onConfirmed={roundsConfirmed}
+        onCancel={() => setPendingRounds(null)}
+        note={
+          pendingRounds?.rest.length
+            ? `1라운드(쇼트 첫 컷 ${pendingRounds.first.length}장) 비용입니다. 이어서 나머지 ${pendingRounds.rest.length}장을 그려 모두 ${pendingRounds.first.length + pendingRounds.rest.length}장만큼 차감됩니다.`
+            : null
+        }
+      />
+      <Status h={h} typical="1~2분" />
+      {h.running.length > 0 && !rounds && <p className="field-help" aria-live="polite">생성 중: {exps.filter((e) => runningFor(e.id)).map((e) => `${exps.indexOf(e) + 1}번`).join(", ")} 컷</p>}
     </div>
   );
 }
