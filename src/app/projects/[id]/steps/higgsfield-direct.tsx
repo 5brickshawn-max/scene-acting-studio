@@ -13,7 +13,7 @@ import {
 } from "@/lib/higgsfield/models";
 import type { AssetView, JobView } from "@/lib/types";
 import { AssetPicker } from "../ui";
-import { FRAMING_LABEL, ratioLabel, castLabel, continuityAnchor, imageAspectFor, imageIsStale, timelineOrder, usesConti, withSketch, shotsOf, type Framing } from "@/lib/domain/project";
+import { FRAMING_LABEL, ratioLabel, castLabel, continuityAnchor, imageAspectFor, imageIsStale, timelineOrder, withSketch, shotsOf, type Framing } from "@/lib/domain/project";
 import { useEditor } from "../editor-context";
 
 /** The team's fixed model: GPT Image 2.6 for the rough conti sketches and every finished picture. */
@@ -513,7 +513,8 @@ export function HiggsfieldDirect({
   const stale = exps.filter((e) => imageIsStale(e, framing, aspect)).length;
 
   // the newest AI picture review: its notes per panel, for panels whose image has not been redrawn since
-  const review = usesConti(data) ? undefined : jobs.jobs.find((j) => j.kind === "check_sheet" && j.status === "done");
+  // storyboard: no picture check any more (the conti is drawn in order instead); cast mode keeps its review fixes
+  const review = data.mode === "storyboard" ? undefined : jobs.jobs.find((j) => j.kind === "check_sheet" && j.status === "done");
   const reviewFix = (() => {
     const out = review?.output as { issues?: { panel: number | null; severity: "high" | "low"; message: string }[] } | null;
     const by = new Map<string, { text: string[]; high: boolean }>();
