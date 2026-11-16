@@ -272,3 +272,27 @@ describe("composition rule (storyboard)", () => {
     expect(buildSketchHandoffs(d)[0].prompt).toContain("never drawn frontal in a horizontally symmetrical frame");
   });
 });
+
+describe("review fixes (몰리송 test)", () => {
+  it("a voice-over line keeps mouths closed in the panel image; lists are not cut after their first item; child wording is flagged", async () => {
+    const { buildExpressionHandoffs, buildVideoHandoff } = await import("@/lib/domain/handoff");
+    const { preRenderCheck, isChildCharacter } = await import("@/lib/domain/check");
+    const d = setExpressionCount(createProjectData("춤", 1, "storyboard"), 2);
+    d.expressions = d.expressions.map((e, i) => ({ ...e, action: i === 0 ? "Hana drops her hips into a squat, fists on hips." : "동작" }));
+    d.dialogue.lines = [{ expressionId: d.expressions[0].id, line: "One, two!", meaning: "", delivery: "", vo: true }];
+    const img = buildExpressionHandoffs(d)[0].prompt;
+    expect(img).toContain("is a voice-over heard over the picture");
+    expect(img).not.toContain("mouth open mid-word");
+    d.dialogue.lines[0].vo = false;
+    expect(buildExpressionHandoffs(d)[0].prompt).toContain("mouth open mid-word");
+
+    expect(isChildCharacter("5~7세쯤의 작은 여자아이")).toBe(true);
+    expect(isChildCharacter("30대 여성, 키 170cm")).toBe(false);
+    d.cast[0] = { ...d.cast[0], appearance: "5~7세쯤의 작은 여자아이" };
+    const h = buildVideoHandoff(d, "references");
+    const warn = preRenderCheck(d, h).find((i) => i.area === "어린이 표현");
+    expect(warn?.text).toContain("hips");
+    d.cast[0] = { ...d.cast[0], appearance: "30대 여성" };
+    expect(preRenderCheck(d, buildVideoHandoff(d, "references")).find((i) => i.area === "어린이 표현")).toBeUndefined();
+  });
+});

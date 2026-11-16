@@ -60,6 +60,15 @@ export function sceneCameraSentences(scene: string): string {
 
 const order0 = (d: ProjectData) => timelineOrder(d);
 
+/** A cast member described as a child (an age under 13, or words like 아이·소녀·child). */
+export function isChildCharacter(text: string): boolean {
+  const age = text.match(/(\d{1,2})\s*(?:[~～\-–]\s*\d{1,2}\s*)?(?:세|살|years?\s*old|yo\b)/i);
+  if (age && Number(age[1]) < 13) return true;
+  return /어린\s*(?:아이|여자|남자|소녀|소년)|여자\s*아이|남자\s*아이|꼬마|유아|초등|\bchild\b|\bkid\b|\btoddler\b|little (?:girl|boy)/i.test(text);
+}
+const RISKY_WITH_CHILD =
+  /\bcrop(?:ped)? top\b|\bmidriff\b|\bhips?\b|\bbutt\b|\bthighs?\b|\bcleavage\b|\bbare\b|\bunderwear\b|\bbikini\b|\blatex\b|\bspread(?:ing|s)? (?:her|his|their) (?:knees|legs)\b|\bsquat(?:s|ting)?\b|\bsexy\b|\bseductive\b|엉덩이|크롭|배꼽|허벅지/gi;
+
 /** How many "never / no" phrases a prompt carries before acting shrinks (the team's final prompt had about 10). */
 export const NEGATIVE_LIMIT = 14;
 
@@ -79,6 +88,20 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
       `프롬프트에 금지 표현(never·no·not·금지 …)이 ${negatives}개입니다(권장 ${NEGATIVE_LIMIT}개 이하). 팀 시험에서 금지 문장이 늘자 인물 움직임이 절반 이하로 줄었습니다. 글이나 추가 연출의 ‘…하지 말 것’을 ‘무엇을 할지’로 바꾸세요.`,
     );
   else add("ok", "금지 표현", `금지 표현 ${negatives}개 — 권장 범위(${NEGATIVE_LIMIT}개 이하)입니다.`);
+
+  // child characters: wording about the body that a model's safety filter can read the wrong way (a Seedance
+  // render of a dancing child was refused as nsfw over "crop top", "hips", "spreading her knees")
+  const child = data.cast.some((c) => isChildCharacter(`${c.locks} ${c.appearance}`));
+  if (child) {
+    const risky = [...new Set((h.prompt.match(RISKY_WITH_CHILD) ?? []).map((w) => w.toLowerCase()))];
+    if (risky.length)
+      add(
+        "warn",
+        "어린이 표현",
+        `어린 인물이 나오는 장면에 몸을 묘사하는 표현이 있습니다: ${risky.slice(0, 8).join(", ")}. 영상 모델의 검수(nsfw)에 걸릴 수 있으니 1·2단계 글을 바꾸세요(예: hips/엉덩이 → waist/허리, crop top/크롭 → short top/짧은 상의, spreading her knees → bending her knees, squat → bend down low).`,
+        { kind: "goto", step: 1, label: "2단계 글로" },
+      );
+  }
 
   // ── the prompt's fixed frame ──
   const shots = shotsOf(data);
