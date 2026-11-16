@@ -655,7 +655,7 @@ export function HiggsfieldDirect({
         </p>
       </div>
 
-      {anchor ? (
+      {story ? null : anchor ? (
         <p className="notice notice-info">
           <strong>연결 기준 그림: {numberOf(anchor.id)}번 표정.</strong> 다른 표정은 이 그림과 같은 카메라 거리·인물 크기·위치로 그려서, 영상에서 컷 없는 한
           쇼트처럼 이어집니다. 기준 그림을 바꾸면 나머지 표정도 다시 생성하세요.
@@ -733,7 +733,14 @@ export function HiggsfieldDirect({
         </div>
       )}
       {seqNote && <p className="notice notice-info">{seqNote}</p>}
-      {!h.quote && !seq && (
+      {!h.quote && !seq && story && (
+        <div className="flex flex-wrap items-center gap-2">
+          <button className="btn btn-sm btn-ghost" disabled={!ready} onClick={() => ask()}>
+            차례 없이 {exps.length}컷 한꺼번에 생성 (빠름, 연결은 약함)
+          </button>
+        </div>
+      )}
+      {!h.quote && !seq && !story && (
         <div className="flex flex-wrap items-center gap-2">
           {!anchor && first ? (
             <>

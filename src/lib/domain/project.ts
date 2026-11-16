@@ -854,6 +854,10 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
       }
       if (changed.length)
         warn(`${changed.join("·")}번 컷: 러프 콘티를 그린 뒤 장면 묘사·카메라·연결 상태 글이 바뀌었습니다. 그림과 글이 다르면 영상이 한쪽을 무시합니다 — 콘티를 다시 그리거나 글을 그림에 맞추세요.`);
+    } else if (data.video.refMode === "auto" && data.expressions.some((e) => e.sketchAssetId)) {
+      // auto, some sketches drawn: the team is on the conti route — name the cuts still without one
+      const noSketch = data.expressions.map((e, i) => (e.sketchAssetId ? 0 : i + 1)).filter(Boolean);
+      warn(`러프 콘티가 없는 컷: ${noSketch.join("·")}번. 모든 컷에 러프 콘티가 있어야 콘티 방식으로 영상을 만듭니다(②의 ‘스케치 없는 컷만’).`);
     } else {
       const missing = data.expressions.filter((e) => !e.imageAssetId).length;
       if (missing) warn(`그림이 없는 컷이 ${missing}개 있습니다. Higgsfield로 생성하거나 직접 올리세요. (러프 콘티만으로 영상을 만들려면 모든 컷에 러프 콘티를 넣으세요 — 콘티 방식)`);

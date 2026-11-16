@@ -54,7 +54,8 @@ function invariants(d: ProjectData, where: string) {
   buildSceneImageHandoff(d);
   const panels = buildExpressionHandoffs(d);
   if (d.mode === "storyboard") buildSketchHandoffs(d);
-  for (const h of panels) expect(h.prompt, at("panel prompts never ask for 2D")).not.toMatch(/(^|[^\d.])2D(?!\w)/);
+  // a 3D & 2.5D project never asks for 2D (a 2D project does, on purpose)
+  if (d.dimension !== "2d") for (const h of panels) expect(h.prompt, at("panel prompts never ask for 2D")).not.toMatch(/(^|[^\d.])2D(?!\w)/);
   for (const source of ["references", "start_frame"] as const) {
     const h = buildVideoHandoff(d, source);
     const p = h.prompt;
@@ -63,7 +64,7 @@ function invariants(d: ProjectData, where: string) {
     // the studio block closes the prompt and is written positively
     expect(p.endsWith(h.constraints), at("constraints close the prompt")).toBe(true);
     expect(h.constraints, at("constraints have no 'never/NO' phrasing")).not.toMatch(/never gliding|\bNO [A-Z]|streaming/);
-    expect(p, at("prompt never asks for 2D")).not.toMatch(/(^|[^\d.])2D(?!\w)/);
+    if (d.dimension !== "2d") expect(p, at("prompt never asks for 2D")).not.toMatch(/(^|[^\d.])2D(?!\w)/);
     expect(p, at("prompt never forbids 3D")).not.toMatch(/never photorealistic or 3D|switch to photorealism or 3D/);
     // a cut storyboard is never told it is one continuous take, and the other way round
     if (d.mode === "storyboard" && shotsOf(d).length > 1) expect(p, at("cut scene not called one take")).not.toContain("ONE single continuous shot with no cuts");
