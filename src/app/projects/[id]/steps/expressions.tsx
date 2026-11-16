@@ -50,7 +50,6 @@ import { StepFrame } from "./step-frame";
 import { HiggsfieldDirect, SketchGenerator, SketchRedoButton } from "./higgsfield-direct";
 import { ExpressionPackButton } from "../packs";
 import { EnglishBar } from "../prompt-tools";
-import { englishStale } from "@/lib/domain/english";
 import { guideIssues } from "@/lib/domain/check";
 import { ACTION_ORDER_KO, HU_ITEMS_KO, MAX_PRINCIPLES, PRINCIPLES } from "@/lib/domain/principles";
 
@@ -252,19 +251,18 @@ function FramingPicker() {
 }
 
 /**
- * "수정 완료 · 반영": after editing a card by hand, save now and rebuild the English the prompts use, so the
- * next picture or video request (and the prompt on screen) follows the edit at once.
+ * "수정 완료 · 저장": after editing a card by hand, save now. The English the prompts use is written once, right
+ * before the next picture or video (useHfJobs → ensureEnglish), not per card.
  */
 function useEditCompletion() {
-  const { doc, askAi, canEdit } = useEditor();
+  const { doc } = useEditor();
   const [edited, setEdited] = useState(false);
   const [state, setState] = useState<"idle" | "saving" | "done" | "error">("idle");
   const complete = async () => {
     setState("saving");
     const ok = await doc.flush();
     if (ok === false) return setState("error");
-    // the prompts use the English made from the saved design: make it again for what changed
-    if (canEdit && englishStale(doc.data).length) await askAi("write_english", 4);
+    // only saves: the English the prompts use is written once, right before the next picture or video
     setEdited(false);
     setState("done");
     setTimeout(() => setState((s) => (s === "done" ? "idle" : s)), 4000);
@@ -279,15 +277,15 @@ function EditCompletionBar({ c }: { c: ReturnType<typeof useEditCompletion> }) {
     <div className="flex flex-wrap items-center gap-2 rounded-lg bg-[#fff7ef] border border-[#f3c9ae] p-2">
       {c.edited && (
         <button type="button" className="btn btn-sm btn-primary" disabled={c.state === "saving"} onClick={() => void c.complete()}>
-          {c.state === "saving" ? "저장·반영 중…" : "수정 완료 · 반영"}
+          {c.state === "saving" ? "저장 중…" : "수정 완료 · 저장"}
         </button>
       )}
       <span className="text-[13px] text-muted" aria-live="polite">
         {c.state === "done"
-          ? "✓ 저장했고, 바뀐 부분의 영어 정리를 다시 만들어 프롬프트에 반영합니다(30초 안팎)."
+          ? "✓ 저장했습니다. 다음에 그림·영상을 생성할 때 바뀐 부분을 영어로 한 번 정리해 반영합니다."
           : c.state === "error"
             ? "저장하지 못했습니다. 화면 위쪽의 저장 상태를 확인하세요."
-            : "고친 내용을 바로 저장하고 그림·영상 프롬프트에 반영합니다."}
+            : "고친 내용을 바로 저장합니다(그림·영상 생성 직전에 프롬프트에 반영)."}
       </span>
     </div>
   );
