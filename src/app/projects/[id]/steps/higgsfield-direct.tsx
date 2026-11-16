@@ -13,11 +13,11 @@ import {
 } from "@/lib/higgsfield/models";
 import type { AssetView, JobView } from "@/lib/types";
 import { AssetPicker } from "../ui";
-import { FRAMING_LABEL, ratioLabel, castLabel, continuityAnchor, imageAspectFor, imageIsStale, timelineOrder, withSketch, shotsOf, type Framing } from "@/lib/domain/project";
+import { FRAMING_LABEL, ratioLabel, castLabel, continuityAnchor, imageAspectFor, imageIsStale, timelineOrder, usesConti, withSketch, type Framing } from "@/lib/domain/project";
 import { useEditor } from "../editor-context";
 
-/** The team's fixed model: GPT Image 2.6 for the rough conti sketches and every finished picture. */
-const SKETCH_MODEL: ImageModelKey = "gpt_image_2_6";
+/** The team's fixed models: rough conti sketches with Nano Banana, every finished picture with GPT Image. */
+const SKETCH_MODEL: ImageModelKey = "nano_banana_2_1";
 const PICTURE_MODEL: ImageModelKey = "gpt_image_2_6";
 
 type Quote = { credits: number | null; each?: number | null; count?: number; balance: number | null; workspace: string | null; model: string; references: number };
@@ -33,11 +33,9 @@ const fmtCredits = (n: number | null) => (n === null ? "?" : Math.floor(n).toLoc
 
 /** Shared quote → generate → poll logic for one kind of Higgsfield job. */
 function useHfJobs(kind: "hf_expr" | "hf_video" | "hf_frame" | "hf_scene" | "hf_sketch") {
-  const { projectId, doc, jobs, assets, addAsset, ensureEnglish } = useEditor();
+  const { projectId, doc, jobs, assets, addAsset } = useEditor();
   const [quote, setQuote] = useState<{ spec: Spec; q: Quote } | null>(null);
   const [busy, setBusy] = useState(false);
-  /** the English write-up running right before a generation */
-  const [englishing, setEnglishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const mine = jobs.jobs.filter((j) => j.kind === kind);
@@ -83,12 +81,6 @@ function useHfJobs(kind: "hf_expr" | "hf_video" | "hf_frame" | "hf_scene" | "hf_
     setBusy(true);
     setError(null);
     await doc.flush();
-    // the prompts use the English of the design: bring it up to date once, right before generating
-    if (action === "generate" && spec.target !== "finalize") {
-      setEnglishing(true);
-      await ensureEnglish();
-      setEnglishing(false);
-    }
     const res = await fetch(`/api/projects/${projectId}/higgsfield`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -108,7 +100,6 @@ function useHfJobs(kind: "hf_expr" | "hf_video" | "hf_frame" | "hf_scene" | "hf_
     pending,
     lastFailed,
     busy,
-    englishing,
     error,
     quote,
     cancelQuote: () => setQuote(null),
@@ -179,11 +170,6 @@ function QuoteBox({
 function Status({ h, typical }: { h: ReturnType<typeof useHfJobs>; typical: string }) {
   return (
     <>
-      {h.englishing && (
-        <p className="notice notice-info" aria-live="polite">
-          바뀐 설계를 영어로 정리하는 중입니다(보통 30초~1분). 끝나면 바로 생성을 시작합니다.
-        </p>
-      )}
       {h.running.length > 0 && (
         <p className="notice notice-info" aria-live="polite">
           Higgsfield에서 생성 중입니다 ({h.running.length}건, 보통 {typical}). 창을 닫아도 계속되며, 끝나면 여기 결과가 나타납니다.
@@ -277,7 +263,7 @@ export function SceneImageGenerator({ onUse }: { onUse: (assetId: string) => voi
  * its panel's 러프 스케치 slot (newest wins); a panel can then be redone alone or replaced by hand.
  */
 export function SketchGenerator() {
-  const { doc, canEdit, jobs } = useEditor();
+  const { doc, canEdit, jobs, assets, askAi } = useEditor();
   const h = useHfJobs("hf_sketch");
   const model: ImageModelKey = SKETCH_MODEL;
   const exps = doc.data.expressions;
@@ -308,112 +294,70 @@ export function SketchGenerator() {
 
   const runningFor = (id: string) => h.running.some((j) => (j.input as { expressionId?: string }).expressionId === id);
 
-  // 라운드 생성: round 1 = the first cut of every shot, round 2 = the second cut of every shot, … — cuts of
-  // different shots are drawn together, and every cut sees the sketch right before it in its own shot (a hat put
-  // on, a character who came in). As fast as a batch when shots are short (cuts are 4 s or more each).
-  const order = shotsOf(doc.data).flat().filter((id) => drawable.some((e) => e.id === id));
-  const no = (id: string) => exps.findIndex((e) => e.id === id) + 1;
-  const [rounds, setRounds] = useState<{ round: number; total: number; ids: string[]; queue: string[][]; since: number } | null>(null);
-  const [roundsNote, setRoundsNote] = useState<string | null>(null);
-  const [pendingRounds, setPendingRounds] = useState<string[][] | null>(null);
-  /** a cut's round = how many earlier cuts of its shot are drawn in this run */
-  const split = (targets: string[]) => {
-    const shots = shotsOf(doc.data);
-    const out: string[][] = [];
-    for (const id of order.filter((x) => targets.includes(x))) {
-      const shot = shots.find((sh) => sh.includes(id)) ?? [id];
-      const depth = shot.slice(0, shot.indexOf(id)).filter((b) => targets.includes(b)).length;
-      (out[depth] ??= []).push(id);
-    }
-    return out.filter((r) => r?.length);
-  };
-  const startRounds = (targets: string[]) => {
-    const r = split(targets);
-    if (!r.length) return;
-    setRoundsNote(null);
-    setPendingRounds(r);
-    void ask(r[0]);
-  };
-  const roundsConfirmed = () => {
-    if (!pendingRounds) return;
-    const [first, ...queue] = pendingRounds;
-    setRounds({ round: 1, total: pendingRounds.length, ids: first, queue, since: Date.now() - 30_000 });
-    setPendingRounds(null);
-  };
+  // Once every cut has its sketch (nothing generating), the AI conti check runs by itself — after a full set, not
+  // after one or two redrawn cuts: re-checking every redraw found new small things each time and never ended.
+  const lastCheck = jobs.jobs.find((j) => j.kind === "check_sheet");
+  const sketches = drawable.map((e) => (e.sketchAssetId ? assets.get(e.sketchAssetId) : undefined));
+  const newestSketch = Math.max(0, ...sketches.map((a) => (a ? Date.parse(a.createdAt) : 0)));
+  const sketchKey = drawable.map((e) => e.sketchAssetId ?? "").join(",");
+  const checkDue =
+    canEdit &&
+    usesConti(doc.data) &&
+    drawable.length > 0 &&
+    sketches.every(Boolean) &&
+    !h.running.length &&
+    !h.pending.length &&
+    !h.quote &&
+    lastCheck?.status !== "queued" &&
+    lastCheck?.status !== "running" &&
+    (!lastCheck || Date.parse(lastCheck.created_at) < newestSketch) &&
+    // most of the set is new since the last check (a full generation), or there was no check yet
+    (!lastCheck ||
+      sketches.filter((a) => a && Date.parse(a.createdAt) > Date.parse(lastCheck.created_at)).length >= Math.ceil(drawable.length / 2));
+  const autoChecked = useRef(new Set<string>());
   useEffect(() => {
-    if (!rounds || !canEdit) return;
-    const mine = (j: (typeof jobs.jobs)[number], id: string) =>
-      j.kind === "hf_sketch" && (j.input as { expressionId?: string }).expressionId === id && Date.parse(j.created_at) >= rounds.since;
-    const state = rounds.ids.map((id) => {
-      const js = jobs.jobs.filter((j) => mine(j, id));
-      const done = js.find((j) => j.status === "done" && jobAssetId(j));
-      if (done) return doc.data.expressions.find((e) => e.id === id)?.sketchAssetId === jobAssetId(done) ? "done" : "applying";
-      return js.some((j) => j.status === "failed") ? "failed" : "running";
-    });
-    if (state.some((x) => x === "running" || x === "applying")) return;
-    const failed = rounds.ids.filter((_, k) => state[k] === "failed");
-    const [next, ...queue] = rounds.queue;
-    if (failed.length) setRoundsNote(`${failed.map(no).join("·")}번 컷이 실패했습니다. 카드에서 그 컷만 다시 그리세요(앞 컷의 콘티를 보고 그립니다).`);
-    if (next?.length) {
-      setRounds({ round: rounds.round + 1, total: rounds.total, ids: next, queue, since: Date.now() - 5_000 });
-      void h.generate({ target: "sketch", model, expressionIds: next }).then((ok) => {
-        if (!ok) {
-          setRounds(null);
-          setRoundsNote("다음 라운드를 요청하지 못해 멈췄습니다. ‘스케치 없는 컷만’으로 이어서 그리세요.");
-        }
-      });
-      return;
-    }
-    setRounds(null);
-    if (!failed.length) setRoundsNote("러프 콘티를 모두 그렸습니다. 마음에 안 드는 컷은 카드에서 그 컷만 다시 그리세요(앞 컷의 콘티를 보고 그립니다).");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobs.jobs, doc.data.expressions, rounds, canEdit]);
+    if (!checkDue || autoChecked.current.has(sketchKey)) return;
+    autoChecked.current.add(sketchKey);
+    void askAi("check_sheet", 1);
+  }, [checkDue, sketchKey, askAi]);
+  const checking = lastCheck && (lastCheck.status === "queued" || lastCheck.status === "running");
 
   return (
     <div className="rounded-lg border border-line bg-[#f7fbf5] p-4 space-y-3" aria-labelledby="hf-sketch">
       <div>
         <div id="hf-sketch" className="font-semibold">러프 콘티 바로 생성 (Higgsfield)</div>
         <p className="field-help">
-          컷마다 장면 묘사·카메라대로 <strong>흰 배경에 단순한 선으로만</strong> 러프 콘티를 그립니다. <strong>쇼트 순서대로 라운드</strong>로: 1라운드에 쇼트마다 첫
-          컷을, 2라운드에 쇼트마다 둘째 컷을 … 한꺼번에 그리고, 각 컷은 같은 쇼트의 바로 앞 컷 콘티를 보고 그려서 장소·인물·의상·소품이 이어집니다(라운드당 약
-          1분). 결과는 각 컷의 ‘러프 스케치’ 칸에 바로 들어갑니다. 마음에 안 드는 컷은 카드에서 그 컷만 다시 그리세요. 구독 크레딧이 컷 수만큼 차감됩니다.
+          컷마다 장면 묘사·카메라대로 <strong>흰 배경에 단순한 선으로만</strong> 그린 러프 콘티를 한 번에 만들어 각 컷의 ‘러프 스케치’ 칸에 넣습니다. 마음에 안
+          드는 컷은 카드에서 그 컷만 다시 생성하거나 직접 그린 그림으로 바꾸세요. 컷 그림은 이 구도를 따릅니다. 구독 크레딧이 차감됩니다(품질 낮음으로 저렴하게).
         </p>
       </div>
       <p className="text-[13px] text-muted">생성 모델: <strong className="text-ink">{IMAGE_MODELS[model].label}</strong> (러프 콘티는 이 모델로 고정)</p>
-      {!h.quote && !rounds && order.length > 0 && (
+      {!h.quote && (
         <div className="flex flex-wrap gap-2">
-          <button className="btn btn-dark" disabled={!ready} onClick={() => startRounds(order)}>
-            {h.busy && pendingRounds ? "비용 확인 중…" : `러프 콘티 전부 생성 (${order.length}컷)`}
+          <button className="btn btn-dark" disabled={!ready || !drawable.length} onClick={() => ask(drawable.map((e) => e.id))}>
+            {h.busy ? "비용 확인 중…" : `러프 콘티 전부 생성 (${drawable.length}컷)`}
           </button>
-          {missing.length > 0 && missing.length < order.length && (
-            <button className="btn btn-sm" disabled={!ready} onClick={() => startRounds(missing)}>
+          {missing.length > 0 && missing.length < drawable.length && (
+            <button className="btn btn-sm" disabled={!ready} onClick={() => ask(missing)}>
               스케치 없는 컷만 ({missing.length}컷)
             </button>
           )}
         </div>
       )}
-      {rounds && (
-        <p className="notice notice-info" aria-live="polite">
-          라운드 {rounds.round}/{rounds.total}: {rounds.ids.map(no).join("·")}번 컷을 그리는 중…{rounds.queue.length ? ` 끝나면 다음 라운드를 이어서 그립니다.` : ""}
-        </p>
-      )}
-      {roundsNote && <p className="notice notice-info">{roundsNote}</p>}
       {!drawable.length && <p className="field-help">컷마다 장면 묘사나 카메라를 먼저 쓰세요(②의 AI 콘티 설계).</p>}
       {drawable.length < exps.length && drawable.length > 0 && (
         <p className="field-help">장면 묘사·카메라가 비어 있는 컷 {exps.length - drawable.length}개는 건너뜁니다.</p>
       )}
-      <QuoteBox
-        h={h}
-        onConfirmed={roundsConfirmed}
-        onCancel={() => setPendingRounds(null)}
-        note={
-          pendingRounds && pendingRounds.length > 1
-            ? `1라운드(${pendingRounds[0].length}장) 비용입니다. 라운드 ${pendingRounds.length}번에 걸쳐 모두 ${pendingRounds.flat().length}장을 그려 그만큼 차감됩니다.`
-            : null
-        }
-      />
-      <Status h={h} typical="1~2분" />
-      {h.running.length > 0 && !rounds && <p className="field-help" aria-live="polite">생성 중: {exps.filter((e) => runningFor(e.id)).map((e) => `${exps.indexOf(e) + 1}번`).join(", ")} 컷</p>}
+      <QuoteBox h={h} />
+      <Status h={h} typical="20초~1분" />
+      {h.running.length > 0 && <p className="field-help" aria-live="polite">생성 중: {exps.filter((e) => runningFor(e.id)).map((e) => `${exps.indexOf(e) + 1}번`).join(", ")} 컷</p>}
+      {usesConti(doc.data) && (
+        <p className="field-help" aria-live="polite">
+          {checking
+            ? "AI가 러프 콘티와 컷 글을 비교하는 중… 끝나면 아래에 글 보정 제안이 뜹니다."
+            : "러프 콘티를 전부 생성하면 AI가 그림과 컷 글(장면 묘사·카메라·연결 상태)을 자동으로 한 번 비교해 제안을 띄웁니다. 컷 몇 개만 다시 그린 뒤에는 자동으로 다시 검사하지 않습니다(필요하면 ④에서 검사)."}
+        </p>
+      )}
     </div>
   );
 }
@@ -506,8 +450,7 @@ export function HiggsfieldDirect({
   const stale = exps.filter((e) => imageIsStale(e, framing, aspect)).length;
 
   // the newest AI picture review: its notes per panel, for panels whose image has not been redrawn since
-  // storyboard: no picture check any more (the conti is drawn in order instead); cast mode keeps its review fixes
-  const review = data.mode === "storyboard" ? undefined : jobs.jobs.find((j) => j.kind === "check_sheet" && j.status === "done");
+  const review = usesConti(data) ? undefined : jobs.jobs.find((j) => j.kind === "check_sheet" && j.status === "done");
   const reviewFix = (() => {
     const out = review?.output as { issues?: { panel: number | null; severity: "high" | "low"; message: string }[] } | null;
     const by = new Map<string, { text: string[]; high: boolean }>();
@@ -648,7 +591,7 @@ export function HiggsfieldDirect({
         </p>
       </div>
 
-      {story ? null : anchor ? (
+      {anchor ? (
         <p className="notice notice-info">
           <strong>연결 기준 그림: {numberOf(anchor.id)}번 표정.</strong> 다른 표정은 이 그림과 같은 카메라 거리·인물 크기·위치로 그려서, 영상에서 컷 없는 한
           쇼트처럼 이어집니다. 기준 그림을 바꾸면 나머지 표정도 다시 생성하세요.
@@ -726,14 +669,7 @@ export function HiggsfieldDirect({
         </div>
       )}
       {seqNote && <p className="notice notice-info">{seqNote}</p>}
-      {!h.quote && !seq && story && (
-        <div className="flex flex-wrap items-center gap-2">
-          <button className="btn btn-sm btn-ghost" disabled={!ready} onClick={() => ask()}>
-            차례 없이 {exps.length}컷 한꺼번에 생성 (빠름, 연결은 약함)
-          </button>
-        </div>
-      )}
-      {!h.quote && !seq && !story && (
+      {!h.quote && !seq && (
         <div className="flex flex-wrap items-center gap-2">
           {!anchor && first ? (
             <>

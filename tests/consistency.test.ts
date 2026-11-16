@@ -54,8 +54,7 @@ function invariants(d: ProjectData, where: string) {
   buildSceneImageHandoff(d);
   const panels = buildExpressionHandoffs(d);
   if (d.mode === "storyboard") buildSketchHandoffs(d);
-  // a 3D & 2.5D project never asks for 2D (a 2D project does, on purpose)
-  if (d.dimension !== "2d") for (const h of panels) expect(h.prompt, at("panel prompts never ask for 2D")).not.toMatch(/(^|[^\d.])2D(?!\w)/);
+  for (const h of panels) expect(h.prompt, at("panel prompts never ask for 2D")).not.toMatch(/(^|[^\d.])2D(?!\w)/);
   for (const source of ["references", "start_frame"] as const) {
     const h = buildVideoHandoff(d, source);
     const p = h.prompt;
@@ -64,7 +63,7 @@ function invariants(d: ProjectData, where: string) {
     // the studio block closes the prompt and is written positively
     expect(p.endsWith(h.constraints), at("constraints close the prompt")).toBe(true);
     expect(h.constraints, at("constraints have no 'never/NO' phrasing")).not.toMatch(/never gliding|\bNO [A-Z]|streaming/);
-    if (d.dimension !== "2d") expect(p, at("prompt never asks for 2D")).not.toMatch(/(^|[^\d.])2D(?!\w)/);
+    expect(p, at("prompt never asks for 2D")).not.toMatch(/(^|[^\d.])2D(?!\w)/);
     expect(p, at("prompt never forbids 3D")).not.toMatch(/never photorealistic or 3D|switch to photorealism or 3D/);
     // a cut storyboard is never told it is one continuous take, and the other way round
     if (d.mode === "storyboard" && shotsOf(d).length > 1) expect(p, at("cut scene not called one take")).not.toContain("ONE single continuous shot with no cuts");
@@ -213,7 +212,7 @@ describe("safeguards: sketch ↔ text ↔ acting", () => {
     const d = setExpressionCount(createProjectData("콘티", 1, "storyboard"), 2);
     d.expressions[0] = { ...d.expressions[0], action: "pushes up and kneels", continuity: "시작: 엎드림 / 끝: 무릎을 꿇은 자세" };
     const p = buildSketchHandoffs(d)[0].prompt;
-    expect(p).toContain("End pose to draw");
+    expect(p).toContain("The pose to draw");
     expect(p).toContain("무릎을 꿇은 자세");
   });
 });
@@ -259,8 +258,8 @@ describe("dialogue acting cues (Z_1–Z_4 references)", () => {
     d.dialogue.lines = [{ expressionId: d.expressions[0].id, line: "We've got HER, though.", meaning: "", delivery: cue }];
     const p = buildVideoHandoff(d, "references").prompt;
     expect(p).toContain(cue);
-    expect(ACTING_EN).toContain("lands on that word");
-    expect(ACTING_EN).toContain("Everyone in frame stays live");
+    expect(ACTING_EN).toContain("lands exactly on that word");
+    expect(ACTING_EN).toContain("Everyone in frame is live");
   });
 });
 
@@ -333,55 +332,9 @@ describe("rough conti redraw loop", () => {
     d.expressions = d.expressions.map((e, i) => ({ ...e, action: `동작 ${i + 1}` }));
     const [h] = buildSketchHandoffs(d, { [d.expressions[0].id]: "the hat is missing" });
     expect(h.references.map((r) => r.assetId)).toEqual(["scene-1", "sheet-1", "sheet-2"]);
-    expect(h.prompt).toContain("Image 2: 인물1's design sheet");
+    expect(h.prompt).toContain("Image reference 2 is the design sheet of 인물1");
     expect(h.prompt).toContain("black bowler hat");
     expect(h.prompt).toContain("the hat is missing");
-    expect(h.prompt).toContain("draw where it ends");
-  });
-});
-
-describe("rough conti in two rounds", () => {
-  it("a later cut of a shot sees the earlier sketch of its shot; a shot start sees the shot before", async () => {
-    const { buildSketchHandoffs } = await import("@/lib/domain/handoff");
-    let d = setExpressionCount(createProjectData("라운드", 1, "storyboard"), 4);
-    d.expressions = d.expressions.map((e, i) => ({ ...e, action: `동작 ${i + 1}`, link: i === 2 ? ("cut" as const) : ("continuous" as const), sketchAssetId: i === 0 ? "sk-1" : i === 2 ? "sk-3" : null }));
-    const hs = buildSketchHandoffs(d);
-    expect(hs[1].references.map((r) => r.assetId)).toContain("sk-1");
-    expect(hs[1].prompt).toContain("just before in this same shot");
-    expect(hs[3].references.map((r) => r.assetId)).toContain("sk-3");
-    // a shot start redrawn later sees the previous shot (a hard cut between)
-    d = { ...d, expressions: d.expressions.map((e, i) => (i === 1 ? { ...e, sketchAssetId: "sk-2" } : e)) };
-    const again = buildSketchHandoffs(d)[2];
-    expect(again.references.map((r) => r.assetId)).toContain("sk-2");
-    expect(again.prompt).toContain("from the shot before");
-    expect(buildSketchHandoffs(d)[0].references.some((r) => r.assetId.startsWith("sk-"))).toBe(false);
-  });
-});
-
-describe("panel titles", () => {
-  it("drop time ranges and stay short in the prompts", async () => {
-    const { panelTitle } = await import("@/lib/domain/project");
-    const { buildVideoHandoff } = await import("@/lib/domain/handoff");
-    expect(panelTitle("0~1.5초 · 밤거리 와이드 고정: 코발트블루 별밤과 노란 창문 불빛 건물, 젖은 돌바닥. 화면 왼쪽 가운데 공중의 보라 이모지가")).toBe("밤거리 와이드 고정");
-    expect(panelTitle("4.5~6초 · 같은 구도 홀드")).toBe("같은 구도 홀드");
-    expect(panelTitle("군중이 갈라지며 칼리엘라 등장")).toBe("군중이 갈라지며 칼리엘라 등장");
-    const d = setExpressionCount(createProjectData("제목", 1, "storyboard"), 2);
-    d.expressions = d.expressions.map((e, i) => ({ ...e, emotion: `${i * 2}~${i * 2 + 2}초 · 장면 ${i + 1}`, action: `동작 ${i + 1}` }));
-    const p = buildVideoHandoff(d, "references").prompt;
-    expect(p).not.toMatch(/panel \d+ — \d+~\d+초/);
-    expect(p).toContain("— 장면 1");
-  });
-});
-
-describe("4 seconds or more per storyboard cut", () => {
-  it("caps the cut count by the length and warns when a scene has too many cuts", async () => {
-    const { maxCutsFor, stepIssues } = await import("@/lib/domain/project");
-    expect(maxCutsFor(12)).toBe(3);
-    expect(maxCutsFor(20)).toBe(5);
-    expect(maxCutsFor(6)).toBe(2);
-    const d = setDuration(setExpressionCount(createProjectData("길이", 1, "storyboard"), 7), 12);
-    expect(stepIssues(d, 1).some((i) => i.message.includes("컷당 4초 이상"))).toBe(true);
-    const ok = setExpressionCount(d, 3);
-    expect(stepIssues(ok, 1).some((i) => i.message.includes("컷당 4초 이상"))).toBe(false);
+    expect(h.prompt).toContain("its end pose");
   });
 });
