@@ -287,7 +287,9 @@ export const EnglishOut = z.object({
       transition: z
         .string()
         .describe("다음 표정으로 넘어가게 하는 몸의 동작(깜빡임·숨·고개 돌림·얼굴 앞을 지나는 손 등), 영어 한 문장 (100자 이내). 마지막 표정이면 빈 문자열"),
-      delivery: z.string().describe("대사 말투, 영어 3~8단어. 대사가 없으면 빈 문자열"),
+      delivery: z
+        .string()
+        .describe("대사 말투, 영어 한 구절 (170자 이내): 크기(whisper/quiet/normal/loud), 강세 단어, 특정 단어에 맞춘 동작·시선(on \"word\" — action). 대사가 없으면 빈 문자열"),
       state: z.string().describe("스토리보드: 이 컷의 연결 상태(화면 위치·보는 방향·이동·의상/소품 상태·빛), 영어 한 문장 (220자 이내). 스토리보드가 아니면 빈 문자열"),
     }),
   ),

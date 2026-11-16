@@ -248,3 +248,17 @@ describe("Seedance acting doctrine (SH04_3 tests)", () => {
     expect(startState("그냥 상태")).toBe("");
   });
 });
+
+describe("dialogue acting cues (Z_1–Z_4 references)", () => {
+  it("keeps word-cued gestures and volume in the delivery, and tells the model how to read them", async () => {
+    const { buildVideoHandoff, ACTING_EN } = await import("@/lib/domain/handoff");
+    const d = setExpressionCount(createProjectData("대화", 1, "storyboard"), 2);
+    d.expressions = d.expressions.map((e, i) => ({ ...e, action: `동작 ${i + 1}` }));
+    const cue = 'quiet, stress on "HER"; on "HER" she turns her eyes to her own right and nods toward Haru';
+    d.dialogue.lines = [{ expressionId: d.expressions[0].id, line: "We've got HER, though.", meaning: "", delivery: cue }];
+    const p = buildVideoHandoff(d, "references").prompt;
+    expect(p).toContain(cue);
+    expect(ACTING_EN).toContain("lands exactly on that word");
+    expect(ACTING_EN).toContain("Everyone in frame is live");
+  });
+});

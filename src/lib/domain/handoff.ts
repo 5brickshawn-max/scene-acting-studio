@@ -735,7 +735,7 @@ const FULL: Limits = { face: Infinity, gesture: Infinity, note: Infinity, transi
 /** principles: 2 = the movement each priority principle asks for, 1 = names only, 0 = left out */
 type Budget = Limits & { style: number; voice: number; features: number; enPose: boolean; enBody: boolean; principles: 0 | 1 | 2 };
 const BUDGETS: Budget[] = [
-  { face: 60, gesture: 110, note: 60, transition: 100, delivery: 100, style: 160, voice: 160, features: 6, enPose: true, enBody: true, principles: 2 },
+  { face: 60, gesture: 110, note: 60, transition: 100, delivery: 180, style: 160, voice: 160, features: 6, enPose: true, enBody: true, principles: 2 },
   { face: 30, gesture: 80, note: 0, transition: 80, delivery: 70, style: 140, voice: 140, features: 6, enPose: true, enBody: true, principles: 1 },
   // the expression images show the face, then the gesture: drop that text first and keep the
   // transition (how one expression moves into the next — what keeps it from morphing)
@@ -1313,7 +1313,7 @@ export const keepPainted = (style: string) =>
  * dead. Written once per prompt; the beats do not repeat it.
  */
 export const ACTING_EN =
-  "FACE AND BODY: feature-film character acting, broad enough to read at a glance and grounded. Natural blinking; forehead and brows always active and matched to each state, no mask-face, no dead eyes. Eyes stay a natural, moderate size. ORDER RULE: in every change the eyes move first, then the head, then the body, one after another. Eyelines are held steady, never darting. At the emotional peak, a moving hold: the pose stops and only the breath, shoulders, eyes and tears move.";
+  "FACE AND BODY: feature-film character acting, broad enough to read at a glance and grounded. Natural blinking; forehead and brows always active and matched to each state, no mask-face, no dead eyes. Eyes stay a natural, moderate size. ORDER RULE: in every change the eyes move first, then the head, then the body, one after another. Eyelines are held steady, never darting. At the emotional peak, a moving hold: the pose stops and only the breath, shoulders, eyes and tears move. Everyone in frame is live: whoever is not speaking keeps reacting with small head turns, breathing and small hand actions. A gesture or look written for a word lands exactly on that word; how loud a line is comes from its delivery, and an exclamation mark is punctuation, not volume.";
 
 /** The scene's emotional arc as the prompt's main subject (empty when the English arc is missing or stale). */
 export const arcLine = (arc: string | null) =>
@@ -1503,8 +1503,8 @@ function buildStoryboardFrame(data: ProjectData, expressionId: string, shot: Fra
 
 /** Caps per panel field, tried in order until the prompt fits (the last is used regardless). */
 const STORY_BUDGETS = [
-  { action: Infinity, camera: Infinity, state: Infinity, rules: 600, transition: 140, delivery: 100, features: 4, principles: 2 as const },
-  { action: 400, camera: 200, state: 200, rules: 450, transition: 100, delivery: 80, features: 4, principles: 2 as const },
+  { action: Infinity, camera: Infinity, state: Infinity, rules: 600, transition: 140, delivery: 180, features: 4, principles: 2 as const },
+  { action: 400, camera: 200, state: 200, rules: 450, transition: 100, delivery: 120, features: 4, principles: 2 as const },
   { action: 250, camera: 140, state: 140, rules: 300, transition: 70, delivery: 50, features: 3, principles: 1 as const },
   { action: 150, camera: 80, state: 90, rules: 200, transition: 0, delivery: 40, features: 2, principles: 0 as const },
 ];

@@ -214,7 +214,7 @@ export function buildEnglishSheet(d: ProjectData, out: EnglishOut): EnglishSheet
           face: fitText(b.face, d.mode === "storyboard" ? 380 : 200),
           body: fitText(b.body, d.mode === "storyboard" ? 240 : 200),
           transition: fitText(b.transition, 140),
-          delivery: fitText(b.delivery, 80),
+          delivery: fitText(b.delivery, 180),
           state: fitText(b.state ?? "", 260),
           others: (b.others ?? []).flatMap((o) => {
             const id = d.cast[o.character - 1]?.id;
