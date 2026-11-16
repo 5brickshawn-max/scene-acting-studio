@@ -33,9 +33,11 @@ const fmtCredits = (n: number | null) => (n === null ? "?" : Math.floor(n).toLoc
 
 /** Shared quote → generate → poll logic for one kind of Higgsfield job. */
 function useHfJobs(kind: "hf_expr" | "hf_video" | "hf_frame" | "hf_scene" | "hf_sketch") {
-  const { projectId, doc, jobs, assets, addAsset } = useEditor();
+  const { projectId, doc, jobs, assets, addAsset, ensureEnglish } = useEditor();
   const [quote, setQuote] = useState<{ spec: Spec; q: Quote } | null>(null);
   const [busy, setBusy] = useState(false);
+  /** the English write-up running right before a generation */
+  const [englishing, setEnglishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const mine = jobs.jobs.filter((j) => j.kind === kind);
@@ -81,6 +83,12 @@ function useHfJobs(kind: "hf_expr" | "hf_video" | "hf_frame" | "hf_scene" | "hf_
     setBusy(true);
     setError(null);
     await doc.flush();
+    // the prompts use the English of the design: bring it up to date once, right before generating
+    if (action === "generate" && spec.target !== "finalize") {
+      setEnglishing(true);
+      await ensureEnglish();
+      setEnglishing(false);
+    }
     const res = await fetch(`/api/projects/${projectId}/higgsfield`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -100,6 +108,7 @@ function useHfJobs(kind: "hf_expr" | "hf_video" | "hf_frame" | "hf_scene" | "hf_
     pending,
     lastFailed,
     busy,
+    englishing,
     error,
     quote,
     cancelQuote: () => setQuote(null),
@@ -170,6 +179,11 @@ function QuoteBox({
 function Status({ h, typical }: { h: ReturnType<typeof useHfJobs>; typical: string }) {
   return (
     <>
+      {h.englishing && (
+        <p className="notice notice-info" aria-live="polite">
+          바뀐 설계를 영어로 정리하는 중입니다(보통 30초~1분). 끝나면 바로 생성을 시작합니다.
+        </p>
+      )}
       {h.running.length > 0 && (
         <p className="notice notice-info" aria-live="polite">
           Higgsfield에서 생성 중입니다 ({h.running.length}건, 보통 {typical}). 창을 닫아도 계속되며, 끝나면 여기 결과가 나타납니다.
