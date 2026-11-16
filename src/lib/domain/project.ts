@@ -303,6 +303,8 @@ export const ProjectDataSchema = z.object({
   opening: z.string().default(""),
   /** one art style for the whole scene (every character is drawn in it) */
   style: z.string(),
+  /** the look's dimension: hand-drawn 2D, or the studio's 3D & 2.5D (the default) */
+  dimension: z.enum(["2d", "3d"]).default("3d"),
   /**
    * 장면 기준 그림: ONE drawing with the whole cast together (for one character, that character's drawing).
    * Identity, relative sizes and art style of every character come from it.
@@ -450,6 +452,7 @@ export function createProjectData(title = "새 장면", castCount = 1, mode: Sce
     extras: "",
     opening: "",
     style: "",
+    dimension: "3d",
     baseAssetId: null,
     designRefAssetIds: [],
     cast,
@@ -1092,3 +1095,9 @@ export function actingCheckKey(d: ProjectData): string {
   for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0;
   return (h >>> 0).toString(36);
 }
+
+/** 화풍 차원: 2D or the studio's 3D & 2.5D. */
+export type Dimension = ProjectData["dimension"];
+export const DIMENSION_LABEL: Record<Dimension, string> = { "2d": "2D", "3d": "2.5D & 3D" };
+/** How the prompts name the look ("2D animation" / "3D & 2.5D animation"). */
+export const dimensionEn = (d: Pick<ProjectData, "dimension">) => (d.dimension === "2d" ? "2D" : "3D & 2.5D");

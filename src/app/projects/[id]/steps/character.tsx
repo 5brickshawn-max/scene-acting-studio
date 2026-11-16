@@ -12,6 +12,7 @@ import {
   SCENE_MODE_HELP,
   SCENE_MODE_LABEL,
   SCENE_MODES,
+  DIMENSION_LABEL,
   type CastMember,
   type StepIndex,
 } from "@/lib/domain/project";
@@ -321,6 +322,20 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
             help="이름 없는 인물들을 한 번만 적어 두면 모든 컷과 영상에 같은 모습으로 들어갑니다."
           />
         )}
+        <div>
+          <Seg
+            label="화풍 차원"
+            value={d.dimension}
+            options={["2d", "3d"] as const}
+            labels={DIMENSION_LABEL}
+            onChange={(v) => doc.edit(0, (x) => ({ ...x, dimension: v }))}
+          />
+          <p className="field-help">
+            {d.dimension === "2d"
+              ? "2D 애니메이션으로 그리고 영상도 손그림 2D 영화처럼 만듭니다. 그림체 글에 ‘3D’가 있어도 2D로 읽습니다."
+              : "스튜디오 기본(3D & 2.5D): 입체감 있는 형태에 그림체의 질감을 입힙니다. 그림체 글에 ‘2D’가 있어도 3D & 2.5D로 읽습니다."}
+          </p>
+        </div>
         <Field
           label="그림체와 색감 (장면 공통)"
           multiline

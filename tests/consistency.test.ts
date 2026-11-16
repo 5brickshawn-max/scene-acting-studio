@@ -313,3 +313,29 @@ describe("review fixes (몰리송 test)", () => {
     expect(preRenderCheck(d, buildVideoHandoff(d, "references")).find((i) => i.area === "어린이 표현")).toBeUndefined();
   });
 });
+
+describe("화풍 차원 (2D / 2.5D & 3D)", () => {
+  it("a 2D project asks for 2D everywhere; the default stays 3D & 2.5D", async () => {
+    const { buildVideoHandoff, buildExpressionHandoffs, studioStyle } = await import("@/lib/domain/handoff");
+    const { englishStale } = await import("@/lib/domain/english");
+    for (const mode of ["storyboard", "cast"] as const) {
+      const d = setExpressionCount(createProjectData("차원", 1, mode), 2);
+      d.expressions = d.expressions.map((e, i) => ({ ...e, action: `동작 ${i + 1}` }));
+      d.style = "3D & 2.5D animation with soft cel shading, painterly brushwork";
+      expect(buildVideoHandoff(d, "references").prompt).toContain("3D & 2.5D animation style");
+      d.dimension = "2d";
+      const h = buildVideoHandoff(d, "references");
+      expect(h.prompt).not.toMatch(/3D|2\.5D/);
+      expect(h.prompt).toContain("2D animation style");
+      expect(h.constraints).toContain("A hand-drawn 2D animated feature film.");
+      expect(h.negativePrompt).toContain("3D render");
+      expect(buildExpressionHandoffs(d)[0].prompt).not.toMatch(/3D|2\.5D/);
+    }
+    expect(studioStyle("Painterly 2D look", "3d")).toBe("Painterly 3D & 2.5D look");
+    expect(studioStyle("Painterly 3D & 2.5D animation", "2d")).toBe("Painterly 2D animation");
+    const d = createProjectData("영어", 1, "storyboard");
+    d.style = "수채 붓자국";
+    d.dimension = "2d";
+    expect(englishStale(d)).toContain("그림체");
+  });
+});
