@@ -22,7 +22,12 @@ const Spec = z.discriminatedUnion("target", [
     expressionIds: z.array(z.string().max(64)).max(12).optional(),
     fixes: z.record(z.string().max(64), z.string().max(3000)).optional(),
   }),
-  z.object({ target: z.literal("sketch"), model: z.string().max(64), expressionIds: z.array(z.string().max(64)).max(12).optional() }),
+  z.object({
+    target: z.literal("sketch"),
+    model: z.string().max(64),
+    expressionIds: z.array(z.string().max(64)).max(12).optional(),
+    fixes: z.record(z.string().max(64), z.string().max(3000)).optional(),
+  }),
   z.object({ target: z.literal("video"), model: z.string().max(64), resolution: z.string().max(16) }),
   z.object({ target: z.literal("finalize"), draftRowId: z.string().uuid() }),
   z.object({ target: z.literal("scene"), model: z.string().max(64) }),

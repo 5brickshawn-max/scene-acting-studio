@@ -1488,30 +1488,52 @@ function buildStoryboardHandoffs(data: ProjectData, fixes: Record<string, string
  * drawn from the panel's moment and camera. The scene picture only tells who is who and where things stand.
  * The team can redo any panel or replace it with their own drawing; the finished panel art then follows it.
  */
-export function buildSketchHandoffs(data: ProjectData): ExpressionHandoff[] {
+export function buildSketchHandoffs(data: ProjectData, fixes: Record<string, string> = {}): ExpressionHandoff[] {
   const aspect = data.video.aspectRatio;
   const en = freshEnglish(data);
+  // who is who: the telling shape features (a non-human body shape matters most for a line sketch)
   const who = data.cast
     .filter((c) => c.name.trim())
     .map((c) => {
-      const look = en.cast.get(c.id)?.look?.[0] ?? clean(c.locks).split(/[.\n]/)[0];
-      return look ? `${castName(data, c.id)} (${clip(look, 70) || look.slice(0, 70)})` : castName(data, c.id);
+      const look = (en.cast.get(c.id)?.look ?? shortLocks(c.locks, 3)).slice(0, 3).join(", ");
+      return look ? `${castName(data, c.id)} (${clip(look, 200) || look.slice(0, 200)})` : castName(data, c.id);
     })
     .join("; ");
+  // what each one wears in this scene, as shapes (sleeves, hems, hats): a sketch still shows a costume's outline
+  const costumes = data.cast
+    .map((c) => {
+      const o = en.cast.get(c.id)?.outfit ?? clean(c.outfit);
+      const t = clip(o, 200) || o.slice(0, 200);
+      return t ? `${castName(data, c.id)}: ${noEndDot(t)}` : "";
+    })
+    .filter(Boolean)
+    .join(". ");
   return data.expressions.map((e, i) => {
     const t = panelTexts(data, e, en);
     const references: ReferenceSlot[] = data.baseAssetId
       ? [{ role: "image reference 1", assetId: data.baseAssetId, why: "장면 기준 그림 — 누가 누구인지·배경 배치만 (색·그림체는 따르지 않음)" }]
       : [];
+    // the character sheets: body shapes and costume outlines (a heart-shaped emoji, a sock body) the text cannot carry
+    const sheets = data.cast.filter((c) => c.refAssetId);
+    for (const c of sheets)
+      references.push({ role: `image reference ${references.length + 1}`, assetId: c.refAssetId!, why: `${castLabel(data, c.id)} 캐릭터 시트 — 형태·의상 실루엣만` });
+    const sheetLines = sheets.map((c, k) => {
+      const no = (data.baseAssetId ? 2 : 1) + k;
+      return `Image reference ${no} is the design sheet of ${castName(data, c.id)}: copy only the outline — body shape, head and hair shape, costume silhouette (sleeves, hems, hats) and how many hands or feet they have. Not its colours or rendering.`;
+    });
+    const fix = fixes[e.id]?.trim();
     const prompt = [
       `A rough sketch of one ${aspect} film frame: ONE single image of ONE moment that fills the whole frame — never a storyboard sheet, a grid, a contact sheet, a comic page or a sequence of small frames; exactly one camera view. Quick loose black pencil lines on a plain white background. Simple lines only — no colour, no shading, no grey fills, no texture, no rendering; simple gesture figures with readable poses, faces only as simple shapes and eye lines, like a director's thumbnail. No borders, no text, no arrows, no numbers.`,
-      `The description below may list several steps of an action (look → prepare → act → contact → settle) and a camera move from a start to an end framing: draw only the single key moment of the main action, in one framing — do not draw each step or each framing as a separate picture.`,
+      `The description below may list several steps of an action (look → prepare → act → contact → settle) and a camera move from a start to an end framing: draw only the single moment the action arrives at (its end pose), in one framing — do not draw each step or each framing as a separate picture, and do not draw anything that happens after the description ends.`,
       data.baseAssetId &&
         "Image reference 1 is the finished scene picture: use it ONLY to know who is who (silhouettes, hair shapes, sizes) and how the set is laid out. Do NOT copy its colours, shading, detail or art style — this must stay a rough line sketch.",
-      who && `Characters who may appear: ${who}. Draw only those this moment needs.`,
+      ...sheetLines,
+      who && `Characters who may appear: ${who}. Draw only those this moment needs, each with the same body shape and size order in every panel.`,
+      costumes && `What they wear in this scene (draw the outline; the continuity below says what changes, e.g. a hat put on): ${costumes}.`,
+      fix && `Corrections from the review of the previous sketch of this panel (fix these; keep everything else): ${sentence(clean(fix).slice(0, 900))}`,
       t.action ? `This moment: ${sentence(t.action)}` : "",
       endState(t.state) &&
-        `The pose to draw (where this moment ends — hands, body position and props exactly like this, e.g. an open hand stays open, a fist stays a fist, kneeling stays kneeling): ${sentence(endState(t.state))}`,
+        `The pose to draw (where this moment ends — hands, body position, props and costume exactly like this, e.g. an open hand stays open, a fist stays a fist, kneeling stays kneeling): ${sentence(endState(t.state))}`,
       t.camera && `Camera: ${sentence(t.camera)} Draw one framing only (the framing at the key moment): where the camera stands and how big the figures are.`,
       `Keep the composition clear: main figures large enough to read, background as a few simple lines (horizon, walls, door, big props). A face is never drawn frontal in a horizontally symmetrical frame, and nobody looks into the lens from a symmetrical frame. Again: one single frame, not several panels.`,
     ]
