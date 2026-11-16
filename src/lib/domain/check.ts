@@ -249,7 +249,7 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
       label: "4단계 시간 분배로",
     });
   const n = data.acting.segments.length;
-  if (n && duration / n < 2) {
+  if (n && duration / n < (data.mode === "storyboard" ? 4 : 2)) {
     const u = data.mode === "storyboard" ? "컷" : "표정";
     add("warn", `${u}당 시간`, `${u}당 ${r1(duration / n)}초로 짧아 전환이 급해질 수 있습니다.`, { kind: "goto", step: 1, label: `2단계 길이·${u} 수로` });
   }
@@ -261,15 +261,15 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
       const i = data.expressions.findIndex((e) => e.id === seg.expressionId);
       const e = data.expressions[i];
       const len = seg.end - seg.start;
-      if (!e || len >= 1.5) return [];
-      const busy = cameraTextMoves(e.camera) || e.action.trim().length > 160;
+      if (!e || len >= 4) return [];
+      const busy = len < 1.5 ? cameraTextMoves(e.camera) || e.action.trim().length > 160 : true;
       return busy ? [`${i + 1}번 컷 ${r1(len)}초`] : [];
     });
     if (crowded.length)
       add(
         "warn",
         "짧은 컷",
-        `${crowded.join(" · ")}: 1.5초도 안 되는 컷에 카메라 움직임이나 여러 동작이 있어 영상 모델이 다 하지 못하고 건너뛰거나 뭉갤 수 있습니다. 시간을 늘리거나(4단계), 동작을 하나로 줄이거나, 고정 샷으로 바꾸세요.`,
+        `${crowded.join(" · ")}: 컷당 4초(권장 5초)보다 짧아 영상 모델이 동작을 건너뛰거나 뭉갤 수 있습니다. 시간을 늘리거나(4단계), 컷 수를 줄이거나(2단계), 동작을 하나로 줄이세요.`,
         { kind: "goto", step: 3, label: "4단계 시간 분배로" },
       );
   }

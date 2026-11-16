@@ -41,7 +41,7 @@ describe("8 animation principles (field guide)", () => {
     const p = buildVideoHandoff(d).prompt;
     expect(p).toContain("Motion: before the main action the character first looks at the target and visibly prepares");
     expect(p).toContain("the torso stops first, then the arms");
-    expect(p).toContain("Each action reads in order: look, prepare, act, contact, settle");
+    expect(p).toContain("in-between poses: look, prepare, act, contact, settle");
     expect(principleLine(d.expressions[0], 1)).toBe("Motion priorities: anticipation, follow-through.");
     expect(principleLine(d.expressions[1], 2)).toBe("");
   });

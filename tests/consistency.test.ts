@@ -213,7 +213,7 @@ describe("safeguards: sketch ↔ text ↔ acting", () => {
     const d = setExpressionCount(createProjectData("콘티", 1, "storyboard"), 2);
     d.expressions[0] = { ...d.expressions[0], action: "pushes up and kneels", continuity: "시작: 엎드림 / 끝: 무릎을 꿇은 자세" };
     const p = buildSketchHandoffs(d)[0].prompt;
-    expect(p).toContain("The pose to draw");
+    expect(p).toContain("End pose to draw");
     expect(p).toContain("무릎을 꿇은 자세");
   });
 });
@@ -259,8 +259,8 @@ describe("dialogue acting cues (Z_1–Z_4 references)", () => {
     d.dialogue.lines = [{ expressionId: d.expressions[0].id, line: "We've got HER, though.", meaning: "", delivery: cue }];
     const p = buildVideoHandoff(d, "references").prompt;
     expect(p).toContain(cue);
-    expect(ACTING_EN).toContain("lands exactly on that word");
-    expect(ACTING_EN).toContain("Everyone in frame is live");
+    expect(ACTING_EN).toContain("lands on that word");
+    expect(ACTING_EN).toContain("Everyone in frame stays live");
   });
 });
 
@@ -350,10 +350,10 @@ describe("rough conti redraw loop", () => {
     d.expressions = d.expressions.map((e, i) => ({ ...e, action: `동작 ${i + 1}` }));
     const [h] = buildSketchHandoffs(d, { [d.expressions[0].id]: "the hat is missing" });
     expect(h.references.map((r) => r.assetId)).toEqual(["scene-1", "sheet-1", "sheet-2"]);
-    expect(h.prompt).toContain("Image reference 2 is the design sheet of 인물1");
+    expect(h.prompt).toContain("Image 2: 인물1's design sheet");
     expect(h.prompt).toContain("black bowler hat");
     expect(h.prompt).toContain("the hat is missing");
-    expect(h.prompt).toContain("its end pose");
+    expect(h.prompt).toContain("draw where it ends");
   });
 });
 
@@ -364,7 +364,7 @@ describe("rough conti in two rounds", () => {
     d.expressions = d.expressions.map((e, i) => ({ ...e, action: `동작 ${i + 1}`, link: i === 2 ? ("cut" as const) : ("continuous" as const), sketchAssetId: i === 0 ? "sk-1" : i === 2 ? "sk-3" : null }));
     const hs = buildSketchHandoffs(d);
     expect(hs[1].references.map((r) => r.assetId)).toContain("sk-1");
-    expect(hs[1].prompt).toContain("earlier in this SAME shot");
+    expect(hs[1].prompt).toContain("just before in this same shot");
     expect(hs[3].references.map((r) => r.assetId)).toContain("sk-3");
     // a shot start redrawn later sees the previous shot (a hard cut between)
     d = { ...d, expressions: d.expressions.map((e, i) => (i === 1 ? { ...e, sketchAssetId: "sk-2" } : e)) };
@@ -387,5 +387,18 @@ describe("panel titles", () => {
     const p = buildVideoHandoff(d, "references").prompt;
     expect(p).not.toMatch(/panel \d+ — \d+~\d+초/);
     expect(p).toContain("— 장면 1");
+  });
+});
+
+describe("4 seconds or more per storyboard cut", () => {
+  it("caps the cut count by the length and warns when a scene has too many cuts", async () => {
+    const { maxCutsFor, stepIssues } = await import("@/lib/domain/project");
+    expect(maxCutsFor(12)).toBe(3);
+    expect(maxCutsFor(20)).toBe(5);
+    expect(maxCutsFor(6)).toBe(2);
+    const d = setDuration(setExpressionCount(createProjectData("길이", 1, "storyboard"), 7), 12);
+    expect(stepIssues(d, 1).some((i) => i.message.includes("컷당 4초 이상"))).toBe(true);
+    const ok = setExpressionCount(d, 3);
+    expect(stepIssues(ok, 1).some((i) => i.message.includes("컷당 4초 이상"))).toBe(false);
   });
 });

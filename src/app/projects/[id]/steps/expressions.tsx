@@ -18,6 +18,7 @@ import {
   TILT_LABEL,
   MAX_EXPRESSIONS,
   MAX_PANELS_STORYBOARD,
+  maxCutsFor,
   usesConti,
   sketchIsStale,
   withSketch,
@@ -756,10 +757,16 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
           </p>
         )}
         <div>
-          <div className="field-label">컷 수</div>
+          <div className="field-label">컷 수 (컷당 4초 이상, 권장 5초 — {d.acting.duration}초면 최대 {maxCutsFor(d.acting.duration)}컷)</div>
           <div className="seg">
             {Array.from({ length: MAX_PANELS_STORYBOARD - MIN_EXPRESSIONS + 1 }, (_, i) => i + MIN_EXPRESSIONS).map((n) => (
-              <button key={n} aria-pressed={s.count === n} disabled={!canEdit} onClick={() => doc.edit(1, (x) => setExpressionCount(x, n))}>
+              <button
+                key={n}
+                aria-pressed={s.count === n}
+                disabled={!canEdit || (n > maxCutsFor(d.acting.duration) && s.count !== n)}
+                title={n > maxCutsFor(d.acting.duration) ? `컷당 4초 미만이 됩니다 — 영상을 ${n * 4}초 이상으로 늘리면 고를 수 있습니다` : undefined}
+                onClick={() => doc.edit(1, (x) => setExpressionCount(x, n))}
+              >
                 {n}컷
               </button>
             ))}
