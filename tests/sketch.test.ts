@@ -19,7 +19,7 @@ describe("러프 콘티 (rough sketches)", () => {
     expect(p).toContain("black pencil lines on a plain white background");
     // one moment in one picture: never a sheet of small panels
     expect(p).toContain("ONE single image of ONE moment");
-    expect(p).toContain("draw only the single key moment of the main action, in one framing");
+    expect(p).toContain("draw only the single moment the action arrives at (its end pose), in one framing");
     expect(p).not.toMatch(/panel \d+ of \d+/);
     expect(p).toContain("no colour, no shading");
     expect(p).toContain("Do NOT copy its colours");

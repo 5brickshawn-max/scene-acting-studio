@@ -22,7 +22,7 @@ export type GenSpec =
   /** fixes: per panel, the AI picture review's notes to correct in the redraw */
   | { target: "expressions"; model: string; expressionIds?: string[]; fixes?: Record<string, string> }
   /** 러프 콘티: rough line sketches of storyboard panels (all, or the listed ones) */
-  | { target: "sketch"; model: string; expressionIds?: string[] }
+  | { target: "sketch"; model: string; expressionIds?: string[]; fixes?: Record<string, string> }
   | { target: "video"; model: string; resolution: string }
   | { target: "finalize"; draftRowId: string }
   /** 첫 장면: the scene reference picture drawn from the scenario (step 1) */
@@ -81,7 +81,7 @@ async function plan(projectId: string, spec: GenSpec, data: ProjectData): Promis
     if (data.mode !== "storyboard") throw new Error("러프 콘티는 스토리보드 방식에서만 생성합니다.");
     const m = IMAGE_MODELS[spec.model];
     const wanted = spec.expressionIds?.length ? new Set(spec.expressionIds) : null;
-    const items = buildSketchHandoffs(data)
+    const items = buildSketchHandoffs(data, spec.fixes ?? {})
       .filter((h) => !wanted || wanted.has(h.expressionId))
       .filter((h) => {
         const e = data.expressions.find((x) => x.id === h.expressionId);

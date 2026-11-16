@@ -322,3 +322,19 @@ describe("화풍 차원 (2D / 2.5D & 3D)", () => {
     expect(englishStale(d)).toContain("그림체");
   });
 });
+
+describe("rough conti redraw loop", () => {
+  it("sketches carry the character sheets, the costumes and the review notes", async () => {
+    const { buildSketchHandoffs } = await import("@/lib/domain/handoff");
+    const d = setExpressionCount(createProjectData("콘티", 2, "storyboard"), 2);
+    d.baseAssetId = "scene-1";
+    d.cast = d.cast.map((c, i) => ({ ...c, name: `인물${i + 1}`, refAssetId: `sheet-${i + 1}`, outfit: i ? "heart-shaped body, no legs" : "sleeveless top with frills, black bowler hat" }));
+    d.expressions = d.expressions.map((e, i) => ({ ...e, action: `동작 ${i + 1}` }));
+    const [h] = buildSketchHandoffs(d, { [d.expressions[0].id]: "the hat is missing" });
+    expect(h.references.map((r) => r.assetId)).toEqual(["scene-1", "sheet-1", "sheet-2"]);
+    expect(h.prompt).toContain("Image reference 2 is the design sheet of 인물1");
+    expect(h.prompt).toContain("black bowler hat");
+    expect(h.prompt).toContain("the hat is missing");
+    expect(h.prompt).toContain("its end pose");
+  });
+});

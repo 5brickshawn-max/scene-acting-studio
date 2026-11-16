@@ -16,10 +16,14 @@ import { AssetPicker } from "../ui";
 import { FRAMING_LABEL, ratioLabel, castLabel, continuityAnchor, imageAspectFor, imageIsStale, timelineOrder, usesConti, withSketch, type Framing } from "@/lib/domain/project";
 import { useEditor } from "../editor-context";
 
+/** The team's fixed models: rough conti sketches with Nano Banana, every finished picture with GPT Image. */
+const SKETCH_MODEL: ImageModelKey = "nano_banana_2_1";
+const PICTURE_MODEL: ImageModelKey = "gpt_image_2_6";
+
 type Quote = { credits: number | null; each?: number | null; count?: number; balance: number | null; workspace: string | null; model: string; references: number };
 type Spec =
   | { target: "expressions"; model: string; expressionIds?: string[]; fixes?: Record<string, string> }
-  | { target: "sketch"; model: string; expressionIds?: string[] }
+  | { target: "sketch"; model: string; expressionIds?: string[]; fixes?: Record<string, string> }
   | { target: "video"; model: string; resolution: string }
   | { target: "finalize"; draftRowId: string }
   | { target: "frame"; model: string; expressionId: string; shot: Framing; slot: "start" | "end" }
@@ -209,7 +213,7 @@ const jobAssetId = (j: JobView) => (j.output as { assetId?: string } | null)?.as
 export function SceneImageGenerator({ onUse }: { onUse: (assetId: string) => void }) {
   const { doc, canEdit, assets } = useEditor();
   const h = useHfJobs("hf_scene");
-  const [model, setModel] = useState<ImageModelKey>("gpt_image_2_6");
+  const model: ImageModelKey = PICTURE_MODEL;
   const d = doc.data;
   const ready = canEdit && !h.busy && !h.quote && Boolean(d.expressionSetup.scene.trim() || d.opening.trim());
   const current = d.baseAssetId ? assets.get(d.baseAssetId) : undefined;
@@ -219,16 +223,7 @@ export function SceneImageGenerator({ onUse }: { onUse: (assetId: string) => voi
         시나리오·첫 장면 묘사·인물 자료로 이 장면의 첫 순간을 그립니다. 고른 그림이 <strong className="text-ink">장면 기준 그림</strong>이 되어 이후 모든 그림과
         영상의 인물·그림체 기준이 됩니다. Higgsfield 구독 크레딧이 차감됩니다.
       </p>
-      <div role="group" aria-label="이미지 모델">
-        <div className="text-[13px] font-semibold mb-1 text-muted">생성 모델</div>
-        <div className="seg">
-          {(Object.keys(IMAGE_MODELS) as ImageModelKey[]).map((k) => (
-            <button key={k} aria-pressed={model === k} disabled={!canEdit || !!h.quote} onClick={() => setModel(k)}>
-              {IMAGE_MODELS[k].label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <p className="text-[13px] text-muted">생성 모델: <strong className="text-ink">{IMAGE_MODELS[model].label}</strong> (완성 그림은 이 모델로 고정)</p>
       {!h.quote && (
         <button className="btn btn-dark" disabled={!ready} onClick={() => h.askQuote({ target: "scene", model })}>
           {h.busy ? "비용 확인 중…" : current ? "첫 장면 다시 생성" : "비용 확인 후 첫 장면 생성"}
@@ -270,7 +265,7 @@ export function SceneImageGenerator({ onUse }: { onUse: (assetId: string) => voi
 export function SketchGenerator() {
   const { doc, canEdit, jobs, assets, askAi } = useEditor();
   const h = useHfJobs("hf_sketch");
-  const [model, setModel] = useState<ImageModelKey>("gpt_image_2_6");
+  const model: ImageModelKey = SKETCH_MODEL;
   const exps = doc.data.expressions;
   const ready = canEdit && !h.busy && !h.quote;
   const drawable = exps.filter((e) => e.action.trim() || e.camera.trim());
@@ -299,8 +294,8 @@ export function SketchGenerator() {
 
   const runningFor = (id: string) => h.running.some((j) => (j.input as { expressionId?: string }).expressionId === id);
 
-  // Once every cut has its sketch (nothing generating), the AI conti check runs by itself once per set:
-  // it compares each sketch with its cut's text and proposes text corrections where they differ.
+  // Once every cut has its sketch (nothing generating), the AI conti check runs by itself — after a full set, not
+  // after one or two redrawn cuts: re-checking every redraw found new small things each time and never ended.
   const lastCheck = jobs.jobs.find((j) => j.kind === "check_sheet");
   const sketches = drawable.map((e) => (e.sketchAssetId ? assets.get(e.sketchAssetId) : undefined));
   const newestSketch = Math.max(0, ...sketches.map((a) => (a ? Date.parse(a.createdAt) : 0)));
@@ -315,7 +310,10 @@ export function SketchGenerator() {
     !h.quote &&
     lastCheck?.status !== "queued" &&
     lastCheck?.status !== "running" &&
-    (!lastCheck || Date.parse(lastCheck.created_at) < newestSketch);
+    (!lastCheck || Date.parse(lastCheck.created_at) < newestSketch) &&
+    // most of the set is new since the last check (a full generation), or there was no check yet
+    (!lastCheck ||
+      sketches.filter((a) => a && Date.parse(a.createdAt) > Date.parse(lastCheck.created_at)).length >= Math.ceil(drawable.length / 2));
   const autoChecked = useRef(new Set<string>());
   useEffect(() => {
     if (!checkDue || autoChecked.current.has(sketchKey)) return;
@@ -333,13 +331,7 @@ export function SketchGenerator() {
           드는 컷은 카드에서 그 컷만 다시 생성하거나 직접 그린 그림으로 바꾸세요. 컷 그림은 이 구도를 따릅니다. 구독 크레딧이 차감됩니다(품질 낮음으로 저렴하게).
         </p>
       </div>
-      <div role="group" aria-label="러프 콘티 모델" className="seg">
-        {(Object.keys(IMAGE_MODELS) as ImageModelKey[]).map((k) => (
-          <button key={k} aria-pressed={model === k} disabled={!canEdit || !!h.quote} onClick={() => setModel(k)}>
-            {IMAGE_MODELS[k].label.split(" · ")[0]}
-          </button>
-        ))}
-      </div>
+      <p className="text-[13px] text-muted">생성 모델: <strong className="text-ink">{IMAGE_MODELS[model].label}</strong> (러프 콘티는 이 모델로 고정)</p>
       {!h.quote && (
         <div className="flex flex-wrap gap-2">
           <button className="btn btn-dark" disabled={!ready || !drawable.length} onClick={() => ask(drawable.map((e) => e.id))}>
@@ -363,7 +355,7 @@ export function SketchGenerator() {
         <p className="field-help" aria-live="polite">
           {checking
             ? "AI가 러프 콘티와 컷 글을 비교하는 중… 끝나면 아래에 글 보정 제안이 뜹니다."
-            : "러프 콘티가 모두 생기면 AI가 그림과 컷 글(장면 묘사·카메라·연결 상태)을 자동으로 비교해, 다른 곳을 글 보정 제안으로 띄웁니다."}
+            : "러프 콘티를 전부 생성하면 AI가 그림과 컷 글(장면 묘사·카메라·연결 상태)을 자동으로 한 번 비교해 제안을 띄웁니다. 컷 몇 개만 다시 그린 뒤에는 자동으로 다시 검사하지 않습니다(필요하면 ④에서 검사)."}
         </p>
       )}
     </div>
@@ -372,17 +364,29 @@ export function SketchGenerator() {
 
 /** One panel's "redo this sketch" button (shares the sketch jobs with SketchGenerator). */
 export function SketchRedoButton({ expressionId, hasSketch }: { expressionId: string; hasSketch: boolean }) {
-  const { canEdit, doc } = useEditor();
+  const { canEdit, doc, jobs, assets } = useEditor();
   const h = useHfJobs("hf_sketch");
   const e = doc.data.expressions.find((x) => x.id === expressionId);
   if (!canEdit || !e || !(e.action.trim() || e.camera.trim())) return null;
+  // the newest conti check's notes for this cut go into the redraw (otherwise the same mistakes come back)
+  const index = doc.data.expressions.indexOf(e) + 1;
+  const check = jobs.jobs.find((j) => j.kind === "check_sheet" && j.status === "done");
+  const sketch = e.sketchAssetId ? assets.get(e.sketchAssetId) : undefined;
+  const notes =
+    check && (!sketch || Date.parse(sketch.createdAt) < Date.parse(check.created_at))
+      ? ((check.output as { issues?: { panel: number | null; message: string }[] } | null)?.issues ?? [])
+          .filter((i) => i.panel === index)
+          .map((i) => i.message)
+          .join(" / ")
+      : "";
+  const fixes = notes ? { [expressionId]: notes } : undefined;
   const running = h.running.some((j) => (j.input as { expressionId?: string }).expressionId === expressionId);
   if (running) return <p className="text-[13px] text-muted" aria-live="polite">러프 콘티 생성 중…</p>;
   return (
     <div className="space-y-2">
       {!h.quote && (
-        <button className="btn btn-sm" disabled={h.busy} onClick={() => h.askQuote({ target: "sketch", model: "gpt_image_2_6", expressionIds: [expressionId] })}>
-          {h.busy ? "비용 확인 중…" : hasSketch ? "러프 콘티 다시 생성" : "러프 콘티 생성"}
+        <button className="btn btn-sm" disabled={h.busy} onClick={() => h.askQuote({ target: "sketch", model: SKETCH_MODEL, expressionIds: [expressionId], fixes })}>
+          {h.busy ? "비용 확인 중…" : hasSketch ? (notes ? "지적 반영해 러프 콘티 다시 생성" : "러프 콘티 다시 생성") : "러프 콘티 생성"}
         </button>
       )}
       <QuoteBox h={h} />
@@ -400,7 +404,7 @@ export function HiggsfieldDirect({
 }) {
   const { doc, canEdit, assets, addAsset, jobs, askAi } = useEditor();
   const h = useHfJobs("hf_expr");
-  const [model, setModel] = useState<ImageModelKey>("nano_banana_2_1");
+  const model: ImageModelKey = PICTURE_MODEL;
   // ① → ②: once the anchor image is chosen, the cost check for the rest opens by itself
   const [chain, setChain] = useState(false);
   const data = doc.data;
@@ -446,7 +450,7 @@ export function HiggsfieldDirect({
   const stale = exps.filter((e) => imageIsStale(e, framing, aspect)).length;
 
   // the newest AI picture review: its notes per panel, for panels whose image has not been redrawn since
-  const review = jobs.jobs.find((j) => j.kind === "check_sheet" && j.status === "done");
+  const review = usesConti(data) ? undefined : jobs.jobs.find((j) => j.kind === "check_sheet" && j.status === "done");
   const reviewFix = (() => {
     const out = review?.output as { issues?: { panel: number | null; severity: "high" | "low"; message: string }[] } | null;
     const by = new Map<string, { text: string[]; high: boolean }>();
@@ -602,16 +606,7 @@ export function HiggsfieldDirect({
         )
       )}
 
-      <div role="group" aria-label="이미지 모델">
-        <div className="text-[13px] font-semibold mb-1 text-muted">생성 모델</div>
-        <div className="seg">
-          {(Object.keys(IMAGE_MODELS) as ImageModelKey[]).map((k) => (
-            <button key={k} aria-pressed={model === k} disabled={!canEdit || !!h.quote} onClick={() => setModel(k)}>
-              {IMAGE_MODELS[k].label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <p className="text-[13px] text-muted">생성 모델: <strong className="text-ink">{IMAGE_MODELS[model].label}</strong> (완성 그림은 이 모델로 고정)</p>
 
       {canEdit && !h.quote && !seq && reviewFix.ids.length > 0 && (
         <div className="rounded-lg border-2 border-[#f3c9ae] bg-[#fffaf5] p-3 space-y-2">
@@ -826,7 +821,7 @@ const SHOTS: Framing[] = ["close_up", "bust", "medium"];
 export function FrameMaker({ onUse }: { onUse: (slot: "start" | "end", assetId: string) => void }) {
   const { doc, canEdit, assets } = useEditor();
   const h = useHfJobs("hf_frame");
-  const [model, setModel] = useState<ImageModelKey>("nano_banana_2_1");
+  const model: ImageModelKey = PICTURE_MODEL;
   const data = doc.data;
   const order = timelineOrder(data);
   const n = (id: string) => data.expressions.findIndex((e) => e.id === id) + 1;
@@ -843,13 +838,7 @@ export function FrameMaker({ onUse }: { onUse: (slot: "start" | "end", assetId: 
         표정 그림의 순간을 영상 비율({data.video.aspectRatio})과 고른 구도로 다시 그립니다. 예: 시작 = 1번 표정 클로즈업, 끝 = 마지막 표정 바스트 → 카메라가
         클로즈업에서 바스트로 물러나는 영상.
       </p>
-      <div role="group" aria-label="이미지 모델" className="seg">
-        {(Object.keys(IMAGE_MODELS) as ImageModelKey[]).map((k) => (
-          <button key={k} type="button" aria-pressed={model === k} disabled={!canEdit || !!h.quote} onClick={() => setModel(k)}>
-            {IMAGE_MODELS[k].label}
-          </button>
-        ))}
-      </div>
+      <p className="text-[13px] text-muted">생성 모델: <strong className="text-ink">{IMAGE_MODELS[model].label}</strong> (완성 그림은 이 모델로 고정)</p>
       {(["start", "end"] as const).map((slot) => (
         <div key={slot} className="flex flex-wrap items-end gap-2">
           <label className="text-[13px] font-semibold text-muted">
