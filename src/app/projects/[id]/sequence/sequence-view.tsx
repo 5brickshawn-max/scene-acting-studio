@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ProjectData } from "@/lib/domain/project";
-import { defaultResult, junction } from "@/lib/domain/sequence";
+import { defaultResult, joinOf, junction } from "@/lib/domain/sequence";
 import type { AssetView } from "@/lib/types";
 
 type Scene = { id: string; name: string; data: ProjectData };
@@ -105,26 +105,54 @@ export function SequenceView(props: {
                   ) : (
                     <p className="text-muted">앞 장면의 끝 상태에서 시작하도록 설계됩니다: {s.data.previous?.endState || "(기록 없음)"}</p>
                   )}
-                  {start ? (
-                    <div className="flex items-center gap-3">
-                      <img src={start.previewUrl} alt="" className="h-16 rounded border border-line" />
-                      <span className="text-muted">끊김 없이 이어 가기: 이 장면 영상은 이 시작 프레임에서 시작합니다(5단계 ‘시작 프레임’).</span>
-                    </div>
-                  ) : null}
-                  {props.canEdit && pick[prev.id] && (
-                    <div className="space-y-1">
-                      <button
-                        className="btn btn-sm"
-                        disabled={Boolean(busy)}
-                        onClick={async () => {
-                          if (await call("lastframe", { fromAssetId: pick[prev.id], toProjectId: s.id }, `frame-${s.id}`)) router.refresh();
-                        }}
-                      >
-                        {busy === `frame-${s.id}` ? "마지막 프레임 가져오는 중…" : start ? "앞 영상 마지막 프레임으로 다시 바꾸기" : "끊김 없이 이어 가기 — 앞 영상의 마지막 프레임을 시작 프레임으로"}
-                      </button>
-                      <p className="field-help">
-                        같은 쇼트가 장면을 넘어 이어질 때만 쓰세요. 시작 프레임이 있으면 이 장면 영상은 참고 그림 대신 그 프레임에서 시작하는 방식으로 만들어집니다(컷으로 넘어가는 장면은 필요 없음).
-                      </p>
+                  <div role="group" aria-label="장면 사이 연결" className="seg">
+                    <button
+                      aria-pressed={joinOf(s.data) === "cut"}
+                      disabled={!props.canEdit || Boolean(busy)}
+                      onClick={async () => {
+                        if (joinOf(s.data) === "cut") return;
+                        if (await call("join_cut", { projectId: s.id }, `join-${s.id}`)) router.refresh();
+                      }}
+                    >
+                      컷 편집 (하드 컷)
+                    </button>
+                    <button
+                      aria-pressed={joinOf(s.data) === "seamless"}
+                      disabled={!props.canEdit || Boolean(busy) || !pick[prev.id]}
+                      title={!pick[prev.id] ? "앞 장면에 결과 영상이 있어야 고를 수 있습니다" : undefined}
+                      onClick={async () => {
+                        if (joinOf(s.data) === "seamless") return;
+                        if (await call("lastframe", { fromAssetId: pick[prev.id], toProjectId: s.id }, `frame-${s.id}`)) router.refresh();
+                      }}
+                    >
+                      끊김 없이 이어 가기
+                    </button>
+                  </div>
+                  {(busy === `join-${s.id}` || busy === `frame-${s.id}`) && <p className="text-muted">바꾸는 중…</p>}
+                  {joinOf(s.data) === "cut" ? (
+                    <p className="text-muted">
+                      컷으로 넘어갑니다(기본). 의상·소품·위치·빛은 앞 장면의 끝 상태를 따라 이어지고, 이 장면 영상은 평소처럼 참고 그림으로 만들어집니다.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {start && (
+                        <div className="flex items-center gap-3">
+                          <img src={start.previewUrl} alt="" className="h-16 rounded border border-line" />
+                          <span className="text-muted">이 장면 영상은 앞 영상의 마지막 프레임에서 시작합니다(5단계 ‘시작 프레임’). 영상을 다시 생성해야 반영됩니다.</span>
+                        </div>
+                      )}
+                      {props.canEdit && pick[prev.id] && (
+                        <button
+                          className="btn btn-sm"
+                          disabled={Boolean(busy)}
+                          onClick={async () => {
+                            if (await call("lastframe", { fromAssetId: pick[prev.id], toProjectId: s.id }, `frame-${s.id}`)) router.refresh();
+                          }}
+                        >
+                          지금 고른 앞 영상의 마지막 프레임으로 다시 바꾸기
+                        </button>
+                      )}
+                      <p className="field-help">같은 쇼트가 장면을 넘어 이어질 때만 쓰세요. 시작 프레임이 있으면 이 장면 영상은 참고 그림 대신 그 프레임에서 시작하는 방식으로 만들어집니다.</p>
                     </div>
                   )}
                 </div>

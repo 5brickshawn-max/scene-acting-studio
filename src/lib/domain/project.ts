@@ -310,7 +310,14 @@ export const ProjectDataSchema = z.object({
    * which this scene's first cut starts from (null for a scene that starts a sequence).
    */
   previous: z
-    .object({ projectId: z.string(), name: z.string(), endState: z.string(), index: z.number().int().default(1) })
+    .object({
+      projectId: z.string(),
+      name: z.string(),
+      endState: z.string(),
+      index: z.number().int().default(1),
+      /** how the scene before joins this one: a cut (the default), or seamlessly from its last frame */
+      join: z.enum(["cut", "seamless"]).optional(),
+    })
     .nullable()
     .default(null),
   /**
@@ -1169,7 +1176,7 @@ export function nextSceneData(prev: ProjectData, prevProjectId: string, title: s
     extras: prev.extras,
     style: prev.style,
     dimension: prev.dimension,
-    previous: { projectId: prevProjectId, name: prev.title, endState: sceneEndState(prev), index: (prev.previous?.index ?? 1) + 1 },
+    previous: { projectId: prevProjectId, name: prev.title, endState: sceneEndState(prev), index: (prev.previous?.index ?? 1) + 1, join: "cut" },
     baseAssetId: prev.baseAssetId,
     designRefAssetIds: [...prev.designRefAssetIds],
     cast,

@@ -19,6 +19,8 @@ const Body = z.discriminatedUnion("action", [
   z.object({ action: z.literal("lastframe"), fromAssetId: z.string().max(64), toProjectId: z.string().max(64) }),
   /** take again where the scene before now ends */
   z.object({ action: z.literal("refresh_end"), projectId: z.string().max(64) }),
+  /** a plain cut between the scenes: a start frame taken from the scene before is let go */
+  z.object({ action: z.literal("join_cut"), projectId: z.string().max(64) }),
 ]);
 
 const when = () => new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
@@ -118,8 +120,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const saved = await store(body.toProjectId, png, "design_ref", `앞 장면 마지막 프레임 · ${before.name} · ${when()}.png`, "image/png", {
         lastFrameOf: body.fromAssetId,
       });
-      await saveScene(body.toProjectId, (d) => ({ ...d, video: { ...d.video, startFrameAssetId: saved.assetId } }), "시퀀스: 앞 장면 마지막 프레임을 시작 프레임으로");
+      await saveScene(
+        body.toProjectId,
+        (d) => ({
+          ...d,
+          previous: d.previous ? { ...d.previous, join: "seamless" as const } : d.previous,
+          video: { ...d.video, startFrameAssetId: saved.assetId },
+        }),
+        "시퀀스: 끊김 없이 이어 가기 (앞 장면 마지막 프레임을 시작 프레임으로)",
+      );
       return NextResponse.json(saved);
+    }
+
+    if (body.action === "join_cut") {
+      const scene = inSeq.get(body.projectId);
+      if (!scene?.data.previous) return NextResponse.json({ error: "앞 장면이 없습니다." }, { status: 400 });
+      // only a start frame made from the scene before goes; one the team set for another reason stays
+      const start = scene.data.video.startFrameAssetId;
+      const { data: a } = start ? await admin.from("assets").select("meta").eq("id", start).single() : { data: null };
+      const fromBefore = Boolean((a?.meta as { lastFrameOf?: string } | null)?.lastFrameOf);
+      await saveScene(
+        body.projectId,
+        (d) => ({
+          ...d,
+          previous: d.previous ? { ...d.previous, join: "cut" as const } : d.previous,
+          video: fromBefore ? { ...d.video, startFrameAssetId: null } : d.video,
+        }),
+        "시퀀스: 컷 편집(하드 컷)으로 넘어가기",
+      );
+      return NextResponse.json({ cleared: fromBefore });
     }
 
     // refresh_end

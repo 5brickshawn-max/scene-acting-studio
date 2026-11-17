@@ -38,5 +38,11 @@ export function junction(prev: ProjectData, next: ProjectData): Junction {
   return { endChanged: Boolean(endNow) && endNow.replace(/\s+/g, " ").trim() !== stored.replace(/\s+/g, " ").trim(), endNow };
 }
 
+/**
+ * How a scene joins the one before: a hard cut unless the team chose a seamless join (older scenes that already
+ * start from a frame are read as seamless).
+ */
+export const joinOf = (d: ProjectData): "cut" | "seamless" => d.previous?.join ?? (d.video.startFrameAssetId ? "seamless" : "cut");
+
 /** The result video a scene adds to the sequence by default: its newest one. */
 export const defaultResult = (d: ProjectData): string | null => d.video.resultAssetIds[d.video.resultAssetIds.length - 1] ?? null;

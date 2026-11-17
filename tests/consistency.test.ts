@@ -408,7 +408,7 @@ describe("다음 장면 만들기 (sequence)", () => {
     expect(next.video.resultAssetIds).toEqual([]);
     expect(next.dialogue.lines).toEqual([]);
     expect(next.expressions.every((e) => !e.action && !e.sketchAssetId)).toBe(true);
-    expect(next.previous).toEqual({ projectId: "prev-id", name: "몰리송", endState: "상태 3", index: 2 });
+    expect(next.previous).toEqual({ projectId: "prev-id", name: "몰리송", endState: "상태 3", index: 2, join: "cut" });
     expect(readProjectData(next).recovered).toBe(false);
     expect(projectContext(next, 1)).toContain("앞 장면은 이렇게 끝났습니다: 상태 3");
     invariants(next, "next scene");
@@ -439,5 +439,18 @@ describe("시퀀스 (sequence view)", () => {
     expect(junction(prev, next)).toEqual({ endChanged: true, endNow: "바뀐 끝" });
     prev.video.resultAssetIds = ["v1", "v2"];
     expect(defaultResult(prev)).toBe("v2");
+  });
+});
+
+describe("join between scenes", () => {
+  it("is a hard cut by default; an older scene that starts from a frame reads as seamless", async () => {
+    const { joinOf } = await import("@/lib/domain/sequence");
+    const { nextSceneData } = await import("@/lib/domain/project");
+    const prev = createProjectData("A", 1, "storyboard");
+    const next = nextSceneData(prev, "a", "B");
+    expect(joinOf(next)).toBe("cut");
+    expect(joinOf({ ...next, video: { ...next.video, startFrameAssetId: "f" } })).toBe("cut");
+    const older = { ...next, previous: { ...next.previous!, join: undefined }, video: { ...next.video, startFrameAssetId: "f" } };
+    expect(joinOf(older)).toBe("seamless");
   });
 });
