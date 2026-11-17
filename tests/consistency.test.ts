@@ -414,3 +414,30 @@ describe("다음 장면 만들기 (sequence)", () => {
     invariants(next, "next scene");
   });
 });
+
+describe("시퀀스 (sequence view)", () => {
+  it("follows the newest next scene, lists other branches, and notices a changed end", async () => {
+    const { sequenceChain, junction, defaultResult } = await import("@/lib/domain/sequence");
+    const { nextSceneData } = await import("@/lib/domain/project");
+    const { chain, branches } = sequenceChain(
+      [
+        { id: "a", name: "A", previousId: null, updatedAt: "2026-11-01" },
+        { id: "b1", name: "B 첫 시도", previousId: "a", updatedAt: "2026-11-02" },
+        { id: "b2", name: "B 다시", previousId: "a", updatedAt: "2026-11-05" },
+        { id: "c", name: "C", previousId: "b2", updatedAt: "2026-11-06" },
+      ],
+      "a",
+    );
+    expect(chain).toEqual(["a", "b2", "c"]);
+    expect(branches).toEqual([{ afterId: "a", ids: ["b1"] }]);
+
+    const prev = setExpressionCount(createProjectData("A", 1, "storyboard"), 2);
+    prev.expressions = prev.expressions.map((e, i) => ({ ...e, continuity: `시작: s${i} / 끝: e${i}` }));
+    const next = nextSceneData(prev, "a", "B");
+    expect(junction(prev, next).endChanged).toBe(false);
+    prev.expressions[1] = { ...prev.expressions[1], continuity: "시작: s1 / 끝: 바뀐 끝" };
+    expect(junction(prev, next)).toEqual({ endChanged: true, endNow: "바뀐 끝" });
+    prev.video.resultAssetIds = ["v1", "v2"];
+    expect(defaultResult(prev)).toBe("v2");
+  });
+});

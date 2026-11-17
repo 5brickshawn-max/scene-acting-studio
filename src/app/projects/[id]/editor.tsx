@@ -103,6 +103,9 @@ export function Editor(props: {
             <button className="btn btn-sm" onClick={() => setShowReview(true)}>검토용 링크</button>
           )}
           <NextSceneButton />
+          <Link href={`/projects/${props.projectId}/sequence`} className="btn btn-sm">
+            시퀀스
+          </Link>
           <button className="btn btn-sm" aria-pressed={showChat} onClick={() => toggleChat(!showChat)}>
             {showChat ? "상의 닫기" : "AI와 상의"}
           </button>
