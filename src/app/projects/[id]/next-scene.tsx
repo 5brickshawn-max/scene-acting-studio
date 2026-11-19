@@ -67,8 +67,9 @@ export function NextSceneButton() {
           >
             <h2 className="section-title">다음 장면 만들기</h2>
             <p className="text-[14px] text-muted">
-              이 장면에 이어지는 새 장면을 만듭니다. <strong className="text-ink">출연진(캐릭터 시트·특징·의상·목소리), 그림체·화풍 차원, 장면 기준 그림·참고 그림, 장면 연결 규칙,
+              이 장면에 이어지는 새 장면을 만듭니다. <strong className="text-ink">출연진(캐릭터 시트·특징·의상·목소리), 그림체·화풍 차원, 장면 기준 그림·참고 그림, 기초 자료(대본 PDF 등), 장면 연결 규칙,
               영상 설정</strong>은 그대로 가져오고, 시나리오·컷·대사·액팅·결과는 비어 있습니다. 새 장면의 첫 컷은 이 장면의 마지막 상태에서 이어지게 설계됩니다.
+              기초 자료가 있으면 새 장면에서 ‘AI로 씬 구성’을 누를 때 자료 중 이 장면 다음 부분을 이어서 구성합니다.
             </p>
             <label className="block">
               <span className="field-label">새 장면 이름</span>

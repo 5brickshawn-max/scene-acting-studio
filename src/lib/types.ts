@@ -5,7 +5,7 @@ export const ASSET_KIND_LABEL: Record<AssetKind, string> = {
   design_ref: "디자인 참고",
   expression_ref: "표정 참고 시트",
   sheet: "표정 시트(생성 결과)",
-  dialogue_ref: "대사 참고",
+  dialogue_ref: "대본·기초 자료",
   acting_ref: "액팅 참고",
   video: "영상 결과",
 };

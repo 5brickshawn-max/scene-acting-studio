@@ -51,6 +51,13 @@ function Media({ a, label, tall }: { a?: ReviewAsset; label: string; tall?: bool
       </div>
     );
   if (a.mime.startsWith("video/")) return <video src={a.url} controls preload="metadata" className="w-full rounded-lg bg-black" />;
+  if (a.mime === "application/pdf")
+    return (
+      <a href={a.url} target="_blank" rel="noreferrer noopener" className="flex items-center gap-2 rounded-lg border border-line p-3 hover:border-accent">
+        <span className="pill">PDF</span>
+        <span className="truncate text-[14px]">{a.name}</span>
+      </a>
+    );
   return (
     <a href={a.url} target="_blank" rel="noreferrer noopener" title="원본 열기">
       <img src={a.previewUrl} alt={label} className={`w-full ${tall ? "aspect-[3/4]" : ""} object-contain rounded-lg border border-line checker`} />
@@ -164,6 +171,16 @@ export function ReviewView({ b, dataUrl }: { b: ReviewBundle; dataUrl: string })
         <div className="space-y-2 max-w-xl">
           <div className="field-label">{group || story ? "장면 기준 그림" : "기본 그림"}</div>
           <Media a={A(d.baseAssetId)} label={multi ? "장면 기준 그림" : "기본 그림"} />
+          {d.sceneMaterialAssetIds.length > 0 && (
+            <>
+              <div className="field-label">기초 자료 (대본·연출 자료)</div>
+              <div className="grid grid-cols-2 gap-2">
+                {d.sceneMaterialAssetIds.map((id) => (
+                  <Media key={id} a={A(id)} label="기초 자료" />
+                ))}
+              </div>
+            </>
+          )}
           {d.designRefAssetIds.length > 0 && (
             <>
               <div className="field-label">추가 참고 그림</div>

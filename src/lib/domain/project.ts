@@ -73,6 +73,10 @@ export const MIN_CAST = 1;
 /** Character-by-character mode: every character's acting is set per beat, so the cast stays small. */
 /** Extra scene-wide reference pictures (backgrounds, props, mood) at most. */
 export const MAX_DESIGN_REFS = 8;
+/** 기초 자료: script / direction files (PDF or picture) the scene is built from */
+export const MAX_SCENE_MATERIALS = 4;
+/** a PDF the AI reads whole with every request that uses it (a request carries at most 32 MB) */
+export const MAX_MATERIAL_PDF_MB = 15;
 export const MAX_CAST = 4;
 /** Storyboard mode: named characters are kept by name and features only, so more of them fit. */
 export const MAX_CAST_STORYBOARD = 8;
@@ -317,6 +321,8 @@ export const ProjectDataSchema = z.object({
       index: z.number().int().default(1),
       /** how the scene before joins this one: a cut (the default), or seamlessly from its last frame */
       join: z.enum(["cut", "seamless"]).optional(),
+      /** the scenario of the scene before: with a shared script file, this scene takes up the material after it */
+      scene: z.string().optional(),
     })
     .nullable()
     .default(null),
@@ -327,6 +333,12 @@ export const ProjectDataSchema = z.object({
   baseAssetId: z.string().nullable().default(null),
   /** extra references for the whole scene (other views, close-ups of a character, props) */
   designRefAssetIds: z.array(z.string()).default([]),
+  /**
+   * 기초 자료: the team's script / direction files for the scene (PDF or pictures: a shooting script, a storyboard
+   * page, the original comic pages). The AI reads them with the scenario; the scenario text says which part of
+   * them is this scene.
+   */
+  sceneMaterialAssetIds: z.array(z.string()).default([]),
   /** 출연진: 1–4 characters in one shot; each is found in the scene drawing by name, position and features */
   cast: z.array(CastMemberSchema).min(MIN_CAST).max(MAX_CAST_STORYBOARD),
   expressionSetup: z.object({
@@ -471,6 +483,7 @@ export function createProjectData(title = "새 장면", castCount = 1, mode: Sce
     previous: null,
     baseAssetId: null,
     designRefAssetIds: [],
+    sceneMaterialAssetIds: [],
     cast,
     expressionSetup: {
       count,
@@ -1176,9 +1189,18 @@ export function nextSceneData(prev: ProjectData, prevProjectId: string, title: s
     extras: prev.extras,
     style: prev.style,
     dimension: prev.dimension,
-    previous: { projectId: prevProjectId, name: prev.title, endState: sceneEndState(prev), index: (prev.previous?.index ?? 1) + 1, join: "cut" },
+    previous: {
+      projectId: prevProjectId,
+      name: prev.title,
+      endState: sceneEndState(prev),
+      index: (prev.previous?.index ?? 1) + 1,
+      join: "cut",
+      scene: prev.expressionSetup.scene.trim() || undefined,
+    },
     baseAssetId: prev.baseAssetId,
     designRefAssetIds: [...prev.designRefAssetIds],
+    // a script that covers several scenes goes on: this scene is the part after the scene before
+    sceneMaterialAssetIds: [...prev.sceneMaterialAssetIds],
     cast,
     expressionSetup: {
       ...base.expressionSetup,

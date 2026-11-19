@@ -158,7 +158,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const endState = sceneEndState(before.data);
     await saveScene(
       body.projectId,
-      (d) => ({ ...d, previous: d.previous ? { ...d.previous, name: before.name, endState } : d.previous }),
+      (d) => ({
+        ...d,
+        previous: d.previous ? { ...d.previous, name: before.name, endState, scene: before.data.expressionSetup.scene.trim() || undefined } : d.previous,
+      }),
       "시퀀스: 앞 장면 끝 상태 다시 가져오기",
     );
     return NextResponse.json({ endState });

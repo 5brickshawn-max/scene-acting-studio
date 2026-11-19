@@ -6,6 +6,8 @@ import {
   castLetter,
   maxCastFor,
   MAX_DESIGN_REFS,
+  MAX_MATERIAL_PDF_MB,
+  MAX_SCENE_MATERIALS,
   POSITION_LABEL,
   POSITIONS,
   removeCastMember,
@@ -17,7 +19,7 @@ import {
   type StepIndex,
 } from "@/lib/domain/project";
 import { useEditor } from "../editor-context";
-import { AiAction, Field, ImageSlot, Seg } from "../ui";
+import { AiAction, Field, ImageSlot, MaterialFiles, Seg } from "../ui";
 import { PendingProposal } from "../proposals";
 import { StepFrame } from "./step-frame";
 import { SceneImageGenerator } from "./higgsfield-direct";
@@ -140,15 +142,27 @@ export function CharacterStep({ onNavigate }: { onNavigate: (s: StepIndex) => vo
               "칼리엘라 : “Step aside.”\n" +
               "브람 : “Not one step further!”"
             }
-            help="이 장면의 기준입니다. 대사 앞에 말하는 인물 이름을 붙이세요(‘이름 : …’). 2단계 설계와 3단계 대사가 이 글을 따릅니다."
+            help={
+              d.sceneMaterialAssetIds.length
+                ? "비워 두면 ‘AI로 씬 구성’이 아래 기초 자료에서 이 장면 부분을 옮겨 채웁니다. 쓰거나 고친 글이 자료보다 우선합니다. 대사 앞에는 말하는 인물 이름을 붙이세요(‘이름 : …’)."
+                : "이 장면의 기준입니다. 대사 앞에 말하는 인물 이름을 붙이세요(‘이름 : …’). 2단계 설계와 3단계 대사가 이 글을 따릅니다."
+            }
           />
+          <div className="space-y-2">
+            <div className="field-label">기초 자료 (PDF·그림, 선택)</div>
+            <MaterialFiles ids={d.sceneMaterialAssetIds} onChange={(ids) => doc.edit(0, (x) => ({ ...x, sceneMaterialAssetIds: ids }))} />
+            <p className="field-help">
+              대본·연출 대본·콘티·원작 페이지처럼 이 장면의 기준이 되는 자료를 올리세요(최대 {MAX_SCENE_MATERIALS}개, PDF는 {MAX_MATERIAL_PDF_MB}MB까지). ‘AI로 씬 구성’이 자료를 읽어
+              인물·그림체·쇼트를 구성하고, 시나리오 칸이 비어 있으면 이 장면 부분을 시나리오로 옮겨 줍니다. 이후 컷 설계·대사·액팅도 자료를 함께 봅니다. 한 장면은 60초까지라, 자료가 길면 앞부분부터 담고 나머지는 ‘다음 장면 만들기’로 이어 갑니다.
+            </p>
+          </div>
           <AiAction
             kind="compose_scene"
             step={0}
             label="AI로 씬 구성"
-            disabled={!d.expressionSetup.scene.trim() && !d.baseAssetId}
-            disabledReason="먼저 씬 시놉시스·시나리오를 쓰세요."
-            description={`시나리오와 인물 자료(있으면 그림까지)로 주요 인물(최대 ${maxCastFor(d.mode)}명)·외형·의상·그림체${story ? "·군중" : ""}·첫 장면을 구성합니다.`}
+            disabled={!d.expressionSetup.scene.trim() && !d.baseAssetId && !d.sceneMaterialAssetIds.length}
+            disabledReason="먼저 씬 시놉시스·시나리오를 쓰거나 기초 자료를 올리세요."
+            description={`시나리오${d.sceneMaterialAssetIds.length ? "·기초 자료" : ""}와 인물 자료(있으면 그림까지)로 주요 인물(최대 ${maxCastFor(d.mode)}명)·외형·의상·그림체${story ? "·군중" : ""}·첫 장면을 구성합니다.`}
           />
           <PendingProposal step={0} kinds={["compose_scene"]} />
           {/* other step-1 proposals (AI와 상의, picture analysis) show whichever tab is open below */}
