@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { uploadAsset, listWorkspaceAssets } from "@/lib/upload";
 import { ASSET_KIND_LABEL, type AssetKind, type AssetView } from "@/lib/types";
-import { MAX_MATERIAL_PDF_MB, MAX_SCENE_MATERIALS, type Issue } from "@/lib/domain/project";
+import type { Issue } from "@/lib/domain/project";
 import { JOB_LABEL, type JobKind } from "@/lib/ai/schemas";
 import { useEditor } from "./editor-context";
 
@@ -100,133 +100,6 @@ export function ImageSlot(props: {
   );
 }
 
-/* ───────────── 기초 자료: script / direction files (PDF or pictures) ───────────── */
-
-const MATERIAL_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
-
-const sizeText = (bytes: number) => (bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)}MB` : `${Math.max(1, Math.round(bytes / 1024))}KB`);
-
-/** A list of PDFs and pictures (each opens in full; the team can add several at once, reuse one, or let one go). */
-export function MaterialFiles(props: { ids: string[]; onChange: (ids: string[]) => void }) {
-  const { assets, addAsset, workspaceId, projectId, canEdit } = useEditor();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [picking, setPicking] = useState(false);
-  const [zoom, setZoom] = useState<AssetView | null>(null);
-  const input = useRef<HTMLInputElement>(null);
-  const room = MAX_SCENE_MATERIALS - props.ids.length;
-
-  async function onFiles(list: FileList | null) {
-    const files = Array.from(list ?? []);
-    if (!files.length) return;
-    setError(null);
-    const bad = files.find((f) => !MATERIAL_TYPES.includes(f.type));
-    const big = files.find((f) => f.type === "application/pdf" && f.size > MAX_MATERIAL_PDF_MB * 1048576);
-    if (bad || big || files.length > room) {
-      setError(
-        bad
-          ? `${bad.name}: PDF나 그림(PNG·JPG·WEBP)만 올릴 수 있습니다.`
-          : big
-            ? `${big.name}: PDF는 ${MAX_MATERIAL_PDF_MB}MB까지입니다. 이 장면에 필요한 쪽만 뽑아 올려 주세요.`
-            : `기초 자료는 최대 ${MAX_SCENE_MATERIALS}개입니다(지금 ${room}개 더 올릴 수 있음).`,
-      );
-      if (input.current) input.current.value = "";
-      return;
-    }
-    setBusy(true);
-    const added: string[] = [];
-    try {
-      for (const f of files) {
-        const a = await uploadAsset({ file: f, kind: "dialogue_ref", workspaceId, projectId });
-        addAsset(a);
-        added.push(a.id);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "업로드 실패");
-    } finally {
-      if (added.length) props.onChange([...props.ids, ...added]);
-      setBusy(false);
-      if (input.current) input.current.value = "";
-    }
-  }
-
-  return (
-    <div className="space-y-2">
-      {props.ids.length > 0 && (
-        <ul className="grid sm:grid-cols-2 gap-2">
-          {props.ids.map((id, i) => {
-            const a = assets.get(id);
-            const pdf = a?.mime === "application/pdf";
-            return (
-              <li key={id} className="flex items-center gap-3 rounded-xl border border-line p-2 min-w-0">
-                {a && !pdf ? (
-                  <button type="button" className="shrink-0" onClick={() => setZoom(a)} aria-label={`기초 자료 ${i + 1} 크게 보기`}>
-                    <img src={a.previewUrl} alt="" className="h-14 w-14 object-cover rounded-lg border border-line" />
-                  </button>
-                ) : (
-                  <span className="shrink-0 h-14 w-14 rounded-lg border border-line grid place-items-center text-[13px] font-bold text-accent bg-white">
-                    {a ? "PDF" : "?"}
-                  </span>
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold truncate" title={a?.name}>
-                    {i + 1}. {a?.name ?? "찾을 수 없는 자료"}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
-                    {a && <span>{pdf ? "PDF" : "그림"} · {sizeText(a.sizeBytes)}</span>}
-                    {a && (
-                      <a className="underline" href={a.url} target="_blank" rel="noreferrer">
-                        열기
-                      </a>
-                    )}
-                    {canEdit && (
-                      <button type="button" className="underline" onClick={() => props.onChange(props.ids.filter((x) => x !== id))}>
-                        연결 해제
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {canEdit && room > 0 && (
-        <div className="flex flex-wrap gap-2">
-          <input
-            ref={input}
-            type="file"
-            multiple
-            className="sr-only"
-            accept={MATERIAL_TYPES.join(",")}
-            onChange={(e) => onFiles(e.target.files)}
-            aria-label="기초 자료 파일 선택"
-          />
-          <button type="button" className="btn btn-sm" disabled={busy} onClick={() => input.current?.click()}>
-            {busy ? "올리는 중…" : props.ids.length ? `PDF·그림 더 올리기 (${props.ids.length}/${MAX_SCENE_MATERIALS})` : "PDF·그림 올리기"}
-          </button>
-          <button type="button" className="btn btn-sm" onClick={() => setPicking(true)}>
-            기존 자료에서 선택
-          </button>
-        </div>
-      )}
-      {error && <p className="notice notice-error">{error}</p>}
-      {picking && (
-        <AssetPicker
-          kinds={["dialogue_ref"]}
-          onClose={() => setPicking(false)}
-          onPick={(a) => {
-            addAsset(a);
-            if (!props.ids.includes(a.id)) props.onChange([...props.ids, a.id]);
-            setPicking(false);
-          }}
-        />
-      )}
-      {zoom && <Lightbox asset={zoom} onClose={() => setZoom(null)} />}
-    </div>
-  );
-}
-
 export function Lightbox({ asset, onClose }: { asset: AssetView; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -273,11 +146,7 @@ export function AssetPicker(props: { kinds: AssetKind[]; onPick: (a: AssetView) 
           {shown.map((a) => (
             <li key={a.id}>
               <button className="w-full text-left card overflow-hidden hover:border-accent" onClick={() => props.onPick(a)}>
-                {a.mime === "application/pdf" ? (
-                  <span className="w-full h-32 grid place-items-center text-lg font-bold text-accent bg-white">PDF</span>
-                ) : (
-                  <img src={a.previewUrl} alt="" className="w-full h-32 object-contain checker" />
-                )}
+                <img src={a.previewUrl} alt="" className="w-full h-32 object-contain checker" />
                 <div className="p-2">
                   <div className="text-sm font-semibold truncate">{a.name}</div>
                   <div className="text-[13px] text-muted">{ASSET_KIND_LABEL[a.kind]}</div>

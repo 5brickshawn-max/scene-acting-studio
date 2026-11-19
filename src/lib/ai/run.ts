@@ -3,7 +3,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { z } from "zod";
 import sharp from "sharp";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { readProjectData, MAX_MATERIAL_PDF_MB, dimensionEn, usesConti, castLabel, effectiveText, maxCastFor, MAX_EXPRESSIONS, MAX_PANELS_STORYBOARD, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
+import { readProjectData, dimensionEn, usesConti, castLabel, effectiveText, maxCastFor, MAX_EXPRESSIONS, MAX_PANELS_STORYBOARD, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
 import {
   ActingOut,
   CharacterOut,
@@ -33,8 +33,7 @@ const client = new Anthropic();
 
 type ImageBlock = Anthropic.Beta.BetaImageBlockParam;
 type TextBlock = Anthropic.Beta.BetaTextBlockParam;
-type DocumentBlock = Anthropic.Beta.BetaRequestDocumentBlock;
-type Content = Array<ImageBlock | TextBlock | DocumentBlock>;
+type Content = Array<ImageBlock | TextBlock>;
 
 type JobRow = {
   id: string;
@@ -79,75 +78,6 @@ async function imageBlock(assetId: string | null | undefined, label: string, max
 /** Several images at once, kept in the given order. */
 async function imageBlocks(items: { assetId: string | null | undefined; label: string }[], maxSide?: number): Promise<Content> {
   return (await Promise.all(items.map((x) => imageBlock(x.assetId, x.label, maxSide)))).flat();
-}
-
-/** The PDFs one request may carry together (a request is at most 32 MB, and base64 makes a file a third larger). */
-const MATERIAL_PDF_BUDGET = MAX_MATERIAL_PDF_MB * 1024 * 1024;
-
-/**
- * 기초 자료: the team's script / direction files, in order — a PDF goes whole (Claude reads its text and sees its
- * pages, so a cut table and the original comic pages both come through), a picture at full size (to read its text).
- */
-async function materialBlocks(data: ProjectData): Promise<Content> {
-  const ids = data.sceneMaterialAssetIds;
-  if (!ids.length) return [];
-  const sb = supabaseAdmin();
-  const { data: rows } = await sb.from("assets").select("id, name, mime, storage_path, size_bytes, deleted_at").in("id", ids);
-  const byId = new Map((rows ?? []).filter((r) => !r.deleted_at).map((r) => [r.id as string, r]));
-  let pdfBytes = 0;
-  const parts = await Promise.all(
-    ids.map(async (id, i): Promise<Content> => {
-      const r = byId.get(id);
-      if (!r) return [];
-      const label = `[기초 자료 ${i + 1} — ${r.name}]`;
-      if (r.mime !== "application/pdf") return imageBlock(id, label);
-      // over the budget the file is named but not sent (the request would be refused as a whole)
-      pdfBytes += Number(r.size_bytes) || 0;
-      if (pdfBytes > MATERIAL_PDF_BUDGET) return [{ type: "text", text: `${label} (PDF가 커서 이번 요청에는 넣지 못했습니다 — 시나리오 글을 기준으로 하세요)` }];
-      const { data: file, error } = await sb.storage.from("assets").download(r.storage_path);
-      if (error || !file) return [];
-      const doc: DocumentBlock = {
-        type: "document",
-        source: { type: "base64", media_type: "application/pdf", data: Buffer.from(await file.arrayBuffer()).toString("base64") },
-        title: r.name,
-      };
-      return [{ type: "text", text: label }, doc];
-    }),
-  );
-  const out = parts.flat();
-  return out.length ? [{ type: "text", text: "[기초 자료 — 팀이 올린 이 장면의 대본·연출 자료]" }, ...out] : [];
-}
-
-/** How a step reads the material next to the scenario text (empty without material). */
-function materialNote(data: ProjectData): string {
-  if (!data.sceneMaterialAssetIds.length) return "";
-  return (
-    `위 '기초 자료'는 팀이 올린 대본·연출 자료입니다. 자료의 컷 구성·샷 크기·앵글·카메라·연기 지시·대사·금지 사항을 따르세요. ` +
-    (data.expressionSetup.scene.trim()
-      ? `아래 '상황 설정·기초 대사'(시나리오 글)는 자료 중 이 장면에 해당하는 부분을 팀이 확인한 최신 내용입니다. 둘이 다르면 시나리오 글을 따르고, 자료의 다른 부분(앞뒤 장면)은 이 장면에 넣지 마세요.\n`
-      : `\n`)
-  );
-}
-
-/** 씬 구성 from a script file: which part of it is this scene, the one-scene limits, and the scenario written from it. */
-function composeMaterialNote(data: ProjectData, writeScenario: boolean): string {
-  const story = data.mode === "storyboard";
-  const prev = data.previous;
-  return (
-    `기초 자료(위 PDF·그림)가 이 장면의 원본입니다. 대본의 컷 구성(컷 번호·샷 크기·앵글·시간), 화면·연기·카메라 지시, 대사·내레이션·자막, 사운드, 금지 사항을 읽고, 원작 그림 페이지가 있으면 그 인물·의상·소품·분위기도 참고해 구성하세요.\n` +
-    (prev
-      ? `- 이 장면은 앞 장면 '${prev.name}'에 이어지는 ${prev.index}번째 장면입니다. 앞 장면은 자료의 아래 부분을 담았습니다. 자료에서 그 다음 부분부터 이 장면으로 구성하세요:\n${(prev.scene || prev.endState || "(기록 없음)").slice(0, 4000)}\n`
-      : "") +
-    `- 한 장면은 60초, ${story ? `패널 ${MAX_PANELS_STORYBOARD}개` : "컷 없는 한 쇼트"}까지입니다. 자료가 이보다 길면 ${prev ? "그 다음 부분" : "자료의 처음"}부터 자료의 컷을 중간에 자르지 말고 컷 단위로, 한도 안에 드는 데까지만 이 장면으로 구성하세요. ` +
-    `그리고 questions에 '자료의 ○~○번 컷(시작–끝 시각)으로 이 장면을 만들었습니다. ○~○번 컷은 「다음 장면 만들기」로 이어 가세요. 한 장면에 줄여 담으려면 그렇게 답해 주세요.'처럼 실제 컷 번호와 시각으로 어디까지 담았는지 알리세요(자료가 한도 안이면 쓰지 않음). 팀이 줄여 담으라고 답했으면 비슷한 컷을 묶어 한 장면에 담으세요.\n` +
-    (story ? "" : `- 자료가 여러 컷으로 나뉜 대본이면 인물별 연기 방식(컷 없는 한 쇼트)과 맞지 않습니다. questions에 '자료가 컷 분할 대본이라 스토리보드 방식이 맞습니다'라고 알리세요.\n`) +
-    `- 자료가 정한 그림체(2D·2.5D·3D)가 이 장면 설정(${dimensionEn(data)})과 다르면 questions에 알리세요.\n` +
-    (writeScenario
-      ? `- scenario: 시나리오 칸이 비어 있으니, 자료 중 이 장면으로 구성한 부분을 시나리오 글로 옮겨 scenario에 쓰세요(이후 단계가 모두 이 글을 기준으로 씁니다). ` +
-        `컷마다 '번호 · 샷 크기·앵글 · 시간' 한 줄, 그 아래 상황·화면·연기·카메라를 짧게. 대사는 '이름 : "대사"' 형식으로 자료 원문 그대로(내레이션·속마음은 '이름(V.O.) : "…"', 자막은 '자막 : 「…」'). ` +
-        `끝에 이 부분에 해당하는 금지 사항·꼭 지킬 원작 요소·사운드 지시를 짧게 붙이세요. 자료에 없는 내용은 지어내지 마세요.\n`
-      : `- 시나리오 칸의 글이 이 장면의 기준입니다. 자료는 글에 없는 세부(샷 크기·카메라·연기 지시·금지 사항)를 채우는 데 쓰세요.\n`)
-  );
 }
 
 /** The scene drawing (the whole cast together), labelled with who stands where. */
@@ -288,16 +218,12 @@ async function buildRequest(job: JobRow, data: ProjectData) {
     case "compose_scene": {
       // the scenario is the source; the scene picture, extra references and each character's material help when there
       const scenario = data.expressionSetup.scene.trim();
-      if (!scenario && !data.baseAssetId && !data.sceneMaterialAssetIds.length)
-        throw new Error("먼저 씬 시놉시스·시나리오를 쓰거나, 기초 자료나 장면 기준 그림을 올리세요.");
-      const [base, refs, people, material] = await Promise.all([
+      if (!scenario && !data.baseAssetId) throw new Error("먼저 씬 시놉시스·시나리오를 쓰거나 장면 기준 그림을 올리세요.");
+      const [base, refs, people] = await Promise.all([
         data.baseAssetId ? castImages(data) : Promise.resolve([] as Content),
         imageBlocks(data.designRefAssetIds.map((id) => ({ assetId: id, label: "[추가 참고 그림 — 배경·건축·소품·문양·분위기 참고]" })), 1024),
         characterSheets(data),
-        materialBlocks(data),
       ]);
-      // the scenario is written from the material when the team gave only files
-      const fromMaterial = material.length > 0 && !scenario;
       const pictured = data.cast.flatMap((c, i) => (c.refAssetId ? [`인물 ${i + 1} ${castLabel(data, c.id)}`] : []));
       // the team's answers to earlier confirmation questions are decisions: applied, never asked again
       const allQ = data.cast.flatMap((c) => c.questions);
@@ -318,12 +244,10 @@ async function buildRequest(job: JobRow, data: ProjectData) {
           ...people,
           ...base,
           ...refs,
-          ...material,
           {
             type: "text",
             text:
-              `아래 씬 시놉시스·시나리오${material.length ? "와 위 기초 자료" : ""}로 이 장면을 구성하세요. 결과는 그림·영상 생성의 기준이 됩니다.\n` +
-              (material.length ? composeMaterialNote(data, fromMaterial) : "") +
+              `아래 씬 시놉시스·시나리오로 이 장면을 구성하세요. 결과는 그림·영상 생성의 기준이 됩니다.\n` +
               `- characters: 대사를 하거나 이름으로 불리는 주요 인물만, 최대 ${max}명(${data.mode === "storyboard" ? "스토리보드 방식" : "인물별 연기 방식"}). 그 밖의 사람들은 extras에 무리로 적으세요.\n` +
               `- 인물마다 그림 모델이 같은 인물을 계속 그릴 수 있게 locks(구별되는 식별 요소부터), appearance, outfit을 구체적으로.\n` +
               (pictured.length
@@ -340,7 +264,7 @@ async function buildRequest(job: JobRow, data: ProjectData) {
               `- duration: 장면 길이(초). 시나리오에 타임코드(예: 02:02~02:18)가 있으면 그 길이로, 60초를 넘기지 마세요.\n` +
               `- extras: 이름 없는 사람들(군중·행인·병사 등)만. 사람이 없으면 빈 문자열로 두고, 배경·풍경은 opening에 쓰세요.\n` +
               `- opening: 이 장면의 첫 순간을 한 장의 그림으로 그릴 묘사. 모든 주요 인물이 얼굴이 보이게 화면에 들어가야 합니다(이 그림이 이후 모든 컷의 인물 기준이 됨). 장소·시간·빛·군중·소품 포함.\n\n` +
-              `씬 시놉시스·시나리오:\n${scenario || (material.length ? "(비어 있음 — 기초 자료로 구성)" : "(없음 — 그림만 보고 구성)")}\n` +
+              `씬 시놉시스·시나리오:\n${scenario || "(없음 — 그림만 보고 구성)"}\n` +
               (notes ? `\n팀이 적어 둔 인물 메모:\n${notes}\n` : "") +
               (data.extras.trim() ? `\n팀이 적어 둔 군중: ${data.extras}\n` : "") +
               (data.style.trim() ? `\n팀이 적어 둔 그림체: ${data.style}\n` : "") +
@@ -348,7 +272,7 @@ async function buildRequest(job: JobRow, data: ProjectData) {
                 ? `\n팀이 답한 확인 사항 — 결정된 내용입니다. 모든 결과(인물·의상·그림체·첫 장면·쇼트 구성)에 그대로 반영하고, 같은 질문을 questions에 다시 쓰지 마세요. 답이 시나리오를 고치라고 하면 scenario에 고친 시나리오 전체를 쓰고, 그 내용으로 구성하세요:\n${answeredQ.map((q) => `- ${q.question} → ${q.answer}`).join("\n")}\n`
                 : "") +
               (openQ.length ? `\n아직 답이 없는 질문(다시 쓰지 말 것):\n${openQ.map((q) => `- ${q.question}`).join("\n")}\n` : "") +
-              (answeredQ.length || fromMaterial ? "" : `- scenario: 바꿀 필요가 없으면 빈 문자열.\n`) +
+              (answeredQ.length ? "" : `- scenario: 바꿀 필요가 없으면 빈 문자열.\n`) +
               extra,
           },
         ] as Content,
@@ -390,10 +314,9 @@ async function buildRequest(job: JobRow, data: ProjectData) {
     case "design_expressions": {
       if (data.mode === "storyboard") {
         // storyboard: the scene as successive panels, each described as a whole (sketches the team drew are followed)
-        const [base, sketches, material] = await Promise.all([
+        const [base, sketches] = await Promise.all([
           baseImage(),
           imageBlocks(data.expressions.map((e, i) => ({ assetId: e.sketchAssetId, label: `[${i + 1}번 컷 러프 스케치 — 구도·자세·카메라]` }))),
-          materialBlocks(data),
         ]);
         const n = data.expressionSetup.count;
         return {
@@ -401,12 +324,9 @@ async function buildRequest(job: JobRow, data: ProjectData) {
           content: [
             ...base,
             ...sketches,
-            ...material,
             {
               type: "text",
               text:
-                materialNote(data) +
-                (material.length ? `자료의 컷 표가 있으면 각 컷의 샷 크기·앵글·화면·연기·카메라를 해당 컷의 camera·action에 옮기세요(컷 수가 다르면 자료의 순서대로 나누거나 묶기).\n` : "") +
                 `이 장면을 콘티처럼 컷 ${n}개로 나눠 설계하세요. panels 배열 길이는 정확히 ${n}개이고, 컷 1이 장면의 처음, 컷 ${n}이 끝입니다. 컷(콘티 칸)끼리는 카메라가 이어서 움직이거나(continuous), 컷 분할로 새 쇼트가 시작됩니다(cut) — link로 정하세요. 어디서 끊을지는 시나리오에 맞게 정하세요.\n` +
                 `- 반드시 시나리오 전체(처음부터 끝까지, 모든 기초 대사 포함)를 이 컷 ${n}개·${data.acting.duration}초 안에 담으세요. 컷 수가 시나리오의 장면 전환보다 적으면 비슷한 순간을 합치고, 시나리오 뒷부분을 빼지 마세요.\n` +
                 (job.input.instruction?.includes("[처음부터 다시]")
@@ -442,21 +362,18 @@ async function buildRequest(job: JobRow, data: ProjectData) {
           ] as Content,
         };
       }
-      const [base, ref, material] = await Promise.all([
+      const [base, ref] = await Promise.all([
         baseImage(),
         imageBlock(data.expressionSetup.refAssetId, "[표정 참고 시트 — 연기(표정·방향)만 참고, 그림체는 참고하지 않음]"),
-        materialBlocks(data),
       ]);
       return {
         schema: ExpressionsOut,
         content: [
           ...base,
           ...ref,
-          ...material,
           {
             type: "text",
             text:
-              materialNote(data) +
               (multi
                 ? `이 장면(출연진 ${data.cast.length}명)의 표정(비트) ${data.expressionSetup.count}개를 장면 순서대로 설계하세요. expressions 배열 길이는 정확히 ${data.expressionSetup.count}개여야 합니다. ` +
                   `표정마다 character에 중심 인물(대사가 있으면 말하는 인물) 번호(1~${data.cast.length})를 적고, 중심 인물의 연기는 표정 필드에, 같은 순간 나머지 인물 각각의 연기는 reactions에 인물마다 하나씩 적으세요(감정·강도·눈썹·눈·입·팔손·방향). ` +
@@ -535,18 +452,14 @@ async function buildRequest(job: JobRow, data: ProjectData) {
         ] as Content,
       };
     }
-    case "write_dialogue": {
-      const [base, material] = await Promise.all([baseImage(), materialBlocks(data)]);
+    case "write_dialogue":
       return {
         schema: DialogueOut,
         content: [
-          ...base,
-          ...material,
+          ...(await baseImage()),
           {
             type: "text",
             text:
-              materialNote(data) +
-              (material.length ? `대사·내레이션(V.O.)·자막은 자료 원문 그대로 쓰고, 자료의 말투 지시(크기·멈춤·울음 등)를 delivery에 살리세요.\n` : "") +
               `각 표정(panel 번호 = 표정 순서, 1부터)에 맞는 짧은 대사와 의미, 말투를 작성하고 대사가 있는 인물마다 목소리 설정(voices, character = 인물 번호)을 정하세요. ` +
               (multi
                 ? `대사는 그 표정을 연기하는 인물이 말합니다(위 '표정 N: 인물 · …'). 인물마다 목소리가 서로 분명히 구별되게(나이·음높이·음색·속도) 쓰세요. 이미 적힌 목소리가 있으면 살리세요. `
@@ -563,18 +476,13 @@ async function buildRequest(job: JobRow, data: ProjectData) {
           },
         ] as Content,
       };
-    }
-    case "plan_acting": {
-      const material = await materialBlocks(data);
+    case "plan_acting":
       return {
         schema: ActingOut,
         content: [
-          ...material,
           {
             type: "text",
             text:
-              materialNote(data) +
-              (material.length ? `자료에 컷별 시간(타임코드)이 있으면 그 길이의 비율을 이 장면 길이에 맞춰 따르세요.\n` : "") +
               `영상 전체 길이는 ${data.acting.duration}초로 고정입니다(2단계에서 정함). 이 시간 안에서 표정 순서와 시간 분배만 설계하세요. ` +
               `duration은 반드시 ${data.acting.duration}으로 두고, 구간은 0초에서 시작해 빈틈없이 이어져 ${data.acting.duration}초에서 끝나야 합니다. 모든 표정을 한 번씩 쓰세요. ` +
               `대사를 말할 시간이 충분하도록 하고(한국어 기준 1초에 약 4~5음절), transition에는 다음 표정으로 넘어가는 연기를 짧게 적으세요. 넘어짐·낙하·충돌처럼 빠른 동작만 있는 구간은 짧게 주어(0.5초 안팎) 영상 모델이 슬로모션으로 늘이지 않게 하세요.` +
@@ -586,7 +494,6 @@ async function buildRequest(job: JobRow, data: ProjectData) {
           },
         ] as Content,
       };
-    }
     case "check_acting": {
       // 콘티 그림 · 컷 설계 글 · 액팅(시간·전환): the three must tell the same scene
       const [base, pics] = await Promise.all([baseImage(), expressionImages(data)]);
@@ -741,17 +648,13 @@ async function buildRequest(job: JobRow, data: ProjectData) {
 
 /** What "AI와 상의" looks at: the base drawing, and on step 2 also the reference sheet and the expression images. */
 async function consultImages(job: JobRow, data: ProjectData): Promise<Content> {
-  if (job.step !== 1) {
-    const [cast, material] = await Promise.all([castImages(data), materialBlocks(data)]);
-    return [...cast, ...material];
-  }
-  const [cast, ref, expressions, material] = await Promise.all([
+  if (job.step !== 1) return castImages(data);
+  const [cast, ref, expressions] = await Promise.all([
     castImages(data),
     imageBlock(data.expressionSetup.refAssetId, "[표정 참고 시트 — 연기만 참고]"),
     expressionImages(data),
-    materialBlocks(data),
   ]);
-  return [...cast, ...ref, ...expressions, ...material];
+  return [...cast, ...ref, ...expressions];
 }
 
 async function consultMessages(job: JobRow, data: ProjectData): Promise<Anthropic.Beta.BetaMessageParam[]> {

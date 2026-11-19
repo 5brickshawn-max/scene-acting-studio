@@ -55,7 +55,6 @@ function referencedAssetIds(d: ProjectData): string[] {
   return [
     d.baseAssetId,
     ...d.designRefAssetIds,
-    ...d.sceneMaterialAssetIds,
     ...d.cast.map((c) => c.refAssetId),
     d.expressionSetup.refAssetId,
     d.expressionSetup.sheetAssetId,

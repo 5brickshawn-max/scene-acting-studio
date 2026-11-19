@@ -9,14 +9,14 @@
  */
 import type Anthropic from "@anthropic-ai/sdk";
 
-type Block = Anthropic.Beta.BetaImageBlockParam | Anthropic.Beta.BetaTextBlockParam | Anthropic.Beta.BetaRequestDocumentBlock;
+type Block = Anthropic.Beta.BetaImageBlockParam | Anthropic.Beta.BetaTextBlockParam;
 type Message = Anthropic.Beta.BetaMessageParam;
 
 const CACHE = { type: "ephemeral" } as const;
 
-/** Cache breakpoint on the last image or PDF (no change when there is neither). */
+/** Cache breakpoint on the last image (no change when there is no image). */
 export function cacheThroughLastImage(content: Block[]): Block[] {
-  const last = content.findLastIndex((b) => b.type === "image" || b.type === "document");
+  const last = content.findLastIndex((b) => b.type === "image");
   return last < 0 ? content : content.map((b, i) => (i === last ? { ...b, cache_control: CACHE } : b));
 }
 

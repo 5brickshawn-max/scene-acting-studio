@@ -226,12 +226,7 @@ export function ComposeProposal({ job, out }: { job: JobView; out: SceneComposeO
           </ol>
         </ComposeRow>
         {out.scenario?.trim() && (
-          <ComposeRow
-            picked={picked}
-            toggle={toggle}
-            k="scenario"
-            title={d.expressionSetup.scene.trim() ? "시나리오 수정 (확인 답변 반영)" : "시나리오 (기초 자료에서 이 장면 부분을 옮김 — 시나리오 칸에 들어갑니다)"}
-          >
+          <ComposeRow picked={picked} toggle={toggle} k="scenario" title="시나리오 수정 (확인 답변 반영)">
             <span className="block whitespace-pre-wrap text-[14px]">{out.scenario}</span>
           </ComposeRow>
         )}

@@ -454,35 +454,3 @@ describe("join between scenes", () => {
     expect(joinOf(older)).toBe("seamless");
   });
 });
-
-describe("기초 자료 (scene material: PDF or pictures)", () => {
-  it("older scenes read with no material; a next scene keeps the script and remembers the part already made", async () => {
-    const { nextSceneData, readProjectData } = await import("@/lib/domain/project");
-    const old = createProjectData("A", 1, "storyboard") as Record<string, unknown>;
-    delete old.sceneMaterialAssetIds;
-    const read = readProjectData(old);
-    expect(read.recovered).toBe(false);
-    expect(read.data.sceneMaterialAssetIds).toEqual([]);
-
-    const prev = createProjectData("나의 신부 #1", 2, "storyboard");
-    prev.sceneMaterialAssetIds = ["script-pdf", "page-41"];
-    prev.expressionSetup.scene = "1 · MS · 0:00–0:07\n마누아 : \"마누엘…\"";
-    const next = nextSceneData(prev, "p1", "나의 신부 #2");
-    expect(next.sceneMaterialAssetIds).toEqual(["script-pdf", "page-41"]);
-    expect(next.previous?.scene).toBe(prev.expressionSetup.scene);
-    expect(next.expressionSetup.scene).toBe("");
-    expect(readProjectData(next).recovered).toBe(false);
-    invariants(next, "next scene with material");
-  });
-
-  it("caches through the material: the breakpoint lands on the last image or PDF", async () => {
-    const { cacheThroughLastImage } = await import("@/lib/ai/cache");
-    const out = cacheThroughLastImage([
-      { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "x" } },
-      { type: "text", text: "[기초 자료 1]" },
-      { type: "document", source: { type: "base64", media_type: "application/pdf", data: "y" } },
-      { type: "text", text: "요청" },
-    ]);
-    expect(out.map((b) => "cache_control" in b && Boolean(b.cache_control))).toEqual([false, false, true, false]);
-  });
-});
