@@ -470,7 +470,7 @@ describe("비대칭 (asymmetric faces and poses in every generated picture)", ()
         buildFrameHandoff(d, d.expressions[0].id, "bust").prompt,
         ...(mode === "storyboard" ? buildSketchHandoffs(d).map((h) => h.prompt) : []),
       ];
-      for (const p of prompts) expect(p, `${mode}/${people}`).toMatch(/natural asymmetry/i);
+      for (const p of prompts) expect(p, `${mode}/${people}`).toMatch(/asymmetr/i);
     }
     // the video prompts (the poses joined in motion) carry it too, in positive words (negations cut the motion)
     const { ASYMMETRY_VIDEO_EN } = await import("@/lib/domain/handoff");
@@ -488,6 +488,8 @@ describe("비대칭 (asymmetric faces and poses in every generated picture)", ()
     expect(BASE_SYSTEM).toContain("비대칭 연기");
     // close-ups show no hands: the line leaves them out
     expect(asymmetryEn({ hands: false })).not.toContain("hands");
-    expect(asymmetryEn({ many: true })).toContain("Every face and pose is not mirror-symmetrical");
+    expect(asymmetryEn({ many: true })).toContain("in every face, the two sides carry different tension");
+    expect(asymmetryEn()).toContain("both eyes look at the same target");
+    expect(asymmetryEn()).toContain("character's own side");
   });
 });

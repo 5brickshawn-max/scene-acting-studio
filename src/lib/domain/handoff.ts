@@ -69,21 +69,27 @@ export const FACE_ANGLE_EN =
   "Face angle: the head is always turned or tilted at least a little, so the face reads asymmetrical; a look at the viewer comes from that turned head.";
 
 /**
- * 비대칭 (team request): faces and poses in every generated picture are not mirror-symmetrical — a tilted or
- * turned head, brows and mouth corners at different heights, uneven shoulders, hands doing different things —
- * kept subtle so nothing looks distorted. The design itself (face proportions, costume, ornaments) stays as drawn.
+ * 비대칭 (the team's expression-book principle): the two sides of a face carry different tension — brows,
+ * eyelids and mouth each uneven, the leading one most — and the difference carries on into the head, neck,
+ * shoulders and hands. Kept subtle so nothing looks distorted: the unevenness lives in the muscles and the pose,
+ * never in the face's structure (and is not the plain perspective of a turned head). A face part or hand named
+ * left or right without "screen" is the character's own side.
  */
 /** The same rule for the video prompts, in positive words (negations there cut the motion). */
 export const ASYMMETRY_VIDEO_EN =
-  "Asymmetry: faces and poses stay naturally uneven — the head tilts a little, brows, mouth corners and shoulders sit and move at slightly different heights, each change starts on one side (one hand first, one shoulder first), and the two hands do different things; subtle and natural.";
+  "Asymmetric acting: the two sides of each face carry different tension — brows at different heights, one eyelid wider and the other narrowed with both eyes on the same target, one mouth corner pulled with its cheek and jaw following — and the head tilt, shoulders and hands carry the same feeling into the body; each change starts on one side (one hand first, one shoulder first); the face structure stays the character's own; subtle and natural.";
 
 export function asymmetryEn(opts: { many?: boolean; hands?: boolean } = {}): string {
-  const who = opts.many ? "Every face and pose" : "The face and pose";
+  const face = opts.many ? "in every face, the two sides" : "the two sides of the face";
   return (
-    `Natural asymmetry (subtle, never distorted): ${who} ${opts.many ? "is" : "are"} not mirror-symmetrical — the head turned or tilted a little, ` +
-    `the two brows and the two corners of the mouth at slightly different heights (one brow higher, one mouth corner pulled more), one shoulder higher or nearer the camera, ` +
-    `the hair falling differently on each side${opts.hands === false ? "" : ", the two hands doing different things"}. ` +
-    `Face proportions, character design, costume and ornaments stay exactly as designed; only the acting and the pose are uneven.`
+    `Asymmetric acting (subtle, never distorted): ${face} carry different tension, led by the feature that drives the emotion — ` +
+    `the brows differ in height, slant and kink (one lifted, the other pressed down); one eyelid opens wider while the other narrows (the lid shape changes, the eyeballs keep their size) and both eyes look at the same target; ` +
+    `the mouth corners differ in height and opening, with the cheek and jaw on the pulled side following. ` +
+    `The head tilts or turns a little, the chin lifts or drops, and the shoulders sit at different heights, so the feeling carries into the upper body${
+      opts.hands === false ? "" : "; the hands act the same feeling, each doing something different"
+    }. ` +
+    `The character's face structure, proportions, costume and ornaments stay exactly as designed: the unevenness is in the muscles and the pose, beyond the plain perspective of a turned head. ` +
+    `A face part or hand named left or right without the word "screen" is the character's own side.`
   );
 }
 

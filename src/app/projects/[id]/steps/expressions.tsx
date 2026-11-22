@@ -55,6 +55,15 @@ import { englishStale } from "@/lib/domain/english";
 import { guideIssues } from "@/lib/domain/check";
 import { ACTION_ORDER_KO, HU_ITEMS_KO, MAX_PRINCIPLES, PRINCIPLES } from "@/lib/domain/principles";
 
+/** 팀 표정집 원칙: the two sides of the face carry different tension (sides are the character's own). */
+const ASYM_HINT = {
+  brows: "예: 인물의 오른쪽 눈썹은 올라가 꺾이고 왼쪽은 눌림",
+  eyes: "예: 오른쪽 눈꺼풀은 크게, 왼쪽은 좁혀짐 — 두 눈은 같은 곳을 봄",
+  mouth: "예: 왼쪽 입꼬리만 올라가 그쪽 볼·턱이 함께 당겨짐",
+};
+const ASYM_HELP =
+  "팀 표정집 원칙: 반응 대상 → 주도 요소(눈·눈썹·입 중 하나) → 좌우 긴장 차이 → 고개·어깨·손으로 연결. 좌우는 인물 기준, 얼굴 구조는 그대로 (어색하지 않을 정도로).";
+
 const FACING_SHORT: Record<Facing, string> = {
   left_profile: "◀ 옆",
   left_3q: "◀ 3/4",
@@ -469,10 +478,11 @@ function ExpressionCard({ e, index }: { e: Expression; index: number }) {
             </summary>
             <div className="px-3 pb-3 space-y-2">
               <div className="grid sm:grid-cols-3 gap-2">
-                <Field label="눈썹" multiline rows={2} value={e.brows} onChange={(v) => update({ brows: v })} />
-                <Field label="눈" multiline rows={2} value={e.eyes} onChange={(v) => update({ eyes: v })} />
-                <Field label="입" multiline rows={2} value={e.mouth} onChange={(v) => update({ mouth: v })} />
+                <Field label="눈썹" multiline rows={2} value={e.brows} onChange={(v) => update({ brows: v })} placeholder={ASYM_HINT.brows} />
+                <Field label="눈" multiline rows={2} value={e.eyes} onChange={(v) => update({ eyes: v })} placeholder={ASYM_HINT.eyes} />
+                <Field label="입" multiline rows={2} value={e.mouth} onChange={(v) => update({ mouth: v })} placeholder={ASYM_HINT.mouth} />
               </div>
+              <p className="field-help">{ASYM_HELP}</p>
               <Field label="메모" multiline rows={2} value={e.notes} onChange={(v) => update({ notes: v })} />
             </div>
           </details>
@@ -527,8 +537,8 @@ function PerformanceEditor(props: {
           {(p.brows || p.eyes || p.mouth) && <span className="block text-muted truncate">{[p.brows, p.eyes, p.mouth].filter(Boolean).join(" / ")}</span>}
         </summary>
         <div className="px-3 pb-3 grid sm:grid-cols-3 gap-2">
-          <Field label="눈썹" multiline rows={2} value={p.brows} onChange={(v) => onChange({ brows: v })} />
-          <Field label="눈" multiline rows={2} value={p.eyes} onChange={(v) => onChange({ eyes: v })} />
+          <Field label="눈썹" multiline rows={2} value={p.brows} onChange={(v) => onChange({ brows: v })} placeholder={ASYM_HINT.brows} />
+          <Field label="눈" multiline rows={2} value={p.eyes} onChange={(v) => onChange({ eyes: v })} placeholder={ASYM_HINT.eyes} />
           <Field label="입" multiline rows={2} value={p.mouth} onChange={(v) => onChange({ mouth: v })} placeholder={p.lead ? "" : "말하지 않으면 다문 입"} />
         </div>
       </details>
