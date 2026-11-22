@@ -19,6 +19,8 @@ import {
   MAX_EXPRESSIONS,
   MAX_PANELS_STORYBOARD,
   cutLengthNotice,
+  joinIntoOneShot,
+  legacyCuts,
   usesConti,
   sketchIsStale,
   withSketch,
@@ -759,7 +761,7 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
           </p>
         )}
         <div>
-          <div className="field-label">컷 수</div>
+          <div className="field-label">컷 수 (한 쇼트 안의 콘티 패널)</div>
           <div className="seg">
             {Array.from({ length: MAX_PANELS_STORYBOARD - MIN_EXPRESSIONS + 1 }, (_, i) => i + MIN_EXPRESSIONS).map((n) => (
               <button key={n} aria-pressed={s.count === n} disabled={!canEdit} onClick={() => doc.edit(1, (x) => setExpressionCount(x, n))}>
@@ -892,7 +894,7 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
 
 /** The scene's shot structure at a glance: panels joined by camera moves (→) or split by cuts (|). */
 function ShotStrip() {
-  const { doc } = useEditor();
+  const { doc, canEdit } = useEditor();
   const d = doc.data;
   const shots = shotsOf(d);
   const no = (id: string) => d.expressions.findIndex((e) => e.id === id) + 1;
@@ -914,11 +916,17 @@ function ShotStrip() {
           </span>
         ))}
       </div>
-      <p className="field-help">
-        {shots.length > 1
-          ? `컷 분할 ${shots.length - 1}곳, 쇼트 ${shots.length}개. ✂ 에서 화면이 끊기고 새 쇼트가 시작되며, → 는 같은 쇼트 안에서 카메라가 이어서 움직입니다.`
-          : "지금은 모든 컷이 카메라 이동으로 이어지는 한 쇼트입니다. 컷 카드의 ‘앞 컷과의 연결’에서 컷 분할을 고를 수 있습니다."}
-      </p>
+      <p className="field-help">원 씬 원 컷: 컷 분할 없이 쇼트 하나로 찍습니다. 컷(패널)은 그 쇼트 안의 순간·구도이고, 카메라는 → 를 따라 끊지 않고 이어서 움직입니다.</p>
+      {legacyCuts(d) > 0 && (
+        <p className="notice notice-warn text-[14px]">
+          이전 방식으로 설계되어 컷 분할 표시가 {legacyCuts(d)}곳 남아 있습니다. 영상은 이제 끊지 않고 한 쇼트로 이어지니, 패널 글이 컷을 전제로 쓰였다면 ‘처음부터 다시 설계’로 다시 나누세요.
+          {canEdit && (
+            <button type="button" className="btn btn-sm ml-2 mt-1" onClick={() => doc.edit(1, joinIntoOneShot)}>
+              표시 정리 (모두 한 쇼트로)
+            </button>
+          )}
+        </p>
+      )}
     </div>
   );
 }
@@ -976,24 +984,11 @@ function PanelCard({ e, index }: { e: Expression; index: number }) {
         onChange={(v) => update({ action: v })}
         placeholder="예: 횃불을 든 군중이 좌우로 갈라지고, 그 사이로 칼리엘라가 걸어 나온다. 브람은 오른쪽 앞에서 칼자루를 쥔 채 그녀를 노려본다."
       />
-      {index > 0 && (
-        <div>
-          <Seg
-            label="앞 컷과의 연결"
-            value={e.link}
-            options={["continuous", "cut"] as const}
-            labels={{ continuous: "→ 이어짐 (카메라 이동)", cut: "✂ 컷 분할 (새 쇼트)" }}
-            onChange={(v) =>
-              doc.edit(1, (x) => ({ ...x, expressions: x.expressions.map((y) => (y.id === e.id ? { ...y, link: v } : y)) }))
-            }
-          />
-        </div>
-      )}
       <Field
         label="카메라"
         value={e.camera}
         onChange={(v) => update({ camera: v })}
-        placeholder={e.link === "cut" && index > 0 ? "예: 입술 특대 클로즈업, 고정" : "예: 와이드 로우앵글에서 칼리엘라 쪽으로 천천히 다가감"}
+        placeholder={index > 0 ? "예: 앞 컷의 와이드에서 이어서 칼리엘라 쪽으로 다가가 입술 특대 클로즈업에 닿음" : "예: 와이드 로우앵글에서 칼리엘라 쪽으로 천천히 다가감"}
       />
       <Field
         label="연결 상태 HU (시작 → 끝: 화면 위치·시선·몸 기준 손·발 접지·소품·동작 단계·감정·빛)"

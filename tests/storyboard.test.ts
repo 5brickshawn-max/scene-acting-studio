@@ -113,7 +113,8 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     expect(next.expressions[0]).toMatchObject({ emotion: "T0", action: "A0", camera: "C0" });
     expect(next.expressions[1].action).toBe(d.expressions[1].action);
     expect(next.expressions[3].characterId).toBe(d.cast[1].id);
-    expect(next.expressions[3].link).toBe("cut");
+    // one scene, one cut: the AI's cut is read as the camera moving on
+    expect(next.expressions[3].link).toBe("continuous");
 
     d.english = buildEnglishSheet(d, {
       language: "English",
@@ -172,30 +173,23 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     expect(h.prompt.length).toBeLessThanOrEqual(h.lengthTarget);
   });
 
-  it("cuts panels into shots where the team marks a cut (컷 분할)", () => {
+  it("is always one scene, one cut (원 씬 원 컷): an older scene's cut links are read as one shot", async () => {
+    const { legacyCuts, joinIntoOneShot } = await import("@/lib/domain/project");
     const d = market();
     d.expressions[1].link = "cut";
     d.expressions[3].link = "cut";
-    expect(shotsOf(d).map((sh) => sh.map((id) => d.expressions.findIndex((e) => e.id === id) + 1))).toEqual([[1], [2, 3], [4]]);
-    // the first panel never cuts
-    d.expressions[0].link = "cut";
-    expect(shotsOf(d)).toHaveLength(3);
+    expect(shotsOf(d).map((sh) => sh.map((id) => d.expressions.findIndex((e) => e.id === id) + 1))).toEqual([[1, 2, 3, 4]]);
+    expect(legacyCuts(d)).toBe(2);
+    expect(stepIssues(d, 1).map((i) => i.message).join(" ")).toContain("이전 방식으로 설계되어 컷 분할이 2곳 있습니다");
+    expect(legacyCuts(joinIntoOneShot(d))).toBe(0);
 
     d.expressions[2].action = "다음 컷으로 넘어가며 브람이 앞으로 나선다.";
     const h = buildVideoHandoff(d);
-    expect(h.prompt).toContain("edited in 3 shots: shot 1 = panel 1; shot 2 = panels 2–3; shot 3 = panel 4. Cut ONLY where a beat says HARD CUT");
-    expect(h.prompt).not.toContain("ONE single continuous shot");
-    expect(h.prompt).toContain("panel 2 — 칼리엘라 등장 (shot 2)\nHARD CUT to a new shot here.");
-    expect(h.prompt).toContain("panel 3 — 브람의 경고 (shot 2)\nSame shot: the camera moves on continuously from the previous panel, no cut.");
-    // talk of cuts is kept as written when the scene is cut on purpose
-    expect(h.prompt).toContain("다음 컷으로 넘어가며");
-    expect(h.adjustments.some((a) => a.rule.includes("‘컷’"))).toBe(false);
-    expect(preRenderCheck(d, h).find((i) => i.area === "컷 분할")?.text).toContain("3개 쇼트");
-
+    expect(h.prompt).toContain("ONE single continuous shot with no cuts");
+    expect(h.prompt).not.toContain("HARD CUT");
     const imgs = buildExpressionHandoffs(d);
-    expect(imgs[1].prompt).toContain("ONE scene of 3 shots");
-    expect(imgs[1].prompt).toContain("This panel is in shot 2 and opens it with a hard cut");
-    expect(imgs[2].prompt).toContain("This panel is in shot 2.");
+    expect(imgs[1].prompt).toContain("successive moments of ONE continuous shot");
+    expect(imgs[1].prompt).not.toContain("opens it with a hard cut");
   });
 
   it("keeps one continuous shot (and rewrites stray cut talk) when nothing is cut", () => {
@@ -267,7 +261,7 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     expect(h.prompt).not.toContain("HANDHELD as in the Constraints");
   });
 
-  it("fits nine panels (the reported case) by joining panels of the same shot first", () => {
+  it("fits nine panels (the reported case) by joining neighbouring panels", () => {
     const d = createProjectData("많은 컷", 1, "storyboard");
     d.baseAssetId = "scene-1";
     d.expressionSetup.count = 9;
@@ -276,7 +270,7 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     d.acting.duration = 9;
     d.dialogue.lines = [{ expressionId: "p7", line: "Surely…", meaning: "", delivery: "" }];
     const imgs = buildVideoHandoff(d).references.filter((r) => r.role === "expression").map((r) => r.assetId);
-    // 9 panels in 6 images: panels of one shot share an image first (5·6, 8·9), then one pair across a cut
-    expect(imgs).toEqual(["img-0", "combo:img-1+img-2", "img-3", "combo:img-4+img-5", "img-6", "combo:img-7+img-8"]);
+    // 9 panels of one shot in 6 images: neighbours share an image, the panel with a line keeps its own
+    expect(imgs).toEqual(["img-0", "combo:img-1+img-2", "combo:img-3+img-4", "combo:img-5+img-6", "img-7", "img-8"]);
   });
 });

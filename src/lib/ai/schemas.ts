@@ -64,10 +64,10 @@ export const SceneComposeOut = z.object({
         seconds: z.number().describe("이 쇼트의 길이(초)"),
         panels: z
           .array(z.string().describe("패널(콘티 칸) 제목, 짧게 25자 안팎(예: 가로등 기둥을 돌아 자리 바꾸기). 초 단위 시간(0~2초 등)·카메라 설명·긴 묘사는 쓰지 말 것 — 내용은 다음 단계의 장면 묘사에"))
-          .describe("이 쇼트 안의 패널, 순서대로. 카메라가 한 구도에 머무는 쇼트는 1개, 쇼트 안에서 카메라가 움직여 구도가 바뀌면 바뀌는 구도마다 1개"),
+          .describe("이 쇼트 안의 패널, 순서대로. 카메라가 이어서 움직여 닿는 구도·순간마다 1개"),
       }),
     )
-    .describe("쇼트(컷 분할) 구성, 순서대로. 쇼트와 쇼트 사이는 컷으로 끊김. 인물별 연기 방식이면 쇼트 1개(그 안의 패널 = 표정 비트)"),
+    .describe("쇼트 구성: 항상 쇼트 1개(원 씬 원 컷, 컷 분할 없음). 그 안의 패널 = 스토리보드는 카메라가 이어서 지나가는 순간·구도, 인물별 연기 방식은 표정 비트"),
 });
 
 /** Another character's acting at the same moment (group scenes). */
@@ -141,7 +141,7 @@ export const StoryboardOut = z.object({
       principles: Principles,
       link: z
         .enum(["continuous", "cut"])
-        .describe("앞 컷과의 연결: continuous = 같은 쇼트에서 카메라가 이어서 움직여 이 컷이 됨, cut = 컷 분할(장면이 끊기고 새 쇼트). 첫 컷은 continuous"),
+        .describe("앞 컷과의 연결: 항상 continuous (원 씬 원 컷 — 같은 쇼트에서 카메라가 이어서 움직여 이 컷이 됨)"),
     }),
   ),
 });

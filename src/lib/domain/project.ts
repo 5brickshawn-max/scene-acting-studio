@@ -105,10 +105,11 @@ export function defaultPositions(n: number): Position[] {
  */
 export const SCENE_MODES = ["cast", "storyboard"] as const;
 export type SceneMode = (typeof SCENE_MODES)[number];
-export const SCENE_MODE_LABEL: Record<SceneMode, string> = { cast: "인물별 연기", storyboard: "스토리보드 (컷 단위)" };
+export const SCENE_MODE_LABEL: Record<SceneMode, string> = { cast: "인물별 연기", storyboard: "스토리보드 (원 씬 원 컷)" };
 export const SCENE_MODE_HELP: Record<SceneMode, string> = {
   cast: "표정(비트)마다 인물 한 명 한 명의 감정·얼굴·팔손·방향을 따로 정합니다. 1~4명이 연기하는 장면을 정밀하게 다룰 때.",
-  storyboard: "콘티처럼 컷마다 그 순간 전체를 한 장으로 정합니다(장면 묘사·카메라·러프 스케치). 군중 장면이나 빠르게 만들 때.",
+  storyboard:
+    "원 씬 원 컷: 컷 분할 없는 하나의 쇼트를 콘티처럼 패널 여러 장(쇼트 안의 순간·구도)으로 정합니다(장면 묘사·카메라·러프 스케치). 카메라는 패널에서 패널로 끊지 않고 이어서 움직입니다. 군중 장면이나 빠르게 만들 때.",
 };
 
 /** "A", "B", "C" … — short cast labels used in prompts and the UI. */
@@ -171,8 +172,9 @@ export const ExpressionSchema = z.object({
   /** fingerprint of the panel's text (description · camera · continuity) the sketch was made for; null = unknown (older data) */
   sketchBasis: z.string().nullable().default(null),
   /**
-   * storyboard: how this panel follows the previous one — "continuous" (the camera moves on in the same shot)
-   * or "cut" (컷 분할: a hard cut, a new shot). Ignored for the first panel.
+   * storyboard: how this panel follows the previous one. A storyboard is one scene, one cut (원 씬 원 컷): every
+   * panel is "continuous" (the camera moves on in the same shot). "cut" is only left in older scenes and is read
+   * as continuous too.
    */
   link: z.enum(["continuous", "cut"]).default("continuous"),
   /** group scenes: the acting of every other cast member in this same moment (one per member, cast order) */
@@ -672,12 +674,19 @@ export function isVoiceOver(line: { vo?: boolean | null; delivery: string; meani
   return /\bV\.?\s?O\b|voice[- ]?over|보이스\s*오버|속마음|내레이션|나레이션|독백\s*\(?V/i.test(`${line.delivery} ${line.meaning}`);
 }
 
-/** Panel links in timeline order: false for the first panel, true where a panel starts with a hard cut. */
+/**
+ * Panel links in timeline order: true where a panel starts with a hard cut. A storyboard is one scene, one cut
+ * (원 씬 원 컷): nothing is ever cut — an older scene's "cut" links are read as the camera moving on.
+ */
 export function cutBefore(data: Pick<ProjectData, "mode" | "expressions" | "acting">): Map<string, boolean> {
-  const order = data.acting.segments.map((s) => s.expressionId);
-  const byId = new Map(data.expressions.map((e) => [e.id, e]));
-  return new Map(order.map((id, k) => [id, data.mode === "storyboard" && k > 0 && byId.get(id)?.link === "cut"]));
+  return new Map(data.acting.segments.map((s) => [s.expressionId, false]));
 }
+
+/** Panels an older design still marks as cuts (원 씬 원 컷 reads them as one shot; their text may still say "cut"). */
+export const legacyCuts = (d: Pick<ProjectData, "mode" | "expressions">) =>
+  d.mode === "storyboard" ? d.expressions.filter((e, i) => i > 0 && e.link === "cut").length : 0;
+/** Every panel joined into the one shot. */
+export const joinIntoOneShot = (d: ProjectData): ProjectData => ({ ...d, expressions: d.expressions.map((e) => ({ ...e, link: "continuous" as const })) });
 
 /**
  * 콘티 방식: the storyboard video is made from the character sheets, the background/assets and the rough
@@ -853,6 +862,10 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
   }
 
   if (step === 1 && cutLengthNotice(data)) warn(cutLengthNotice(data));
+  if (step === 1 && legacyCuts(data))
+    warn(
+      `이전 방식으로 설계되어 컷 분할이 ${legacyCuts(data)}곳 있습니다. 스토리보드는 이제 원 씬 원 컷(쇼트 하나)으로만 만들어, 영상은 끊지 않고 한 쇼트로 이어집니다. 패널 글이 컷을 전제로 쓰였다면 ‘처음부터 다시 설계’로 다시 나누세요.`,
+    );
   if (step === 1 && data.expressions.length > maxPanelsFor(data.mode))
     block(`${isStoryboard(data) ? "컷" : "표정"}이 ${data.expressions.length}개입니다. ${isStoryboard(data) ? "스토리보드" : "한"} 장면은 최대 ${maxPanelsFor(data.mode)}개입니다. 2단계 ①에서 ${maxPanelsFor(data.mode)}개 이하로 줄이세요(뒤쪽부터 빠지니, 줄인 뒤 ‘처음부터 다시 설계’를 권장).`);
   if (step === 1 && isStoryboard(data)) {

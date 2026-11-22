@@ -404,7 +404,7 @@ export function StoryboardProposal({ job, out }: { job: JobView; out: Storyboard
                   <span className="block font-semibold">{i + 1}. {p.title}</span>
                   <span className="block">{p.action}</span>
                   <span className="block text-muted">
-                    {i > 0 ? (p.link === "cut" ? "✂ 컷 분할 · " : "→ 이어짐 · ") : ""}카메라: {p.camera}
+                    {i > 0 ? "→ 이어짐 · " : ""}카메라: {p.camera}
                   </span>
                   {p.state && <span className="block text-muted">연결: {p.state}</span>}
                   {speaker && <span className="block text-muted">말하는 인물: {castLabel(doc.data, speaker.id)}</span>}

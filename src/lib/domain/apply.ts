@@ -51,10 +51,11 @@ export type ComposeField = "cast" | "style" | "extras" | "opening" | "questions"
 /** The proposed structure as the app can build it: at most 12 panels, at least 2, within 60 seconds. */
 export function composeStructure(data: Pick<ProjectData, "mode">, out: Pick<SceneComposeOutT, "shots" | "duration">) {
   const story = data.mode === "storyboard";
-  // character-by-character scenes are one continuous shot: its panels are the beats
+  // every scene is one continuous shot (storyboard: 원 씬 원 컷): the proposed shots' panels become moments of it,
+  // each keeping its share of its shot's seconds
   const shots = (story ? out.shots : [{ title: "", seconds: out.duration, panels: out.shots.flatMap((s) => s.panels) }]).filter((s) => s.panels.length);
   const panels: { title: string; shot: number; weight: number }[] = [];
-  shots.forEach((s, k) => s.panels.forEach((t) => panels.push({ title: t, shot: k, weight: Math.max(0.2, s.seconds || 1) / s.panels.length })));
+  shots.forEach((s) => s.panels.forEach((t) => panels.push({ title: t, shot: 0, weight: Math.max(0.2, s.seconds || 1) / s.panels.length })));
   const total = panels.length;
   const max = story ? MAX_PANELS_STORYBOARD : MAX_EXPRESSIONS;
   const kept = panels.slice(0, max);
@@ -107,9 +108,8 @@ export function applyComposition(data: ProjectData, out: SceneComposeOutT, field
     next = setExpressionCount(next, st.panels.length);
     const expressions = next.expressions.map((e, i) => {
       const p = st.panels[i];
-      const opensShot = i > 0 && p.shot !== st.panels[i - 1].shot;
       return st.story
-        ? { ...e, emotion: panelTitle(p.title), link: opensShot ? ("cut" as const) : ("continuous" as const) }
+        ? { ...e, emotion: panelTitle(p.title), link: "continuous" as const }
         : { ...e, notes: e.notes.trim() || p.title, link: "continuous" as const };
     });
     const ids = expressions.map((e) => e.id);
@@ -204,7 +204,8 @@ export function applyStoryboard(data: ProjectData, out: StoryboardOutT, indexes?
       camera: o.camera,
       continuity: o.state ?? prev.continuity,
       principles: validPrinciples(o.principles) ?? prev.principles,
-      link: i === 0 ? "continuous" : o.link ?? prev.link,
+      // one scene, one cut: every panel is a moment of the same shot
+      link: "continuous",
     });
   });
   // the scene's continuity rules come with a full design (a partial pick keeps the team's rules)

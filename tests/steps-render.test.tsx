@@ -98,8 +98,9 @@ describe("step screens render for one and for several characters", () => {
     expect(acting).toContain("컷 순서는 2단계 콘티 순서 그대로입니다");
     expect(acting).not.toContain('aria-label="앞으로"');
     expect(s2).toContain("러프 콘티 전부 생성 (0컷)");
-    expect(s2).toContain("앞 컷과의 연결");
-    expect(s2).toContain("✂ 컷 분할 (새 쇼트)");
+    // one scene, one cut: no link choice, the rule stated by the shot strip
+    expect(s2).not.toContain("앞 컷과의 연결");
+    expect(s2).toContain("원 씬 원 컷: 컷 분할 없이 쇼트 하나로 찍습니다");
     expect(s2).toContain("쇼트 1");
     expect(s2).toContain("말하는 인물 (이 컷에 대사가 있을 때)");
     expect(s2).not.toContain("중심 인물");
@@ -111,7 +112,10 @@ describe("step screens render for one and for several characters", () => {
     // any number of shots: no cap, no merge button
     const many = { ...w, expressions: w.expressions.map((e, i) => ({ ...e, link: i ? ("cut" as const) : ("continuous" as const) })) };
     const s4 = render(many, createElement(ExpressionStep, nav));
-    expect(s4).toContain(`쇼트 ${w.expressions.length}개`);
+    // an older scene with cuts: still one shot, with a notice and a one-click clean-up
+    expect(s4).toContain("쇼트 1<");
+    expect(s4).not.toContain("쇼트 2<");
+    expect(s4).toContain("표시 정리 (모두 한 쇼트로)");
     expect(s4).not.toContain("합치기");
   });
 

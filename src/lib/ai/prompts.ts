@@ -17,7 +17,8 @@ export const BASE_SYSTEM = `당신은 애니메이션 스튜디오(장면마다 
 
 스토리보드 방식 장면 (모드가 '스토리보드'일 때):
 - 표정(비트) 대신 컷(콘티의 한 칸)으로 다룹니다. 컷마다 그 순간 화면 전체를 한 장의 그림으로 정합니다: 장면 묘사(누가 무엇을 하는지, 군중 포함), 카메라, 말하는 인물.
-- 인물별 얼굴 근육·방향은 따로 정하지 않고, 화면 위치도 컷마다 바뀔 수 있습니다. 컷끼리는 카메라 이동으로 이어지거나(이어짐), 컷 분할로 새 쇼트가 시작됩니다(컷 분할).
+- 인물별 얼굴 근육·방향은 따로 정하지 않고, 화면 위치도 컷마다 바뀔 수 있습니다.
+- 스토리보드는 원 씬 원 컷입니다: 컷 분할 없는 하나의 쇼트이고, 컷(콘티 패널)은 그 쇼트 안의 순간·구도입니다. 카메라는 앞 패널이 끝난 위치에서 끊지 않고 이어서 움직여 다음 패널의 구도에 닿습니다.
 
 여러 인물 장면:
 - 인물은 출연진 번호(1부터)와 이름으로 구분합니다. 인물마다 화면 위치(왼쪽·가운데·오른쪽)가 정해져 있고, 쇼트 내내 바뀌지 않습니다.
@@ -60,7 +61,7 @@ export function projectContext(d: ProjectData, step: number): string {
   if (d.previous)
     lines.push(
       `시퀀스: 이 장면은 앞 장면 '${d.previous.name}'에 이어지는 ${d.previous.index}번째 장면입니다. 앞 장면은 이렇게 끝났습니다: ${d.previous.endState || "(기록 없음)"}. ` +
-        `이 장면의 첫 컷 '시작'은 이 상태에서 이어지게(같은 의상·소품·위치·빛, 바뀐다면 컷 분할과 시간 경과로 설명되게) 설계하세요.`,
+        `이 장면의 첫 컷 '시작'은 이 상태에서 이어지게(같은 의상·소품·위치·빛, 바뀐다면 장면 사이의 시간 경과로 설명되게) 설계하세요.`,
     );
   const actor = (id: string) => (multi ? `${castLabel(d, id)} · ` : "");
   if (step >= 1 && story) {
@@ -70,7 +71,7 @@ export function projectContext(d: ProjectData, step: number): string {
     if (d.expressionSetup.continuity.trim()) lines.push(`장면 연결 규칙:\n${d.expressionSetup.continuity.trim()}`);
     d.expressions.forEach((e, i) => {
       lines.push(
-        `컷 ${i + 1}: ${i > 0 ? (e.link === "cut" ? "[컷 분할 — 새 쇼트] " : "[이어짐] ") : ""}${e.emotion || "(제목 없음)"} · 장면 묘사: ${e.action || "(없음)"}${
+        `컷 ${i + 1}: ${i > 0 ? "[이어짐] " : ""}${e.emotion || "(제목 없음)"} · 장면 묘사: ${e.action || "(없음)"}${
           e.camera ? ` · 카메라: ${e.camera}` : ""
         }${e.continuity ? ` · 연결 상태: ${e.continuity}` : ""} · 말하는 인물(대사가 있을 때): ${castLabel(d, e.characterId)}`,
       );

@@ -37,7 +37,8 @@ describe("storyboard continuity (연결성)", () => {
     expect(h.references.map((r) => r.assetId)).toContain("img-2");
     expect(h.prompt).toContain("is the panel just before this one (panel 2)");
     expect(h.prompt).toContain("180° rule");
-    expect(h.prompt).toContain("opens a new shot after a hard cut");
+    // one scene, one cut: the camera has moved on inside the same shot
+    expect(h.prompt).toContain("This panel is in the same shot");
     expect(h.prompt).toContain("Continuity rules of this scene (every panel keeps them): 1) 아스파샤 화면 왼쪽");
     expect(h.prompt).toContain("still one single frame): 샤르휘나가 숄을 듦.");
     // the first panel has nothing before it
@@ -50,7 +51,7 @@ describe("storyboard continuity (연결성)", () => {
     d.expressions[0].continuity = "둘이 마주 봄";
     const p = buildVideoHandoff(d).prompt;
     expect(p).toContain("Continuity rules (keep them in every shot): 1) 아스파샤 화면 왼쪽");
-    expect(p).toContain("Across each HARD CUT the screen sides, eyelines, costumes, props and light carry on.");
+    expect(p).toContain("ONE single continuous shot with no cuts");
     expect(p).toContain("Continuity: 둘이 마주 봄.");
   });
 
@@ -72,16 +73,15 @@ describe("step 4 keeps the storyboard order", () => {
   });
 });
 
-describe("panel references follow the shot (no night picture in a dawn shot)", () => {
-  it("a panel in a later shot is not given a picture from an earlier shot as its anchor, and states beat pictures", () => {
-    const d = board(); // panels 1-2 shot 1, panels 3-4 shot 2 (cut before panel 3)
+describe("panel references in the one shot", () => {
+  it("in the one shot every panel sees the panel before and an earlier panel, and states beat pictures", () => {
+    const d = board(); // an older design marked a cut before panel 3: still one shot (원 씬 원 컷)
     d.expressions.forEach((e, i) => { e.imageAssetId = `img-${i + 1}`; e.imageAspect = "16:9"; });
     const hs = buildExpressionHandoffs(d);
-    // panel 4: earlier panel of its own shot is panel 3, which is also the panel before → only that one, no panel-1 anchor
-    expect(hs[3].references.map((r) => r.assetId)).not.toContain("img-1");
     expect(hs[3].references.map((r) => r.assetId)).toContain("img-3");
-    // panel 3 opens a new shot: a new camera, not a copy of panel 2's composition
-    expect(hs[2].prompt).toContain("a NEW camera position and framing — do not repeat that picture's composition");
+    expect(hs[3].references.map((r) => r.assetId)).toContain("img-1");
+    // nothing opens a new shot
+    expect(hs.some((h) => h.prompt.includes("a NEW camera position and framing"))).toBe(false);
     expect(hs[2].prompt).toContain("the description and continuity win");
     // a later panel of the same shot must not repeat the previous composition
     expect(hs[3].prompt).toContain("must look clearly different from that one");
