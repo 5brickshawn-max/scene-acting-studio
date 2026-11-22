@@ -19,6 +19,7 @@ import {
   MAX_EXPRESSIONS,
   MAX_PANELS_STORYBOARD,
   cutLengthNotice,
+  hasPictureBasis,
   joinIntoOneShot,
   legacyCuts,
   usesConti,
@@ -804,7 +805,7 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
           kind="design_expressions"
           step={1}
           label={s.scene.trim() ? "시나리오에 맞춰 AI로 콘티 설계" : "AI로 콘티 설계"}
-          disabled={!d.baseAssetId}
+          disabled={!hasPictureBasis(d)}
           disabledReason="1단계에서 장면 기준 그림을 먼저 올리세요."
           description={`시나리오 전체를 컷 ${s.count}개·${d.acting.duration}초에 담아 제목·장면 묘사·카메라·연결·말하는 인물을 제안합니다. 러프 스케치를 올린 컷은 그 구도를 따릅니다.`}
         />
@@ -818,7 +819,7 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
             step={1}
             label={`컷 ${s.count}개·${d.acting.duration}초로 처음부터 다시 설계`}
             instruction={`[처음부터 다시] 지금 컷 수 ${s.count}개와 영상 길이 ${d.acting.duration}초에 맞춰 시나리오 전체를 다시 나눠 주세요.`}
-            disabled={!d.baseAssetId}
+            disabled={!hasPictureBasis(d)}
             disabledReason="1단계에서 장면 기준 그림을 먼저 올리세요."
           />
         </div>

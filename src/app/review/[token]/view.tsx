@@ -162,8 +162,12 @@ export function ReviewView({ b, dataUrl }: { b: ReviewBundle; dataUrl: string })
 
       <Step n={1} title={story ? `스토리보드 · 주요 인물 ${d.cast.length}명` : multi ? `출연진 ${d.cast.length}명` : "캐릭터"} approved={approved(0)}>
         <div className="space-y-2 max-w-xl">
-          <div className="field-label">{group || story ? "장면 기준 그림" : "기본 그림"}</div>
-          <Media a={A(d.baseAssetId)} label={multi ? "장면 기준 그림" : "기본 그림"} />
+          {(!story || d.baseAssetId) && (
+            <>
+              <div className="field-label">{group || story ? "장면 기준 그림" : "기본 그림"}</div>
+              <Media a={A(d.baseAssetId)} label={multi ? "장면 기준 그림" : "기본 그림"} />
+            </>
+          )}
           {d.designRefAssetIds.length > 0 && (
             <>
               <div className="field-label">추가 참고 그림</div>

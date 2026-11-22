@@ -64,12 +64,19 @@ describe("씬 구성 (scene composed from the scenario)", () => {
     expect(d.expressions.every((e) => e.reactions.length === 1)).toBe(true);
   });
 
-  it("asks for a scene picture (uploaded or generated) before step 1 can be approved", () => {
-    let d = applyComposition(createProjectData("광장", 1, "storyboard"), OUT, ["cast", "style", "opening"]);
+  it("asks a character-by-character scene for its picture; a storyboard needs none (a design sheet per character is advised)", () => {
+    let d = applyComposition(createProjectData("광장", 1, "cast"), { ...OUT, characters: OUT.characters.slice(0, 1) }, ["cast", "style", "opening"]);
     d.cast = d.cast.map((c) => ({ ...c, appearance: c.appearance || "외형" }));
-    expect(stepIssues(d, 0).map((i) => i.message)).toContain("장면 기준 그림을 올리거나 시나리오로 첫 장면을 생성하세요.");
+    expect(stepIssues(d, 0).map((i) => i.message)).toContain("기본 그림을 올리거나 시나리오로 첫 장면을 생성하세요.");
     d = { ...d, baseAssetId: "generated-1" };
     expect(canApprove(d, 0)).toBe(true);
+
+    let s = applyComposition(createProjectData("광장", 1, "storyboard"), OUT, ["cast", "style"]);
+    s.cast = s.cast.map((c) => ({ ...c, appearance: c.appearance || "외형" }));
+    expect(canApprove(s, 0)).toBe(true);
+    expect(stepIssues(s, 0).map((i) => i.message).join(" ")).toContain("인물 참고 자료(설정화)가 없어");
+    s = { ...s, cast: s.cast.map((c) => ({ ...c, refAssetId: "sheet" })) };
+    expect(stepIssues(s, 0).map((i) => i.message).join(" ")).not.toContain("설정화가 없어");
   });
 });
 

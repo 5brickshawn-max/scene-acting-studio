@@ -206,7 +206,7 @@ export function ComposeProposal({ job, out }: { job: JobView; out: SceneComposeO
       title="씬 구성"
       summary={out.summary}
       applyDisabled={picked.size === 0}
-      onApply={() => apply(applyComposition(doc.data, out, [...picked]), "AI 씬 구성 적용")}
+      onApply={() => apply(applyComposition(doc.data, out, [...picked].filter((k) => !(story && k === "opening"))), "AI 씬 구성 적용")}
     >
       <div className="space-y-3">
         <ComposeRow picked={picked} toggle={toggle} k="cast" title={`주요 인물 ${Math.min(out.characters.length, max)}명 (지금 ${d.cast.length}명을 이 목록으로 바꿈)`}>
@@ -275,9 +275,12 @@ export function ComposeProposal({ job, out }: { job: JobView; out: SceneComposeO
             {st.duration > 30 && <span className="block notice notice-warn">{st.duration}초는 영상 모델 한도(Kling·Seedance 30초, Gemini Omni·MiniMax 15초)를 넘습니다. 생성할 때 모델 한도로 잘립니다.</span>}
           </ComposeRow>
         )}
-        <ComposeRow picked={picked} toggle={toggle} k="opening" title="첫 장면 묘사 (장면 기준 그림 생성에 씀)">
-          <span className="block whitespace-pre-wrap">{out.opening}</span>
-        </ComposeRow>
+        {/* a storyboard has no scene picture: the opening is not shown or applied there */}
+        {!story && out.opening.trim() && (
+          <ComposeRow picked={picked} toggle={toggle} k="opening" title="첫 장면 묘사 (장면 기준 그림 생성에 씀)">
+            <span className="block whitespace-pre-wrap">{out.opening}</span>
+          </ComposeRow>
+        )}
         {out.questions.length > 0 && (
           <ComposeRow picked={picked} toggle={toggle} k="questions" title={`확인 질문 ${out.questions.length}개 추가`}>
             <ul className="list-disc pl-5">

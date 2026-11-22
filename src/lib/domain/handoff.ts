@@ -1296,7 +1296,10 @@ function storyboardCastEn(data: ProjectData, en: ReturnType<typeof freshEnglish>
     .filter(Boolean)
     .join(". ");
   return [
-    named && `Named characters (each keeps their identity exactly as in the scene reference; never mix features between them): ${named}.`,
+    named &&
+      `Named characters (each keeps their identity exactly as in ${
+        data.baseAssetId ? "the scene reference" : data.cast.some((c) => c.refAssetId) ? "their design sheets" : "this description"
+      }; never mix features between them): ${named}.`,
     costumes &&
       `Costumes in this scene (follow them, including disguises and changes between parts of the scene; pick the one this panel's moment and continuity call for): ${costumes}.`,
     data.extras.trim() &&

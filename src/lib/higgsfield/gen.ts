@@ -7,7 +7,7 @@
  * Results are saved into the project's assets and offered to the user — never auto-applied.
  */
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { FRAMING_LABEL, readProjectData, type Framing, type ProjectData } from "@/lib/domain/project";
+import { FRAMING_LABEL, hasPictureBasis, readProjectData, type Framing, type ProjectData } from "@/lib/domain/project";
 import { buildExpressionHandoffs, buildSketchHandoffs, buildFrameHandoff, buildSceneImageHandoff, buildVideoHandoff } from "@/lib/domain/handoff";
 import { findJobIds, getConnection, openSession, withWorkspace, type McpSession } from "./client";
 import sharp from "sharp";
@@ -59,7 +59,7 @@ async function latestData(projectId: string) {
 async function plan(projectId: string, spec: GenSpec, data: ProjectData): Promise<Plan> {
   if (spec.target === "expressions") {
     if (!isImageModel(spec.model)) throw new Error("지원하지 않는 이미지 모델입니다.");
-    if (!data.baseAssetId) throw new Error(data.cast.length > 1 ? "1단계에서 장면 기준 그림을 먼저 올리세요." : "1단계에서 기본 그림을 먼저 올리세요.");
+    if (!hasPictureBasis(data)) throw new Error(data.cast.length > 1 ? "1단계에서 장면 기준 그림을 먼저 올리세요." : "1단계에서 기본 그림을 먼저 올리세요.");
     const m = IMAGE_MODELS[spec.model];
     const wanted = spec.expressionIds?.length ? new Set(spec.expressionIds) : null;
     const items = buildExpressionHandoffs(data, spec.fixes ?? {})
@@ -124,7 +124,7 @@ async function plan(projectId: string, spec: GenSpec, data: ProjectData): Promis
 
   if (spec.target === "frame") {
     if (!isImageModel(spec.model)) throw new Error("지원하지 않는 이미지 모델입니다.");
-    if (!data.baseAssetId) throw new Error(data.cast.length > 1 ? "1단계에서 장면 기준 그림을 먼저 올리세요." : "1단계에서 기본 그림을 먼저 올리세요.");
+    if (!hasPictureBasis(data)) throw new Error(data.cast.length > 1 ? "1단계에서 장면 기준 그림을 먼저 올리세요." : "1단계에서 기본 그림을 먼저 올리세요.");
     const m = IMAGE_MODELS[spec.model];
     const f = buildFrameHandoff(data, spec.expressionId, spec.shot);
     const n = data.expressions.findIndex((e) => e.id === spec.expressionId) + 1;
@@ -149,7 +149,7 @@ async function plan(projectId: string, spec: GenSpec, data: ProjectData): Promis
     const vm = VIDEO_MODELS[spec.model];
     const res = vm.resolutions.find((r) => r.key === spec.resolution);
     if (!res) throw new Error("이 모델에서 지원하지 않는 해상도입니다.");
-    if (!data.baseAssetId) throw new Error(data.cast.length > 1 ? "1단계에서 장면 기준 그림을 먼저 올리세요." : "1단계에서 기본 그림을 먼저 올리세요.");
+    if (!hasPictureBasis(data)) throw new Error(data.cast.length > 1 ? "1단계에서 장면 기준 그림을 먼저 올리세요." : "1단계에서 기본 그림을 먼저 올리세요.");
     const start = data.video.startFrameAssetId;
     // the last frame goes with a start frame, to models that take one
     const end = start && vm.endRole ? data.video.endFrameAssetId : null;

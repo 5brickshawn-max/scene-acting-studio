@@ -141,15 +141,22 @@ describe("step screens render for one and for several characters", () => {
     expect(solo).toContain("+ 인물 추가");
   });
 
-  it("step 1 reopens on the tab the scene picture came from; step 2 offers a fresh redesign for the cut count", () => {
+  it("step 1 reopens on the tab the scene picture came from; a storyboard has no scene-picture step; step 2 offers a fresh redesign", () => {
     const asset = (id: string, name: string) =>
       ({ id, kind: "base", name, mime: "image/png", sizeBytes: 1, width: 16, height: 9, projectId: "p", createdAt: "", url: "u", previewUrl: "u" }) as AssetView;
-    const d = { ...createProjectData("사막", 1, "storyboard"), baseAssetId: "gen-1" };
+    // a storyboard: references only (an older scene picture stays as one of them)
+    const story = { ...createProjectData("사막", 1, "storyboard"), baseAssetId: "gen-1" };
+    const s1 = render(story, createElement(CharacterStep, nav), [asset("gen-1", "첫 장면 · GPT Image 2.5 · 1K")]);
+    expect(s1).toContain("② 참고 그림 (선택)");
+    expect(s1).not.toContain("② 장면 기준 그림");
+    expect(s1).toContain("이전에 정한 장면 그림");
+    expect(render({ ...story, baseAssetId: null }, createElement(CharacterStep, nav))).not.toContain("이전에 정한 장면 그림");
+    const d = { ...createProjectData("사막", 1, "cast"), baseAssetId: "gen-1" };
     const generated = render(d, createElement(CharacterStep, nav), [asset("gen-1", "첫 장면 · GPT Image 2.5 · 1K")]);
     expect(generated).toMatch(/aria-pressed="true"[^>]*>시나리오로 첫 장면 생성/);
     const uploaded = render(d, createElement(CharacterStep, nav), [asset("gen-1", "my-drawing.png")]);
     expect(uploaded).toMatch(/aria-pressed="true"[^>]*>그림 올리기/);
-    const s2 = render(d, createElement(ExpressionStep, nav));
+    const s2 = render({ ...story, baseAssetId: null }, createElement(ExpressionStep, nav));
     expect(s2).toContain("컷 6개·8초로 처음부터 다시 설계");
   });
 });

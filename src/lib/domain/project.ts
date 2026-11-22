@@ -685,6 +685,14 @@ export function cutBefore(data: Pick<ProjectData, "mode" | "expressions" | "acti
 /** Panels an older design still marks as cuts (원 씬 원 컷 reads them as one shot; their text may still say "cut"). */
 export const legacyCuts = (d: Pick<ProjectData, "mode" | "expressions">) =>
   d.mode === "storyboard" ? d.expressions.filter((e, i) => i > 0 && e.link === "cut").length : 0;
+/**
+ * 장면 기준 그림: character-by-character scenes are built on it (the characters' identity and the shared shot);
+ * a storyboard has no such step — the characters come from their design sheets and the world from the references.
+ */
+export const usesScenePicture = (d: Pick<ProjectData, "mode">) => d.mode !== "storyboard";
+/** The scene is ready for pictures: a storyboard always, a character-by-character scene once it has its picture. */
+export const hasPictureBasis = (d: Pick<ProjectData, "mode" | "baseAssetId">) => !usesScenePicture(d) || Boolean(d.baseAssetId);
+
 /** Every panel joined into the one shot. */
 export const joinIntoOneShot = (d: ProjectData): ProjectData => ({ ...d, expressions: d.expressions.map((e) => ({ ...e, link: "continuous" as const })) });
 
@@ -846,14 +854,17 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
       const open = c.questions.filter((q) => !filled(q.answer)).length;
       if (open) warn(`${who}: AI 확인 질문 ${open}개에 아직 답하지 않았습니다.`);
     });
-    if (!data.baseAssetId)
+    if (!hasPictureBasis(data))
       block(
-        isStoryboard(data)
-          ? "장면 기준 그림을 올리거나 시나리오로 첫 장면을 생성하세요."
-          : data.cast.length > 1
-            ? "출연진이 함께 있는 장면 기준 그림을 올리거나 시나리오로 첫 장면을 생성하세요."
-            : "기본 그림을 올리거나 시나리오로 첫 장면을 생성하세요.",
+        data.cast.length > 1
+          ? "출연진이 함께 있는 장면 기준 그림을 올리거나 시나리오로 첫 장면을 생성하세요."
+          : "기본 그림을 올리거나 시나리오로 첫 장면을 생성하세요.",
       );
+    // storyboard: no scene picture — a character without a design sheet is drawn from the text alone
+    if (isStoryboard(data) && !data.baseAssetId) {
+      const bare = data.cast.filter((c) => !c.refAssetId).map((c) => castLabel(data, c.id));
+      if (bare.length) warn(`${bare.join(", ")}: 인물 참고 자료(설정화)가 없어 컷마다 모습이 조금씩 달라질 수 있습니다. 인물 카드에 설정화를 올리면 모든 컷이 그 모습을 따릅니다.`);
+    }
     if (!filled(data.style)) block("장면의 그림체와 색감을 작성하세요.");
     const names = data.cast.map((c) => c.name.trim()).filter(Boolean);
     if (new Set(names).size !== names.length) block("출연진 이름이 겹칩니다. 프롬프트에서 인물을 구분할 수 있게 서로 다른 이름을 쓰세요.");
