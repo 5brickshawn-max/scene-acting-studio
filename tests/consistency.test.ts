@@ -261,6 +261,9 @@ describe("dialogue acting cues (Z_1–Z_4 references)", () => {
     expect(p).toContain(cue);
     expect(ACTING_EN).toContain("lands exactly on that word");
     expect(ACTING_EN).toContain("Everyone in frame is live");
+    // Z_1: a reaction layers on top of ongoing business (chewing through the surprise), which then resumes
+    expect(ACTING_EN).toContain("Ongoing business (eating, sipping, smoking, handling a prop) carries on through a reaction");
+    expect(ACTING_EN).not.toMatch(/business[^.]*\b(never|not|no)\b/);
   });
 });
 
