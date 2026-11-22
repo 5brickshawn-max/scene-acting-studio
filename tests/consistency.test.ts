@@ -472,6 +472,20 @@ describe("비대칭 (asymmetric faces and poses in every generated picture)", ()
       ];
       for (const p of prompts) expect(p, `${mode}/${people}`).toMatch(/natural asymmetry/i);
     }
+    // the video prompts (the poses joined in motion) carry it too, in positive words (negations cut the motion)
+    const { ASYMMETRY_VIDEO_EN } = await import("@/lib/domain/handoff");
+    expect(ASYMMETRY_VIDEO_EN).not.toMatch(/\bnever\b|\bno\b|\bnot\b/i);
+    for (const [mode, people] of [
+      ["cast", 1],
+      ["cast", 2],
+      ["storyboard", 2],
+    ] as const) {
+      const d = setExpressionCount(createProjectData("비대칭", people, mode), 2);
+      expect(buildVideoHandoff(d).prompt, `video ${mode}/${people}`).toContain(ASYMMETRY_VIDEO_EN);
+    }
+    // the AI's own guideline (every design, dialogue, acting, English and consult job)
+    const { BASE_SYSTEM } = await import("@/lib/ai/prompts");
+    expect(BASE_SYSTEM).toContain("비대칭 연기");
     // close-ups show no hands: the line leaves them out
     expect(asymmetryEn({ hands: false })).not.toContain("hands");
     expect(asymmetryEn({ many: true })).toContain("Every face and pose is not mirror-symmetrical");

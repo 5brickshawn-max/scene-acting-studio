@@ -73,6 +73,10 @@ export const FACE_ANGLE_EN =
  * turned head, brows and mouth corners at different heights, uneven shoulders, hands doing different things —
  * kept subtle so nothing looks distorted. The design itself (face proportions, costume, ornaments) stays as drawn.
  */
+/** The same rule for the video prompts, in positive words (negations there cut the motion). */
+export const ASYMMETRY_VIDEO_EN =
+  "Asymmetry: faces and poses stay naturally uneven — the head tilts a little, brows, mouth corners and shoulders sit and move at slightly different heights, each change starts on one side (one hand first, one shoulder first), and the two hands do different things; subtle and natural.";
+
 export function asymmetryEn(opts: { many?: boolean; hands?: boolean } = {}): string {
   const who = opts.many ? "Every face and pose" : "The face and pose";
   return (
@@ -1232,6 +1236,7 @@ export function buildVideoHandoff(
       arcLine(en.arc),
       ACTING_EN,
       multi ? FACE_ANGLE_EN.replace("the head is", "every head is").replace("so the face reads", "so each face reads") : FACE_ANGLE_EN,
+      ASYMMETRY_VIDEO_EN,
       `Stay alive between and during the lines (breathing, blinks, small head and shoulder accents). Each expression change is acted, not morphed: it rides on a physical action (a blink, a breath, a small head turn or a hand passing the face) and steps through in-between poses.`,
     ]
       .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
@@ -1247,7 +1252,7 @@ export function buildVideoHandoff(
   // the studio block grew (weight, camera, sound): its extra length is not taken from the beats
   const lengthTarget =
     (enBeats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) + (multi ? VIDEO_PROMPT_EXTRA_PER_CHARACTER * (data.cast.length - 1) : 0) + constraintsExtra(constraints) + keepPainted(styleText, data.dimension).length +
-    ACTING_EN.length + arcLine(en.arc).length + FACE_ANGLE_EN.length;
+    ACTING_EN.length + arcLine(en.arc).length + FACE_ANGLE_EN.length + ASYMMETRY_VIDEO_EN.length;
   let prompt = "";
   for (const B of BUDGETS) {
     prompt = assemble(B);
@@ -1753,6 +1758,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         multiShot ? " Across a cut, the characters, costumes, world and light stay the same." : ""
       }`,
       COMPOSITION_EN,
+      ASYMMETRY_VIDEO_EN,
     ]
       .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
       .join("\n");
@@ -1774,7 +1780,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
     constraintsExtra(constraints) +
     keepPainted(en.style ?? data.style, data.dimension).length +
     // the acting doctrine, the arc and frame zero are written once and never cut
-    ACTING_EN.length + arcLine(en.arc).length + frameZero.length + COMPOSITION_EN.length;
+    ACTING_EN.length + arcLine(en.arc).length + frameZero.length + COMPOSITION_EN.length + ASYMMETRY_VIDEO_EN.length;
   let prompt = "";
   for (const B of STORY_BUDGETS) {
     prompt = [headerWith(B), frameZero, beatsWith(B).join("\n\n"), directorBlock, constraints].filter(Boolean).join("\n\n");

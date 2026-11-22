@@ -276,8 +276,8 @@ export const EnglishOut = z.object({
     z.object({
       panel: z.number().int().describe("표정 번호 (1부터)"),
       emotion: z.string().describe("감정, 영어 2~5단어"),
-      face: z.string().describe("연기하는 인물의 눈썹·눈·입 연기, 영어 한 문장 (160자 이내). 좌우가 조금 다르게 (예: left brow raised higher, mouth pulled to one side)"),
-      body: z.string().describe("중심 인물의 팔·손·어깨·몸 연기, 영어 한 문장 (120자 이내). 손이 화면에 안 보이는 구도면 빈 문자열"),
+      face: z.string().describe("연기하는 인물의 눈썹·눈·입 연기, 영어 한 문장 (160자 이내). 좌우가 조금 다르게 (예: one brow raised higher, mouth pulled to one side)"),
+      body: z.string().describe("중심 인물의 팔·손·어깨·몸 연기, 영어 한 문장 (120자 이내), 좌우가 다르게 (예: one hand leads, one shoulder raised). 손이 화면에 안 보이는 구도면 빈 문자열"),
       others: z
         .array(
           z.object({
@@ -290,7 +290,7 @@ export const EnglishOut = z.object({
         .describe("여러 인물 장면: 중심 인물을 뺀 나머지 인물마다 하나. 한 명 장면이면 빈 배열"),
       transition: z
         .string()
-        .describe("다음 표정으로 넘어가게 하는 몸의 동작(깜빡임·숨·고개 돌림·얼굴 앞을 지나는 손 등), 영어 한 문장 (100자 이내). 마지막 표정이면 빈 문자열"),
+        .describe("다음 표정으로 넘어가게 하는 몸의 동작(깜빡임·숨·고개 돌림·얼굴 앞을 지나는 손 등), 한쪽부터 시작하는 비대칭 동작으로, 영어 한 문장 (100자 이내). 마지막 표정이면 빈 문자열"),
       delivery: z
         .string()
         .describe("대사 말투, 영어 한 구절 (170자 이내): 크기(whisper/quiet/normal/loud), 강세 단어, 특정 단어에 맞춘 동작·시선(on \"word\" — action). 대사가 없으면 빈 문자열"),
