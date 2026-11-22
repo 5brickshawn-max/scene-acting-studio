@@ -220,7 +220,7 @@ describe("safeguards: sketch ↔ text ↔ acting", () => {
 
 describe("Seedance acting doctrine (SH04_3 tests)", () => {
   it("puts the acting rules, the arc and the result pose in the prompt, and keeps negative wording low", async () => {
-    const { buildVideoHandoff, ACTING_EN, startState } = await import("@/lib/domain/handoff");
+    const { buildVideoHandoff, STORY_ACTING_EN, startState } = await import("@/lib/domain/handoff");
     const { buildEnglishSheet } = await import("@/lib/domain/english");
     const { preRenderCheck, NEGATIVE_LIMIT } = await import("@/lib/domain/check");
     let d = setExpressionCount(createProjectData("결의", 1, "storyboard"), 3);
@@ -236,7 +236,7 @@ describe("Seedance acting doctrine (SH04_3 tests)", () => {
       beats: [],
     });
     const h = buildVideoHandoff(d, "references");
-    expect(h.prompt).toContain(ACTING_EN);
+    expect(h.prompt).toContain(STORY_ACTING_EN);
     expect(h.prompt).toContain("THE EMOTIONAL ARC: THIS IS THE WHOLE POINT.");
     expect(h.prompt).toContain("→ her fingers find the toy →");
     expect(h.prompt).toContain("Frame zero: 상태 0.");
@@ -261,6 +261,9 @@ describe("dialogue acting cues (Z_1–Z_4 references)", () => {
     expect(p).toContain(cue);
     expect(ACTING_EN).toContain("lands exactly on that word");
     expect(ACTING_EN).toContain("Everyone in frame is live");
+    const { STORY_ACTING_EN } = await import("@/lib/domain/handoff");
+    expect(STORY_ACTING_EN).toContain("lands exactly on that word");
+    expect(STORY_ACTING_EN).toContain("Everyone in frame is live");
   });
 });
 

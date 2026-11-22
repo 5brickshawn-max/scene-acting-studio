@@ -463,7 +463,7 @@ describe("compact video prompt and image composition", () => {
 
   it("asks for voice only and names the language in English", () => {
     const d = heavy();
-    expect(buildVideoHandoff(d).prompt).toContain("Only natural sound and the sound effects that occur in the scene, with no music, all at natural pitch.");
+    expect(buildVideoHandoff(d).prompt).toContain("Only natural sound and the sound effects that occur in the scene, all at natural pitch (music is added later in editing).");
     expect(languageEn("고대 영어")).toBe("Old English");
     expect(languageEn("불어")).toBe("French");
     expect(languageEn("Klingon")).toBe("Klingon");

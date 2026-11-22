@@ -19,6 +19,9 @@ import {
   MAX_EXPRESSIONS,
   MAX_PANELS_STORYBOARD,
   cutLengthNotice,
+  multiPanelShots,
+  oneShotPerPanel,
+  suggestedCutsFor,
   usesConti,
   sketchIsStale,
   withSketch,
@@ -772,12 +775,29 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
           <div className="field-label">컷 수</div>
           <div className="seg">
             {Array.from({ length: MAX_PANELS_STORYBOARD - MIN_EXPRESSIONS + 1 }, (_, i) => i + MIN_EXPRESSIONS).map((n) => (
-              <button key={n} aria-pressed={s.count === n} disabled={!canEdit} onClick={() => doc.edit(1, (x) => setExpressionCount(x, n))}>
-                {n}컷
+              <button
+                key={n}
+                aria-pressed={s.count === n}
+                disabled={!canEdit}
+                title={n === suggestedCutsFor(d.acting.duration) ? `${d.acting.duration}초에 권장하는 컷 수(컷당 약 4초)` : undefined}
+                onClick={() => doc.edit(1, (x) => setExpressionCount(x, n))}
+              >
+                {n}컷{n === suggestedCutsFor(d.acting.duration) ? " · 권장" : ""}
               </button>
             ))}
           </div>
-          {cutLengthNotice(d) && <p className="notice notice-warn text-[14px] mt-2">{cutLengthNotice(d)}</p>}
+          <p className="field-help">원칙: 컷 하나 = 쇼트 하나 = 패널 그림 1장. 컷마다 약 4초 이상이어야 영상 모델이 동작을 크게 펼칩니다.</p>
+          {cutLengthNotice(d) && (
+            <p className="notice notice-warn text-[14px] mt-2">
+              {cutLengthNotice(d)}
+              {canEdit && (
+                <button type="button" className="btn btn-sm ml-2 mt-1" onClick={() => doc.edit(1, (x) => setExpressionCount(x, suggestedCutsFor(x.acting.duration)))}>
+                  권장 {suggestedCutsFor(d.acting.duration)}컷으로 맞추기
+                </button>
+              )}
+              <span className="block mt-1">줄이면 뒤쪽 컷부터 빠지니, 그다음 아래 ‘처음부터 다시 설계’로 시나리오 전체를 새 컷 수에 나누세요.</span>
+            </p>
+          )}
         </div>
         <DurationField />
         <div>
@@ -902,7 +922,7 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
 
 /** The scene's shot structure at a glance: panels joined by camera moves (→) or split by cuts (|). */
 function ShotStrip() {
-  const { doc } = useEditor();
+  const { doc, canEdit } = useEditor();
   const d = doc.data;
   const shots = shotsOf(d);
   const no = (id: string) => d.expressions.findIndex((e) => e.id === id) + 1;
@@ -924,11 +944,17 @@ function ShotStrip() {
           </span>
         ))}
       </div>
-      <p className="field-help">
-        {shots.length > 1
-          ? `컷 분할 ${shots.length - 1}곳, 쇼트 ${shots.length}개. ✂ 에서 화면이 끊기고 새 쇼트가 시작되며, → 는 같은 쇼트 안에서 카메라가 이어서 움직입니다.`
-          : "지금은 모든 컷이 카메라 이동으로 이어지는 한 쇼트입니다. 컷 카드의 ‘앞 컷과의 연결’에서 컷 분할을 고를 수 있습니다."}
-      </p>
+      <p className="field-help">원칙: 쇼트 하나에 패널 그림 1장. 쇼트 안의 카메라 이동은 그 컷의 ‘카메라’ 글에 시작 구도 → 끝 구도로 씁니다.</p>
+      {multiPanelShots(d).length > 0 && (
+        <p className="notice notice-warn text-[14px]">
+          이전 방식으로 설계되어 한 쇼트에 패널이 여러 장 있습니다(→ 로 이어진 곳). 그대로 컷 분할로 바꾸거나, ‘처음부터 다시 설계’로 쇼트마다 패널 1장이 되게 다시 나누세요.
+          {canEdit && (
+            <button type="button" className="btn btn-sm ml-2 mt-1" onClick={() => doc.edit(1, oneShotPerPanel)}>
+              모두 컷 분할로
+            </button>
+          )}
+        </p>
+      )}
     </div>
   );
 }
@@ -986,24 +1012,19 @@ function PanelCard({ e, index }: { e: Expression; index: number }) {
         onChange={(v) => update({ action: v })}
         placeholder="예: 횃불을 든 군중이 좌우로 갈라지고, 그 사이로 칼리엘라가 걸어 나온다. 브람은 오른쪽 앞에서 칼자루를 쥔 채 그녀를 노려본다."
       />
-      {index > 0 && (
-        <div>
-          <Seg
-            label="앞 컷과의 연결"
-            value={e.link}
-            options={["continuous", "cut"] as const}
-            labels={{ continuous: "→ 이어짐 (카메라 이동)", cut: "✂ 컷 분할 (새 쇼트)" }}
-            onChange={(v) =>
-              doc.edit(1, (x) => ({ ...x, expressions: x.expressions.map((y) => (y.id === e.id ? { ...y, link: v } : y)) }))
-            }
-          />
-        </div>
+      {index > 0 && e.link === "continuous" && (
+        <p className="notice notice-warn text-[13px]">
+          이 컷은 앞 컷과 한 쇼트로 이어져 있습니다(이전 방식). 원칙은 쇼트 하나에 패널 1장입니다.
+          <button type="button" className="btn btn-sm ml-2" onClick={() => update({ link: "cut" })}>
+            컷 분할로
+          </button>
+        </p>
       )}
       <Field
-        label="카메라"
+        label="카메라 (이 쇼트의 구도와 움직임)"
         value={e.camera}
         onChange={(v) => update({ camera: v })}
-        placeholder={e.link === "cut" && index > 0 ? "예: 입술 특대 클로즈업, 고정" : "예: 와이드 로우앵글에서 칼리엘라 쪽으로 천천히 다가감"}
+        placeholder="예: 미디엄 숏에서 시작해 바헬 쪽으로 트랙인하여 바스트 숏으로 끝남 / 입술 특대 클로즈업, 고정"
       />
       <Field
         label="연결 상태 HU (시작 → 끝: 화면 위치·시선·몸 기준 손·발 접지·소품·동작 단계·감정·빛)"

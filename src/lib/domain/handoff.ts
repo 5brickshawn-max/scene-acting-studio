@@ -77,7 +77,7 @@ export const FACE_ANGLE_EN =
  */
 /** The same rule for the video prompts, in positive words (negations there cut the motion). */
 export const ASYMMETRY_VIDEO_EN =
-  "Asymmetric acting: the two sides of each face carry different tension — brows at different heights, one eyelid wider and the other narrowed with both eyes on the same target, one mouth corner pulled with its cheek and jaw following — and the head tilt, shoulders and hands carry the same feeling into the body; each change starts on one side (one hand first, one shoulder first); the face structure stays the character's own; subtle and natural.";
+  "Asymmetric acting: the two sides of each face carry different tension — brows at different heights, one eyelid wider and the other narrowed with both eyes on the same target, one mouth corner pulled with its cheek and jaw following — and the head tilt, shoulders and hands carry the same feeling into the body; each change starts on one side (one hand first, one shoulder first); the face structure stays the character's own; natural and clearly readable.";
 
 export function asymmetryEn(opts: { many?: boolean; hands?: boolean } = {}): string {
   const face = opts.many ? "in every face, the two sides" : "the two sides of the face";
@@ -1325,7 +1325,7 @@ function storyboardCastEn(data: ProjectData, en: ReturnType<typeof freshEnglish>
     .filter(Boolean)
     .join(". ");
   return [
-    named && `Named characters (each keeps their identity exactly as in the scene reference; never mix features between them): ${named}.`,
+    named && `Named characters (each keeps their own identity and features exactly as in the scene reference): ${named}.`,
     costumes &&
       `Costumes in this scene (follow them, including disguises and changes between parts of the scene; pick the one this panel's moment and continuity call for): ${costumes}.`,
     data.extras.trim() &&
@@ -1365,7 +1365,14 @@ export const keepPainted = (style: string, dim: Dimension = "3d") =>
  * dead. Written once per prompt; the beats do not repeat it.
  */
 export const ACTING_EN =
-  "FACE AND BODY: feature-film character acting, broad enough to read at a glance and grounded. Natural blinking; forehead and brows always active and matched to each state, no mask-face, no dead eyes. Eyes stay a natural, moderate size. ORDER RULE: in every change the eyes move first, then the head, then the body, one after another. Eyelines are held steady, never darting. At the emotional peak, a moving hold: the pose stops and only the breath, shoulders, eyes and tears move. Everyone in frame is live: whoever is not speaking keeps reacting with small head turns, breathing and small hand actions. A gesture or look written for a word lands exactly on that word; how loud a line is comes from its delivery, and an exclamation mark is punctuation, not volume.";
+  "FACE AND BODY: feature-film character acting, broad enough to read at a glance and grounded. Natural blinking; forehead and brows always active and matched to each state, the eyes alive. Eyes stay a natural, moderate size. ORDER RULE: in every change the eyes move first, then the head, then the body, one after another. Eyelines stay locked on their target. At the emotional peak, a moving hold: the pose stops and only the breath, shoulders, eyes and tears move. Everyone in frame is live: whoever is not speaking keeps reacting with head turns, breathing and hand actions. A gesture or look written for a word lands exactly on that word; how loud a line is comes from its delivery — an exclamation mark is punctuation only.";
+
+/**
+ * Storyboard scenes: the same doctrine, action first (team review, Nov 2026: 8 short cuts of held poses read as
+ * timid). Big full-body actions played out completely; a moving hold only where a panel asks for one.
+ */
+export const STORY_ACTING_EN =
+  "FACE AND BODY: big, full-bodied feature-film acting that reads at a glance — whole-body poses with a clear line of action, full-range gestures and strong silhouettes; every action is played out completely at real-time speed, with a clear anticipation, a committed main action and a follow-through. Forehead and brows stay active and match each state, the eyes alive and a natural, moderate size. ORDER RULE: in every change the eyes move first, then the head, then the body. Eyelines stay locked on their target. A moving hold appears only where a panel asks for one. Everyone in frame is live and acts with the whole body (turns, shifts of weight, hand actions). A gesture or look written for a word lands exactly on that word; how loud a line is comes from its delivery — an exclamation mark is punctuation only.";
 
 /**
  * The team's composition rule (storyboard): a face is never frontal in a horizontally symmetrical frame, and
@@ -1373,7 +1380,7 @@ export const ACTING_EN =
  * asymmetric frame, stay allowed.
  */
 export const COMPOSITION_EN =
-  "Composition: a face is never shown frontal in a horizontally symmetrical frame, and nobody stares into the lens from a symmetrical frame; turn the face or set the frame off its mirror line.";
+  "Composition: faces are turned or set off the frame's mirror line, and a look into the lens comes only from an off-centre, asymmetric frame.";
 
 /** The scene's emotional arc as the prompt's main subject (empty when the English arc is missing or stale). */
 export const arcLine = (arc: string | null) =>
@@ -1623,6 +1630,8 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
   const shots = shotsOf(data);
   const cuts = cutBefore(data);
   const multiShot = shots.length > 1;
+  // 한 쇼트 = 패널 1장: every panel is its own shot (older scenes may still join panels into one shot)
+  const onePerPanel = multiShot && shots.every((sh) => sh.length === 1);
   const allowCuts = { allowCuts: multiShot };
   const rangeOf = (ids: string[]) => {
     const a = panelNo(ids[0]);
@@ -1685,8 +1694,8 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
       const cut = (t: string, max: number) => (max === Infinity ? clean(t) : clip(t, max));
       const shotNo = shots.findIndex((sh) => sh.includes(seg.expressionId)) + 1;
       return [
-        `${k + 1}. ${fmtSec(seg.start)}–${fmtSec(seg.end)} seconds: panel ${panelNo(seg.expressionId)}${p?.title ? ` — ${p.title}` : ""}${multiShot ? ` (shot ${shotNo})` : ""}`,
-        multiShot && k > 0 && (cuts.get(seg.expressionId) ? "HARD CUT to a new shot here." : "Same shot: the camera moves on continuously from the previous panel, no cut."),
+        `${k + 1}. ${fmtSec(seg.start)}–${fmtSec(seg.end)} seconds: panel ${panelNo(seg.expressionId)}${p?.title ? ` — ${p.title}` : ""}${multiShot && !onePerPanel ? ` (shot ${shotNo})` : ""}`,
+        multiShot && k > 0 && (cuts.get(seg.expressionId) ? "HARD CUT to a new shot here." : "Same shot: the camera moves on continuously from the previous panel."),
         n && (conti ? `Composition, blocking and camera: as in ${n} (rough sketch).` : `Frame target: ${n}.`),
         cut(action, B.action) && `Action: ${sentence(cut(action, B.action))}`,
         cut(camera, B.camera) && `Camera: ${sentence(rig ? cut(camera, B.camera) : heldSteady(cut(camera, B.camera)))}`,
@@ -1707,14 +1716,16 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
 
   const headerWith = (B: (typeof STORY_BUDGETS)[number]) =>
     [
-      multiShot
+      onePerPanel
+        ? `A ${data.acting.duration}-second animated scene, ${data.video.aspectRatio}, in ${shots.length} shots — one shot per storyboard panel, each opening with a hard cut. Inside a shot the camera moves only as that panel's Camera line says, and the action plays out in full before the cut.`
+        : multiShot
         ? `A ${data.acting.duration}-second animated scene, ${data.video.aspectRatio}, edited in ${shots.length} shots: ${shots.map((sh, i) => `shot ${i + 1} = ${rangeOf(sh)}`).join("; ")}. Cut ONLY where a beat says HARD CUT; inside a shot the camera travels continuously from one panel's framing to the next.`
         : `ONE single continuous shot with no cuts: a ${data.acting.duration}-second animated scene, ${data.video.aspectRatio}. The beats below follow storyboard panels — successive moments of this same shot; the camera travels continuously from one panel's framing to the next and never cuts.`,
       ...storyboardCastEn(data, en, B.features, B.features * 50),
-      (en.style || data.style.trim()) && `Art style: ${sentence(clip(studioStyle(en.style ?? data.style, data.dimension), 200) || clean(studioStyle(en.style ?? data.style, data.dimension)).slice(0, 200))} Stay in this ${dimensionEn(data)} animation style; never photorealistic.${keepPainted(en.style ?? data.style, data.dimension)}`,
+      (en.style || data.style.trim()) && `Art style: ${sentence(clip(studioStyle(en.style ?? data.style, data.dimension), 200) || clean(studioStyle(en.style ?? data.style, data.dimension)).slice(0, 200))} Stay in this stylized ${dimensionEn(data)} animation style, painted and far from photoreal.${keepPainted(en.style ?? data.style, data.dimension)}`,
       conti
-        ? `LOOK (most important): every frame is a finished, fully coloured picture with the colour grading, light, atmosphere and brushwork of the scene picture and the art style below. The storyboard sketches are black-and-white layout guides only; every frame of the video is fully painted. The character design sheets give identity only (face, hair shape, body, costume design) — where this scene changes how a character looks (e.g. hair bleached by the sun, dust, a washed-out palette), follow the scene's description and the scene picture over the sheet's colours. The background references give the world; everyone keeps their proportions and appears once.`
-        : `Match the reference images exactly: the named characters' faces, hair, colors and costumes, the world, the lighting and the drawing style; nobody's proportions change and no character is duplicated.`,
+        ? `LOOK (most important): every frame is fully painted in the colour grading, light, atmosphere and brushwork of the scene picture and the art style. The storyboard sketches are black-and-white layout guides: take from them only each panel's composition, blocking, poses and camera framing. The design sheets give identity (face, hair shape, body, costume design); where this scene changes a look (sun-bleached hair, dust, a washed-out palette), the scene's description and picture win. The background references give the world; everyone keeps their proportions and appears once.`
+        : `Match the reference images exactly: the named characters' faces, hair, colors and costumes, the world, the lighting and the drawing style; everyone keeps their proportions and appears once.`,
       continuityRules(data, en) &&
         `Continuity rules (keep them in every shot): ${clip(continuityRules(data, en), B.rules) || continuityRules(data, en).slice(0, B.rules)}${multiShot ? " Across each HARD CUT the screen sides, eyelines, costumes, props and light carry on." : ""}`,
       background ? "Background as in the DIRECTOR'S DIRECTION below." : "Background and world as in the panel references.",
@@ -1745,22 +1756,20 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
             ),
           ].join("\n")
         : `Use the start frame as the exact first panel.${endFrame ? " The shot ends exactly on the end frame." : ""}`,
-      conti &&
-        "The storyboard sketches are rough black-and-white line drawings made for planning: take from them only each panel's composition, where everyone stands, their poses and the camera framing. Render every frame fully in the art style of the design sheets and the scene picture — colour, light and finished lines — fully painted, as finished animation.",
       refs.some((r) => r.parts) &&
-        "Panels shown side by side in one reference are separate moments: each plays in full frame in turn; never show a split screen, grid or side-by-side frames.",
+        "Panels shown side by side in one reference are separate moments: each plays full-frame in turn, one picture at a time.",
       speaking &&
         (voOnly
-          ? `Dialogue: every line is voice-over — heard over the picture only; nobody lip-syncs it (a beat that says someone silently mouths words still shows that).`
+          ? `Dialogue: every line is voice-over, heard over the picture while every mouth stays closed (a beat that says someone silently mouths words still shows that).`
           : `Dialogue: only the character named for a line speaks it, with their own voice and lip movement; everyone else keeps their mouth closed unless a beat says they silently mouth words.${
               anyVo ? " Lines marked voice-over are heard over the picture; nobody lip-syncs them." : ""
             }`),
-      speaking && data.extras.trim() && "Crowd sound only as quiet natural ambience, never words.",
+      speaking && data.extras.trim() && "Crowd sound stays a quiet, wordless ambience.",
       voices.length &&
-        `Voices: ${voices.map((v) => `${castName(data, v.id)} — ${noEndDot(clip(v.text, 160) || clean(v.text).slice(0, 80))}`).join("; ")}. Speak only the exact dialogue below; never read direction text aloud.`,
+        `Voices: ${voices.map((v) => `${castName(data, v.id)} — ${noEndDot(clip(v.text, 160) || clean(v.text).slice(0, 80))}`).join("; ")}. Speak only the exact dialogue lines below.`,
       arcLine(en.arc),
-      ACTING_EN,
-      `Everyone stays alive between the panels (breathing, blinks, small weight shifts); every change ${multiShot ? "inside a shot " : ""}is acted through a physical action and in-between poses. Each action reads in order: look, prepare, act, contact, settle; the result pose holds long enough to read.${
+      STORY_ACTING_EN,
+      `Each action plays in full, in order: look, prepare, act, contact, settle — the body travels and changes shape on screen, and the result pose reads clearly before the next panel.${
         multiShot ? " Across a cut, the characters, costumes, world and light stay the same." : ""
       }`,
       COMPOSITION_EN,
@@ -1786,7 +1795,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
     constraintsExtra(constraints) +
     keepPainted(en.style ?? data.style, data.dimension).length +
     // the acting doctrine, the arc and frame zero are written once and never cut
-    ACTING_EN.length + arcLine(en.arc).length + frameZero.length + COMPOSITION_EN.length + ASYMMETRY_VIDEO_EN.length;
+    STORY_ACTING_EN.length + arcLine(en.arc).length + frameZero.length + COMPOSITION_EN.length + ASYMMETRY_VIDEO_EN.length;
   let prompt = "";
   for (const B of STORY_BUDGETS) {
     prompt = [headerWith(B), frameZero, beatsWith(B).join("\n\n"), directorBlock, constraints].filter(Boolean).join("\n\n");
