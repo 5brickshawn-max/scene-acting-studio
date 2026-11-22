@@ -88,8 +88,8 @@ async function plan(projectId: string, spec: GenSpec, data: ProjectData): Promis
         return Boolean(e?.action.trim() || e?.camera.trim());
       })
       .map((h) => ({
-        // a rough sketch needs no high rendering quality (cheaper)
-        params: { ...m.params, ...("quality" in m.params ? { quality: "low" } : {}), prompt: h.prompt, aspect_ratio: h.aspectRatio },
+        // a rough sketch needs no high rendering quality (cheaper), but enough to keep hands, props and silhouettes right
+        params: { ...m.params, ...("quality" in m.params ? { quality: "medium" } : {}), prompt: h.prompt, aspect_ratio: h.aspectRatio },
         medias: h.references.map((r) => ({ assetId: r.assetId, role: "image_references" })),
         label: `${h.index + 1}번 컷 러프 콘티 · ${m.label}`,
         meta: { model: spec.model, expressionId: h.expressionId, index: h.index },

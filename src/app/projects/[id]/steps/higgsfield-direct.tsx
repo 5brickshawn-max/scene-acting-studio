@@ -16,8 +16,8 @@ import { AssetPicker } from "../ui";
 import { FRAMING_LABEL, hasPictureBasis, ratioLabel, castLabel, continuityAnchor, imageAspectFor, imageIsStale, timelineOrder, usesConti, withSketch, type Framing } from "@/lib/domain/project";
 import { useEditor } from "../editor-context";
 
-/** The team's fixed models: rough conti sketches with Nano Banana, every finished picture with GPT Image. */
-const SKETCH_MODEL: ImageModelKey = "nano_banana_2_1";
+/** The team's fixed models: rough conti sketches and every finished picture with GPT Image 2.6. */
+const SKETCH_MODEL: ImageModelKey = "gpt_image_2_6";
 const PICTURE_MODEL: ImageModelKey = "gpt_image_2_6";
 
 type Quote = { credits: number | null; each?: number | null; count?: number; balance: number | null; workspace: string | null; model: string; references: number };
