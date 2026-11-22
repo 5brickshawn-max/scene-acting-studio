@@ -414,3 +414,29 @@ describe("다음 장면 만들기 (sequence)", () => {
     invariants(next, "next scene");
   });
 });
+
+describe("rough conti carries what the conti check holds it to", () => {
+  it("rules, the start state, each character's build and age, the place references, left/right and the shot size", async () => {
+    const { buildSketchHandoffs } = await import("@/lib/domain/handoff");
+    const d = setExpressionCount(createProjectData("훈련장", 2, "storyboard"), 3);
+    d.cast[0] = { ...d.cast[0], name: "꼬마", locks: "1. 주황 곱슬머리\n2. 보라 숄\n3. 가는 팔\n4. 짧은 나무 검", appearance: "열 살 남자아이, 키 130cm" };
+    d.cast[1] = { ...d.cast[1], name: "에일레스", locks: "1. 허리까지 오는 웨이브 머리", appearance: "190cm 전사", refAssetId: "sheet-e" };
+    d.designRefAssetIds = ["bg-1"];
+    d.expressionSetup.continuity = "2) 횃불은 화면 오른쪽 벽 4) 칼끝은 화면 왼쪽 아래";
+    d.expressions = d.expressions.map((e, i) => ({ ...e, action: `동작 ${i + 1}`, camera: "허리 위 미디엄 클로즈업", continuity: `시작: 시작 ${i + 1} / 끝: 끝 ${i + 1}` }));
+    d.expressions[1] = { ...d.expressions[1], continuity: "끝: 끝 2" };
+    const hs = buildSketchHandoffs(d);
+    const p = hs[1].prompt;
+    expect(hs[1].references.map((r) => r.assetId)).toEqual(["sheet-e", "bg-1"]);
+    expect(p).toContain("Image reference 2 is the place and props of this scene");
+    expect(p).toContain("Continuity rules of this scene (every panel keeps them): 2) 횃불은 화면 오른쪽 벽 4) 칼끝은 화면 왼쪽 아래");
+    expect(p).toContain("build and age: 열 살 남자아이, 키 130cm");
+    expect(p).toContain("짧은 나무 검");
+    expect(p).toContain("a child stays child-sized next to adults");
+    // no start of its own: it starts where panel 1 ended
+    expect(p).toContain("Where this moment starts (it continues from the panel before — same positions, same hands on the same props): 끝 1.");
+    expect(hs[0].prompt).toContain("Where this moment starts (it continues from the panel before — same positions, same hands on the same props): 시작 1.");
+    expect(p).toContain("for someone facing the camera their own right hand is on screen-left");
+    expect(p).toContain("at exactly this shot size");
+  });
+});
