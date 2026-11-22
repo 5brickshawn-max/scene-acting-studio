@@ -64,7 +64,7 @@ export const SceneComposeOut = z.object({
         seconds: z.number().describe("이 쇼트의 길이(초)"),
         panels: z
           .array(z.string().describe("패널(콘티 칸) 제목, 짧게 25자 안팎(예: 가로등 기둥을 돌아 자리 바꾸기). 초 단위 시간(0~2초 등)·카메라 설명·긴 묘사는 쓰지 말 것 — 내용은 다음 단계의 장면 묘사에"))
-          .describe("이 쇼트의 패널. 스토리보드는 정확히 1개(쇼트 하나 = 패널 1장, 쇼트 안의 카메라 이동은 title에). 인물별 연기 방식은 표정 비트마다 1개"),
+          .describe("이 쇼트 안의 패널, 순서대로. 카메라가 한 구도에 머무는 쇼트는 1개, 쇼트 안에서 카메라가 움직여 구도가 바뀌면 바뀌는 구도마다 1개"),
       }),
     )
     .describe("쇼트(컷 분할) 구성, 순서대로. 쇼트와 쇼트 사이는 컷으로 끊김. 인물별 연기 방식이면 쇼트 1개(그 안의 패널 = 표정 비트)"),
@@ -141,7 +141,7 @@ export const StoryboardOut = z.object({
       principles: Principles,
       link: z
         .enum(["continuous", "cut"])
-        .describe("앞 컷과의 연결: 항상 cut (쇼트 하나 = 패널 1장, 쇼트 안의 카메라 이동은 camera에)"),
+        .describe("앞 컷과의 연결: continuous = 같은 쇼트에서 카메라가 이어서 움직여 이 컷이 됨, cut = 컷 분할(장면이 끊기고 새 쇼트). 첫 컷은 continuous"),
     }),
   ),
 });
@@ -276,8 +276,8 @@ export const EnglishOut = z.object({
     z.object({
       panel: z.number().int().describe("표정 번호 (1부터)"),
       emotion: z.string().describe("감정, 영어 2~5단어"),
-      face: z.string().describe("연기하는 인물의 눈썹·눈·입 연기, 영어 한 문장 (160자 이내). 좌우 긴장을 다르게, 주도 요소부터, 좌우는 인물 기준 own right/left (예: her own right brow lifted and kinked, left lid narrowed, both eyes on him)"),
-      body: z.string().describe("중심 인물의 팔·손·어깨·몸 연기, 영어 한 문장 (120자 이내), 얼굴과 같은 감정을 한쪽 어깨·한 손으로 (예: one shoulder raised, one hand pressed to her head). 손이 화면에 안 보이는 구도면 빈 문자열"),
+      face: z.string().describe("연기하는 인물의 눈썹·눈·입 연기, 영어 한 문장 (160자 이내)"),
+      body: z.string().describe("중심 인물의 팔·손·어깨·몸 연기, 영어 한 문장 (120자 이내). 손이 화면에 안 보이는 구도면 빈 문자열"),
       others: z
         .array(
           z.object({
@@ -290,7 +290,7 @@ export const EnglishOut = z.object({
         .describe("여러 인물 장면: 중심 인물을 뺀 나머지 인물마다 하나. 한 명 장면이면 빈 배열"),
       transition: z
         .string()
-        .describe("다음 표정으로 넘어가게 하는 몸의 동작(깜빡임·숨·고개 돌림·얼굴 앞을 지나는 손 등), 한쪽부터 시작하는 비대칭 동작으로, 영어 한 문장 (100자 이내). 마지막 표정이면 빈 문자열"),
+        .describe("다음 표정으로 넘어가게 하는 몸의 동작(깜빡임·숨·고개 돌림·얼굴 앞을 지나는 손 등), 영어 한 문장 (100자 이내). 마지막 표정이면 빈 문자열"),
       delivery: z
         .string()
         .describe("대사 말투, 영어 한 구절 (170자 이내): 크기(whisper/quiet/normal/loud), 강세 단어, 특정 단어에 맞춘 동작·시선(on \"word\" — action). 대사가 없으면 빈 문자열"),

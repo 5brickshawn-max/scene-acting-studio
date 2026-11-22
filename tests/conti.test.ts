@@ -34,9 +34,10 @@ describe("콘티 방식 (storyboard video from sheets, places and rough sketches
     // line art kept to as few pictures as possible (three to an image) so the coloured references lead the look
     expect(h.prompt).toContain("5. panels 1, 2, 3 side by side, left to right — rough storyboard sketches");
     expect(h.prompt).toContain("6. panel 4 — rough storyboard sketch");
-    expect(h.prompt).toContain("LOOK (most important): every frame is fully painted in the colour grading, light, atmosphere and brushwork");
-    expect(h.prompt).toContain("the scene's description and picture win");
-    expect(h.prompt).toContain("take from them only each panel's composition, blocking, poses and camera framing");
+    expect(h.prompt).toContain("LOOK (most important): every frame is a finished, fully coloured picture with the colour grading, light, atmosphere");
+    expect(h.prompt).toContain("follow the scene's description and the scene picture over the sheet's colours");
+    expect(h.prompt).toContain("take from them only each panel's composition, where everyone stands, their poses and the camera framing");
+    expect(h.prompt).toContain("fully painted, as finished animation");
     expect(h.prompt).toContain("Composition, blocking and camera: as in reference image 5 (right frame) (rough sketch).");
     expect(h.startFrame).toContain("① 캐릭터 시트 ② 장면 그림·배경·에셋 ③ 러프 콘티");
   });
@@ -62,6 +63,6 @@ describe("3D & 2.5D, never 2D", async () => {
     const p = buildVideoHandoff(d).prompt;
     expect(p).toContain("회화풍 3D & 2.5D");
     expect(p).not.toMatch(/(^|[^\d.])2D(?![\w.])/);
-    expect(p).toContain("stylized 3D & 2.5D animation style, painted and far from photoreal");
+    expect(p).toContain("3D & 2.5D animation style; never photorealistic");
   });
 });

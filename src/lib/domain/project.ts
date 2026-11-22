@@ -171,10 +171,10 @@ export const ExpressionSchema = z.object({
   /** fingerprint of the panel's text (description · camera · continuity) the sketch was made for; null = unknown (older data) */
   sketchBasis: z.string().nullable().default(null),
   /**
-   * storyboard: how this panel follows the previous one — "cut" (컷 분할: a hard cut, a new shot; the rule now:
-   * one shot, one panel) or "continuous" (older scenes: the camera moved on in the same shot). Ignored for the first panel.
+   * storyboard: how this panel follows the previous one — "continuous" (the camera moves on in the same shot)
+   * or "cut" (컷 분할: a hard cut, a new shot). Ignored for the first panel.
    */
-  link: z.enum(["continuous", "cut"]).default("cut"),
+  link: z.enum(["continuous", "cut"]).default("continuous"),
   /** group scenes: the acting of every other cast member in this same moment (one per member, cast order) */
   reactions: z.array(PerformanceSchema).default([]),
   /** 1-based panel number in the expression reference sheet, or null */
@@ -310,14 +310,7 @@ export const ProjectDataSchema = z.object({
    * which this scene's first cut starts from (null for a scene that starts a sequence).
    */
   previous: z
-    .object({
-      projectId: z.string(),
-      name: z.string(),
-      endState: z.string(),
-      index: z.number().int().default(1),
-      /** how the scene before joins this one: a cut (the default), or seamlessly from its last frame */
-      join: z.enum(["cut", "seamless"]).optional(),
-    })
+    .object({ projectId: z.string(), name: z.string(), endState: z.string(), index: z.number().int().default(1) })
     .nullable()
     .default(null),
   /**
@@ -434,7 +427,7 @@ export function blankExpression(panel: number | null = null, characterId = ""): 
     principles: [],
     sketchAssetId: null,
     sketchBasis: null,
-    link: "cut",
+    link: "continuous",
     reactions: [],
     panel,
     emotion: "",
@@ -519,17 +512,6 @@ export const SUGGESTED_SECONDS_PER_CUT = 4;
 /** The cut count this length holds at about 4 s each (at least two). */
 export const suggestedCutsFor = (duration: number) =>
   Math.min(MAX_PANELS_STORYBOARD, Math.max(MIN_EXPRESSIONS, Math.floor((duration || 0) / SUGGESTED_SECONDS_PER_CUT)));
-/**
- * 한 쇼트 = 패널 1장 (team rule): every storyboard panel is its own shot; a camera move inside the shot is written in
- * that panel's camera line. The shots that still hold several panels (older scenes), in order.
- */
-export function multiPanelShots(data: Pick<ProjectData, "mode" | "expressions" | "acting">): string[][] {
-  return data.mode === "storyboard" ? shotsOf(data).filter((sh) => sh.length > 1) : [];
-}
-/** Every panel opens its own shot (the first one included). */
-export const oneShotPerPanel = (d: ProjectData): ProjectData =>
-  d.mode === "storyboard" ? { ...d, expressions: d.expressions.map((e) => ({ ...e, link: "cut" as const })) } : d;
-
 /** The short-cut notice for a storyboard (empty when the cuts have time enough). */
 export function cutLengthNotice(data: Pick<ProjectData, "mode" | "expressions" | "acting">): string {
   if (data.mode !== "storyboard" || !data.expressions.length) return "";
@@ -871,12 +853,6 @@ export function stepIssues(data: ProjectData, step: StepIndex): Issue[] {
   }
 
   if (step === 1 && cutLengthNotice(data)) warn(cutLengthNotice(data));
-  if (step === 1 && multiPanelShots(data).length)
-    warn(
-      `한 쇼트에 패널이 여러 장입니다(${multiPanelShots(data)
-        .map((sh) => sh.map((id) => data.expressions.findIndex((e) => e.id === id) + 1).join("→"))
-        .join(", ")}). 원칙은 쇼트 하나에 패널 그림 1장입니다 — 쇼트 안의 카메라 이동은 그 패널의 카메라 글에 쓰고, ‘모두 컷 분할로’를 누르거나 ‘처음부터 다시 설계’로 다시 나누세요.`,
-    );
   if (step === 1 && data.expressions.length > maxPanelsFor(data.mode))
     block(`${isStoryboard(data) ? "컷" : "표정"}이 ${data.expressions.length}개입니다. ${isStoryboard(data) ? "스토리보드" : "한"} 장면은 최대 ${maxPanelsFor(data.mode)}개입니다. 2단계 ①에서 ${maxPanelsFor(data.mode)}개 이하로 줄이세요(뒤쪽부터 빠지니, 줄인 뒤 ‘처음부터 다시 설계’를 권장).`);
   if (step === 1 && isStoryboard(data)) {
@@ -1193,7 +1169,7 @@ export function nextSceneData(prev: ProjectData, prevProjectId: string, title: s
     extras: prev.extras,
     style: prev.style,
     dimension: prev.dimension,
-    previous: { projectId: prevProjectId, name: prev.title, endState: sceneEndState(prev), index: (prev.previous?.index ?? 1) + 1, join: "cut" },
+    previous: { projectId: prevProjectId, name: prev.title, endState: sceneEndState(prev), index: (prev.previous?.index ?? 1) + 1 },
     baseAssetId: prev.baseAssetId,
     designRefAssetIds: [...prev.designRefAssetIds],
     cast,

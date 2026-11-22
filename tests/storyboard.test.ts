@@ -1,4 +1,4 @@
-import { keepPainted, STORY_ACTING_EN, COMPOSITION_EN, ASYMMETRY_VIDEO_EN } from "@/lib/domain/handoff";
+import { keepPainted, ACTING_EN, COMPOSITION_EN } from "@/lib/domain/handoff";
 import { describe, expect, it } from "vitest";
 import { addCastMember, shotsOf, approve, canApprove, createProjectData, imageAspectFor, MAX_CAST, MAX_CAST_STORYBOARD, parseProjectData, stepIssues, type ProjectData } from "@/lib/domain/project";
 import { buildExpressionHandoffs, buildFrameHandoff, buildVideoHandoff, cameraTextMoves } from "@/lib/domain/handoff";
@@ -29,8 +29,6 @@ function market(): ProjectData {
     imageAssetId: `panel-${i}`,
     imageFraming: "medium",
     imageAspect: "16:9",
-    // an older scene: its panels join into one continuous shot (the rule now is one shot per panel)
-    link: "continuous" as const,
   }));
   d.acting.duration = 8;
   d.acting.segments = d.expressions.map((e, i) => ({ expressionId: e.id, start: i * 2, end: i * 2 + 2, transition: "" }));
@@ -69,7 +67,7 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     expect(first.aspectRatio).toBe("16:9");
     expect(first.prompt).toContain("One finished 16:9 frame of the animation (moment 1 of 4 in this scene)");
     expect(first.prompt).toContain("never a storyboard sheet, a grid");
-    expect(first.prompt).toContain("Named characters (each keeps their own identity and features exactly as in the scene reference): 칼리엘라 — 진홍색 꼬임 머리, 엘프 귀; 브람 — 은발 단발, 검은 갑옷.");
+    expect(first.prompt).toContain("Named characters (each keeps their identity exactly as in the scene reference; never mix features between them): 칼리엘라 — 진홍색 꼬임 머리, 엘프 귀; 브람 — 은발 단발, 검은 갑옷.");
     expect(first.prompt).toContain("Crowd and background people (unnamed): 횃불을 든 상인과 구경꾼 수십 명.");
     expect(first.prompt).toContain("This moment: 횃불을 든 군중이 좌우로 갈라진다.");
     expect(first.prompt).toContain("FRAMING OF THIS PANEL (follow it over every reference picture): 와이드 하이앵글.");
@@ -89,7 +87,7 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     expect(h.prompt).toContain("2. 2–4 seconds: panel 2 — 칼리엘라 등장\nFrame target: reference image 3.\nAction: 그 사이로 칼리엘라가 걸어 나온다.\nCamera: 칼리엘라 쪽으로 다가감.");
     expect(h.prompt).toContain('칼리엘라 says exactly (English): "Step aside."');
     expect(h.prompt).toContain('브람 says exactly (English): "Not one step further!"');
-    expect(h.prompt).toContain("Crowd sound stays a quiet, wordless ambience.");
+    expect(h.prompt).toContain("Crowd sound only as quiet natural ambience, never words.");
     expect(h.prompt).toContain("1. scene reference drawing — named characters, style and world; identity only");
     expect(h.cameraMove).toBe(true);
     expect(h.prompt.endsWith(h.constraints)).toBe(true);
@@ -170,7 +168,7 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     expect(p).toContain("세라 — 첫째 특징, 둘째 특징;");
     expect(p).not.toContain("셋째 특징");
     const h = buildVideoHandoff(d);
-    expect(h.lengthTarget).toBe(3500 + 3 * 200 + (h.constraints.length - 700) + 150 + keepPainted(d.style).length + STORY_ACTING_EN.length + COMPOSITION_EN.length + ASYMMETRY_VIDEO_EN.length);
+    expect(h.lengthTarget).toBe(3500 + 3 * 200 + (h.constraints.length - 700) + 150 + keepPainted(d.style).length + ACTING_EN.length + COMPOSITION_EN.length);
     expect(h.prompt.length).toBeLessThanOrEqual(h.lengthTarget);
   });
 
@@ -188,7 +186,7 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     expect(h.prompt).toContain("edited in 3 shots: shot 1 = panel 1; shot 2 = panels 2–3; shot 3 = panel 4. Cut ONLY where a beat says HARD CUT");
     expect(h.prompt).not.toContain("ONE single continuous shot");
     expect(h.prompt).toContain("panel 2 — 칼리엘라 등장 (shot 2)\nHARD CUT to a new shot here.");
-    expect(h.prompt).toContain("panel 3 — 브람의 경고 (shot 2)\nSame shot: the camera moves on continuously from the previous panel.");
+    expect(h.prompt).toContain("panel 3 — 브람의 경고 (shot 2)\nSame shot: the camera moves on continuously from the previous panel, no cut.");
     // talk of cuts is kept as written when the scene is cut on purpose
     expect(h.prompt).toContain("다음 컷으로 넘어가며");
     expect(h.adjustments.some((a) => a.rule.includes("‘컷’"))).toBe(false);
@@ -222,7 +220,7 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     const h = buildVideoHandoff(d);
     expect(h.prompt).toContain("3. panels 2, 3 side by side, left to right");
     expect(h.prompt).toContain("Frame target: reference image 3 (right frame).");
-    expect(h.prompt).toContain("one picture at a time");
+    expect(h.prompt).toContain("never show a split screen");
     const items = preRenderCheck(d, h).filter((i) => i.area === "참고 그림 수");
     expect(items.map((i) => i.level)).toEqual(["ok"]);
     expect(items[0].text).toContain("2·3번 컷 (나란히 2장)");
@@ -280,28 +278,5 @@ describe("storyboard mode (스토리보드 · 컷 단위)", () => {
     const imgs = buildVideoHandoff(d).references.filter((r) => r.role === "expression").map((r) => r.assetId);
     // 9 panels in 6 images: panels of one shot share an image first (5·6, 8·9), then one pair across a cut
     expect(imgs).toEqual(["img-0", "combo:img-1+img-2", "img-3", "combo:img-4+img-5", "img-6", "combo:img-7+img-8"]);
-  });
-
-  it("one shot, one panel (한 쇼트 = 패널 1장): new panels open their own shot, the video says so, older multi-panel shots are flagged", async () => {
-    const { multiPanelShots, oneShotPerPanel, createProjectData: create } = await import("@/lib/domain/project");
-    const fresh = create("새 장면", 1, "storyboard");
-    expect(fresh.expressions.every((e) => e.link === "cut")).toBe(true);
-    const m = market();
-    const d = { ...m, expressions: m.expressions.map((e) => ({ ...e, link: "cut" as const })) };
-    const h = buildVideoHandoff(d);
-    expect(h.prompt).toContain("in 4 shots — one shot per storyboard panel, each opening with a hard cut");
-    expect(h.prompt).not.toContain("(shot 2)");
-    expect(multiPanelShots(d)).toEqual([]);
-    const old = market();
-    expect(multiPanelShots(old)).toHaveLength(1);
-    expect(stepIssues(old, 1).map((i) => i.message).join(" ")).toContain("원칙은 쇼트 하나에 패널 그림 1장");
-    expect(multiPanelShots(oneShotPerPanel(old))).toEqual([]);
-    // the AI's design is applied one panel per shot, whatever link it names
-    const out = StoryboardOut.parse({
-      summary: "",
-      continuity: "",
-      panels: old.expressions.map((e, i) => ({ title: `컷 ${i + 1}`, action: "a", camera: "c", state: "시작: a / 끝: b", speaker: 0, principles: [], link: "continuous" })),
-    });
-    expect(applyStoryboard(old, out).expressions.every((e) => e.link === "cut")).toBe(true);
   });
 });

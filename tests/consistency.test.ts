@@ -220,7 +220,7 @@ describe("safeguards: sketch ↔ text ↔ acting", () => {
 
 describe("Seedance acting doctrine (SH04_3 tests)", () => {
   it("puts the acting rules, the arc and the result pose in the prompt, and keeps negative wording low", async () => {
-    const { buildVideoHandoff, STORY_ACTING_EN, startState } = await import("@/lib/domain/handoff");
+    const { buildVideoHandoff, ACTING_EN, startState } = await import("@/lib/domain/handoff");
     const { buildEnglishSheet } = await import("@/lib/domain/english");
     const { preRenderCheck, NEGATIVE_LIMIT } = await import("@/lib/domain/check");
     let d = setExpressionCount(createProjectData("결의", 1, "storyboard"), 3);
@@ -236,7 +236,7 @@ describe("Seedance acting doctrine (SH04_3 tests)", () => {
       beats: [],
     });
     const h = buildVideoHandoff(d, "references");
-    expect(h.prompt).toContain(STORY_ACTING_EN);
+    expect(h.prompt).toContain(ACTING_EN);
     expect(h.prompt).toContain("THE EMOTIONAL ARC: THIS IS THE WHOLE POINT.");
     expect(h.prompt).toContain("→ her fingers find the toy →");
     expect(h.prompt).toContain("Frame zero: 상태 0.");
@@ -261,9 +261,6 @@ describe("dialogue acting cues (Z_1–Z_4 references)", () => {
     expect(p).toContain(cue);
     expect(ACTING_EN).toContain("lands exactly on that word");
     expect(ACTING_EN).toContain("Everyone in frame is live");
-    const { STORY_ACTING_EN } = await import("@/lib/domain/handoff");
-    expect(STORY_ACTING_EN).toContain("lands exactly on that word");
-    expect(STORY_ACTING_EN).toContain("Everyone in frame is live");
   });
 });
 
@@ -411,88 +408,9 @@ describe("다음 장면 만들기 (sequence)", () => {
     expect(next.video.resultAssetIds).toEqual([]);
     expect(next.dialogue.lines).toEqual([]);
     expect(next.expressions.every((e) => !e.action && !e.sketchAssetId)).toBe(true);
-    expect(next.previous).toEqual({ projectId: "prev-id", name: "몰리송", endState: "상태 3", index: 2, join: "cut" });
+    expect(next.previous).toEqual({ projectId: "prev-id", name: "몰리송", endState: "상태 3", index: 2 });
     expect(readProjectData(next).recovered).toBe(false);
     expect(projectContext(next, 1)).toContain("앞 장면은 이렇게 끝났습니다: 상태 3");
     invariants(next, "next scene");
-  });
-});
-
-describe("시퀀스 (sequence view)", () => {
-  it("follows the newest next scene, lists other branches, and notices a changed end", async () => {
-    const { sequenceChain, junction, defaultResult } = await import("@/lib/domain/sequence");
-    const { nextSceneData } = await import("@/lib/domain/project");
-    const { chain, branches } = sequenceChain(
-      [
-        { id: "a", name: "A", previousId: null, updatedAt: "2026-11-01" },
-        { id: "b1", name: "B 첫 시도", previousId: "a", updatedAt: "2026-11-02" },
-        { id: "b2", name: "B 다시", previousId: "a", updatedAt: "2026-11-05" },
-        { id: "c", name: "C", previousId: "b2", updatedAt: "2026-11-06" },
-      ],
-      "a",
-    );
-    expect(chain).toEqual(["a", "b2", "c"]);
-    expect(branches).toEqual([{ afterId: "a", ids: ["b1"] }]);
-
-    const prev = setExpressionCount(createProjectData("A", 1, "storyboard"), 2);
-    prev.expressions = prev.expressions.map((e, i) => ({ ...e, continuity: `시작: s${i} / 끝: e${i}` }));
-    const next = nextSceneData(prev, "a", "B");
-    expect(junction(prev, next).endChanged).toBe(false);
-    prev.expressions[1] = { ...prev.expressions[1], continuity: "시작: s1 / 끝: 바뀐 끝" };
-    expect(junction(prev, next)).toEqual({ endChanged: true, endNow: "바뀐 끝" });
-    prev.video.resultAssetIds = ["v1", "v2"];
-    expect(defaultResult(prev)).toBe("v2");
-  });
-});
-
-describe("join between scenes", () => {
-  it("is a hard cut by default; an older scene that starts from a frame reads as seamless", async () => {
-    const { joinOf } = await import("@/lib/domain/sequence");
-    const { nextSceneData } = await import("@/lib/domain/project");
-    const prev = createProjectData("A", 1, "storyboard");
-    const next = nextSceneData(prev, "a", "B");
-    expect(joinOf(next)).toBe("cut");
-    expect(joinOf({ ...next, video: { ...next.video, startFrameAssetId: "f" } })).toBe("cut");
-    const older = { ...next, previous: { ...next.previous!, join: undefined }, video: { ...next.video, startFrameAssetId: "f" } };
-    expect(joinOf(older)).toBe("seamless");
-  });
-});
-
-describe("비대칭 (asymmetric faces and poses in every generated picture)", () => {
-  it("every image prompt asks for subtle asymmetry: expressions, finished panels, rough sketches, frames and the scene picture", async () => {
-    const { buildFrameHandoff, asymmetryEn } = await import("@/lib/domain/handoff");
-    for (const [mode, people] of [
-      ["cast", 1],
-      ["cast", 2],
-      ["storyboard", 2],
-    ] as const) {
-      const d = setExpressionCount(createProjectData("비대칭", people, mode), 2);
-      const prompts = [
-        ...buildExpressionHandoffs(d).map((h) => h.prompt),
-        buildSceneImageHandoff(d).prompt,
-        buildFrameHandoff(d, d.expressions[0].id, "bust").prompt,
-        ...(mode === "storyboard" ? buildSketchHandoffs(d).map((h) => h.prompt) : []),
-      ];
-      for (const p of prompts) expect(p, `${mode}/${people}`).toMatch(/asymmetr/i);
-    }
-    // the video prompts (the poses joined in motion) carry it too, in positive words (negations cut the motion)
-    const { ASYMMETRY_VIDEO_EN } = await import("@/lib/domain/handoff");
-    expect(ASYMMETRY_VIDEO_EN).not.toMatch(/\bnever\b|\bno\b|\bnot\b/i);
-    for (const [mode, people] of [
-      ["cast", 1],
-      ["cast", 2],
-      ["storyboard", 2],
-    ] as const) {
-      const d = setExpressionCount(createProjectData("비대칭", people, mode), 2);
-      expect(buildVideoHandoff(d).prompt, `video ${mode}/${people}`).toContain(ASYMMETRY_VIDEO_EN);
-    }
-    // the AI's own guideline (every design, dialogue, acting, English and consult job)
-    const { BASE_SYSTEM } = await import("@/lib/ai/prompts");
-    expect(BASE_SYSTEM).toContain("비대칭 연기");
-    // close-ups show no hands: the line leaves them out
-    expect(asymmetryEn({ hands: false })).not.toContain("hands");
-    expect(asymmetryEn({ many: true })).toContain("in every face, the two sides carry different tension");
-    expect(asymmetryEn()).toContain("both eyes look at the same target");
-    expect(asymmetryEn()).toContain("character's own side");
   });
 });

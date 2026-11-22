@@ -104,16 +104,15 @@ describe("첫 장면 (opening scene picture drawn from the scenario)", () => {
 });
 
 describe("쇼트 구성 (shots and panels proposed by the scene composition)", () => {
-  it("sets the panel count, titles, cut links and the time split for a storyboard — one panel per shot", () => {
+  it("sets the panel count, titles, cut links and the time split for a storyboard", () => {
     const d = applyComposition(createProjectData("광장", 2, "storyboard"), OUT, ["structure"]);
-    // 한 쇼트 = 패널 1장: a shot the AI split into several panels keeps its first one
-    expect(d.expressionSetup.count).toBe(3);
-    expect(d.expressions.map((e) => e.emotion)).toEqual(["군중이 술렁이는 광장", "칼리엘라의 눈", "브람이 막아섬"]);
-    expect(d.expressions.map((e) => e.link)).toEqual(["cut", "cut", "cut"]);
+    expect(d.expressionSetup.count).toBe(6);
+    expect(d.expressions.map((e) => e.emotion)).toEqual(["군중이 술렁이는 광장", "카메라가 다가가 칼리엘라를 찾음", "칼리엘라의 눈", "브람이 막아섬", "두 사람의 투샷", "칼리엘라가 한 걸음"]);
+    expect(d.expressions.map((e) => e.link)).toEqual(["continuous", "continuous", "cut", "cut", "continuous", "continuous"]);
     expect(shotsOf(d)).toHaveLength(3);
     expect(d.acting.duration).toBe(16);
-    // each panel takes its whole shot's seconds: 4 | 2 | 10
-    expect(d.acting.segments.map((x) => x.end)).toEqual([4, 6, 16]);
+    // each shot's seconds are shared by its panels: 2 + 2 | 2 | 3.3 + 3.3 + 3.4
+    expect(d.acting.segments.map((x) => x.end)).toEqual([2, 4, 6, 9.3, 12.7, 16]);
     expect(d.expressions.every((e) => e.reactions.length === 1)).toBe(true);
   });
 
@@ -128,12 +127,9 @@ describe("쇼트 구성 (shots and panels proposed by the scene composition)", (
   it("caps at 8 storyboard panels and 60 seconds, and leaves the structure alone when not picked", () => {
     const big = { ...OUT, duration: 90, shots: Array.from({ length: 5 }, (_, k) => ({ title: `s${k}`, seconds: 18, panels: ["a", "b", "c"] })) };
     const st = composeStructure({ mode: "storyboard" }, big);
-    // one panel per shot: five shots are five panels
-    expect(st).toMatchObject({ shots: 5, total: 5, clipped: false, duration: 60 });
-    expect(st.panels).toHaveLength(5);
-    const many = composeStructure({ mode: "storyboard" }, { ...big, shots: Array.from({ length: 10 }, (_, k) => ({ title: `s${k}`, seconds: 6, panels: ["a", "b"] })) });
-    expect(many).toMatchObject({ total: 10, clipped: true });
-    expect(many.panels).toHaveLength(8);
+    // no limit on shots: five proposed shots stay five
+    expect(st).toMatchObject({ shots: 3, total: 15, clipped: true, duration: 60 }); // the first 8 panels cover three shots
+    expect(st.panels).toHaveLength(8);
     const before = createProjectData("x", 1, "storyboard");
     expect(applyComposition(before, OUT, ["style"]).expressionSetup.count).toBe(before.expressionSetup.count);
   });

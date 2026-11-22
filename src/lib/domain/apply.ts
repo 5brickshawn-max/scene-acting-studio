@@ -52,12 +52,7 @@ export type ComposeField = "cast" | "style" | "extras" | "opening" | "questions"
 export function composeStructure(data: Pick<ProjectData, "mode">, out: Pick<SceneComposeOutT, "shots" | "duration">) {
   const story = data.mode === "storyboard";
   // character-by-character scenes are one continuous shot: its panels are the beats
-  // storyboard: one shot, one panel (한 쇼트 = 패널 1장) — a shot the AI split into several panels keeps its first title
-  const shots = (
-    story
-      ? out.shots.map((s) => ({ ...s, panels: s.panels.length ? [s.panels[0]] : s.title.trim() ? [s.title] : [] }))
-      : [{ title: "", seconds: out.duration, panels: out.shots.flatMap((s) => s.panels) }]
-  ).filter((s) => s.panels.length);
+  const shots = (story ? out.shots : [{ title: "", seconds: out.duration, panels: out.shots.flatMap((s) => s.panels) }]).filter((s) => s.panels.length);
   const panels: { title: string; shot: number; weight: number }[] = [];
   shots.forEach((s, k) => s.panels.forEach((t) => panels.push({ title: t, shot: k, weight: Math.max(0.2, s.seconds || 1) / s.panels.length })));
   const total = panels.length;
@@ -112,8 +107,9 @@ export function applyComposition(data: ProjectData, out: SceneComposeOutT, field
     next = setExpressionCount(next, st.panels.length);
     const expressions = next.expressions.map((e, i) => {
       const p = st.panels[i];
+      const opensShot = i > 0 && p.shot !== st.panels[i - 1].shot;
       return st.story
-        ? { ...e, emotion: panelTitle(p.title), link: "cut" as const }
+        ? { ...e, emotion: panelTitle(p.title), link: opensShot ? ("cut" as const) : ("continuous" as const) }
         : { ...e, notes: e.notes.trim() || p.title, link: "continuous" as const };
     });
     const ids = expressions.map((e) => e.id);
@@ -208,8 +204,7 @@ export function applyStoryboard(data: ProjectData, out: StoryboardOutT, indexes?
       camera: o.camera,
       continuity: o.state ?? prev.continuity,
       principles: validPrinciples(o.principles) ?? prev.principles,
-      // one shot, one panel: every panel opens its own shot (a camera move stays inside its camera line)
-      link: "cut",
+      link: i === 0 ? "continuous" : o.link ?? prev.link,
     });
   });
   // the scene's continuity rules come with a full design (a partial pick keeps the team's rules)

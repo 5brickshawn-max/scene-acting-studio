@@ -62,16 +62,16 @@ const cameraRig = (rig: string, cadence: Cadence) =>
   `[CAMERA] ${cadence === "stepped" ? "The stepped cadence is only for what moves inside the frame, not the camera. " : ""}The camera move is as directed above (${rig}): quiet and purposeful, alive.`;
 
 const SOUND =
-  "[SOUND] Only natural sound and the sound effects that occur in the scene, all at natural pitch (music is added later in editing). Impacts sound heavy and low: deep thuds, hard footfalls, the forced breath of effort.";
+  "[SOUND] Only natural sound and the sound effects that occur in the scene, with no music, all at natural pitch. Impacts sound heavy and low: deep thuds, hard footfalls, the forced breath of effort.";
 
 /** Every reaction has a cause, in order: body first, then the heavier loose parts, then the lighter ones. */
 const SECONDARY: Record<WeightLevel, string> = {
   natural:
     "[SECONDARY ACTION] Only loose elements already in the scene (hair, clothing, cloth, straps, accessories, fur). Every reaction has a cause, in order: the body first, then the heavier loose parts, then the lighter ones; they follow with a short delay and settle soon after the body stops.",
   heavy:
-    "[SECONDARY ACTION] Only loose elements already in the scene (hair, clothing, cloth, straps, accessories, fur). Every reaction has a cause, in order: the body first, then the heavier loose parts (hoods, braids, cloaks), then the lighter ones (fringe, sleeves, strands of hair). They are heavy: they swing briefly, drop fast and settle. Everything settles fast under gravity.",
+    "[SECONDARY ACTION] Only loose elements already in the scene (hair, clothing, cloth, straps, accessories, fur). Every reaction has a cause, in order: the body first, then the heavier loose parts (hoods, braids, cloaks), then the lighter ones (fringe, sleeves, strands of hair). They are heavy: they swing briefly, drop fast and settle. Nothing floats, nothing slides.",
   extra:
-    "[SECONDARY ACTION] Only loose elements already in the scene (hair, clothing, cloth, straps, accessories, fur). Every reaction has a cause, in order: the body first, then the heavier loose parts (hoods, braids, cloaks), then the lighter ones (fringe, sleeves, strands of hair). They are pulled down hard: they swing briefly, drop fast, slap against the body on landing and settle with a short, stiff follow-through. Everything settles fast under gravity.",
+    "[SECONDARY ACTION] Only loose elements already in the scene (hair, clothing, cloth, straps, accessories, fur). Every reaction has a cause, in order: the body first, then the heavier loose parts (hoods, braids, cloaks), then the lighter ones (fringe, sleeves, strands of hair). They are pulled down hard: they swing briefly, drop fast, slap against the body on landing and settle with a short, stiff follow-through. Nothing floats, nothing slides.",
 };
 
 /** For models with a negative-prompt field (e.g. Kling on its own site); the app does not put these words in the prompt itself. */
