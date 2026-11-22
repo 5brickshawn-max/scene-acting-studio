@@ -68,6 +68,21 @@ const HEAD_EN: Record<Facing, string> = {
 export const FACE_ANGLE_EN =
   "Face angle: the head is always turned or tilted at least a little, so the face reads asymmetrical; a look at the viewer comes from that turned head.";
 
+/**
+ * 비대칭 (team request): faces and poses in every generated picture are not mirror-symmetrical — a tilted or
+ * turned head, brows and mouth corners at different heights, uneven shoulders, hands doing different things —
+ * kept subtle so nothing looks distorted. The design itself (face proportions, costume, ornaments) stays as drawn.
+ */
+export function asymmetryEn(opts: { many?: boolean; hands?: boolean } = {}): string {
+  const who = opts.many ? "Every face and pose" : "The face and pose";
+  return (
+    `Natural asymmetry (subtle, never distorted): ${who} ${opts.many ? "is" : "are"} not mirror-symmetrical — the head turned or tilted a little, ` +
+    `the two brows and the two corners of the mouth at slightly different heights (one brow higher, one mouth corner pulled more), one shoulder higher or nearer the camera, ` +
+    `the hair falling differently on each side${opts.hands === false ? "" : ", the two hands doing different things"}. ` +
+    `Face proportions, character design, costume and ornaments stay exactly as designed; only the acting and the pose are uneven.`
+  );
+}
+
 const GAZE_EN: Record<Gaze, string> = {
   camera: "eyes looking at the viewer",
   left: "eyes looking screen-left",
@@ -408,6 +423,7 @@ export function buildExpressionHandoffs(data: ProjectData, fixes: Record<string,
         refSheet,
         `Expression: ${expression}`,
         FACE_ANGLE_EN,
+        asymmetryEn({ hands }),
         bodyLanguageEn(e, framing, eb ? eb.body : e.gesture),
         s.instruction && `Additional direction: ${clean(s.instruction)}`,
         `Keep exactly the same shot size, head size and position, and white background as the other expression images of this character so they work as a matching set; only the face, head direction${
@@ -448,6 +464,7 @@ export function buildExpressionHandoffs(data: ProjectData, fixes: Record<string,
       `Acting in this moment — every character at once (the listeners keep their mouths closed unless their line says otherwise):`,
       ...lines,
       FACE_ANGLE_EN.replace("the head is", "every head is").replace("so the face reads", "so each face reads"),
+      asymmetryEn({ many: true, hands }),
       hands && `Arms, hands and shoulders act together with each face; hands drawn clearly with natural anatomy (five fingers, no fused or extra fingers).`,
       s.instruction && `Additional direction: ${clean(s.instruction)}`,
       `Keep exactly the same camera, character positions and sizes, and white background as the other frames of this scene so they work as a matching set; only the faces, head directions${
@@ -500,6 +517,7 @@ export function buildFrameHandoff(data: ProjectData, expressionId: string, shot:
       ? `Image reference ${momentRef} is the exact moment to draw: the same facial expressions, head directions, arms and hands${multi ? " of every character" : ""}. Only the camera framing changes to this shot size; never change the acting.`
       : `${multi ? `${actorName} acts this moment. ` : ""}Expression: ${INTENSITY_EN[e.intensity]} ${eb?.emotion ?? e.emotion}. ${eb ? sentence(eb.face) : ""} ${directionEn(e)}`,
     FACE_ANGLE_EN,
+    asymmetryEn({ many: multi, hands: showsHands(shot) }),
     ...castLookEn(data, en, { appearance: false, outfit: false, max: multi ? 5 : 8 }),
     style && `Art style: ${style.replace(/[.。]+$/, "")}. Keep ${multi ? "every character" : "the character"} in this ${dimensionEn(data)} animation style; never photorealistic.`,
     directorBackground(director) ? `Background as in this direction: ${clip(director, 400) || director.slice(0, 400)}` : "Plain white background.",
@@ -1477,6 +1495,7 @@ function buildStoryboardHandoffs(data: ProjectData, fixes: Record<string, string
       data.expressionSetup.instruction && `Additional direction: ${clean(data.expressionSetup.instruction)}`,
       `Background: the world of the scene as in the references and the description (not an empty white background) unless the description says otherwise.`,
       `Staging: the faces, the hands and what they act on are clearly readable and not hidden behind bodies or props; hands drawn clearly with natural anatomy.`,
+      asymmetryEn({ many: true }),
     ]
       .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
       .join("\n");
@@ -1536,7 +1555,8 @@ export function buildSketchHandoffs(data: ProjectData, fixes: Record<string, str
       endState(t.state) &&
         `The pose to draw (where this moment ends — hands, body position, props and costume exactly like this, e.g. an open hand stays open, a fist stays a fist, kneeling stays kneeling): ${sentence(endState(t.state))}`,
       t.camera && `Camera: ${sentence(t.camera)} Draw one framing only (the framing at the key moment): where the camera stands and how big the figures are.`,
-      `Keep the composition clear: main figures large enough to read, background as a few simple lines (horizon, walls, door, big props). A face is never drawn frontal in a horizontally symmetrical frame, and nobody looks into the lens from a symmetrical frame. Again: one single frame, not several panels.`,
+      `Keep the composition clear: main figures large enough to read, background as a few simple lines (horizon, walls, door, big props). A face is never drawn frontal in a horizontally symmetrical frame, and nobody looks into the lens from a symmetrical frame.`,
+      `Poses with natural asymmetry, as in life drawing (subtle, never distorted): heads turned or tilted, weight on one leg, one shoulder higher, the two arms doing different things — no stiff, mirror-symmetrical figures. Again: one single frame, not several panels.`,
     ]
       .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
       .join("\n");
@@ -1561,6 +1581,7 @@ function buildStoryboardFrame(data: ProjectData, expressionId: string, shot: Fra
       ? `Image reference ${momentRef} is the exact moment to draw: the same poses and acting of everyone in it; only the camera framing changes to this shot size.`
       : t.action && `This moment: ${sentence(t.action)}`,
     style && `Art style: ${style.replace(/[.。]+$/, "")}. ${dimensionEn(data)} animation; never photorealistic.`,
+    asymmetryEn({ many: true }),
     `Fill the ${data.video.aspectRatio} frame (no white bars or padding).`,
   ]
     .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
@@ -1822,6 +1843,7 @@ export function buildSceneImageHandoff(data: ProjectData): SceneImageHandoff {
     story && data.extras.trim() && `Crowd and background people (unnamed): ${noEndDot(clean(data.extras))}.`,
     style && `Art style: ${style.replace(/[.。]+$/, "")}. ${dimensionEn(data)} animation style; never photorealistic.`,
     scene && (story || multi) && `The moment: ${sentence(scene)}`,
+    asymmetryEn({ many: story || multi }),
     !story && multi && `Background: plain and light so every character reads clearly.`,
     `No text, no labels, no name tags, no borders.`,
   ]

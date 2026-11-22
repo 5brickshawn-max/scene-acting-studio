@@ -276,7 +276,7 @@ export const EnglishOut = z.object({
     z.object({
       panel: z.number().int().describe("표정 번호 (1부터)"),
       emotion: z.string().describe("감정, 영어 2~5단어"),
-      face: z.string().describe("연기하는 인물의 눈썹·눈·입 연기, 영어 한 문장 (160자 이내)"),
+      face: z.string().describe("연기하는 인물의 눈썹·눈·입 연기, 영어 한 문장 (160자 이내). 좌우가 조금 다르게 (예: left brow raised higher, mouth pulled to one side)"),
       body: z.string().describe("중심 인물의 팔·손·어깨·몸 연기, 영어 한 문장 (120자 이내). 손이 화면에 안 보이는 구도면 빈 문자열"),
       others: z
         .array(

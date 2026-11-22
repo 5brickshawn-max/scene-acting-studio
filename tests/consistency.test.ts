@@ -454,3 +454,26 @@ describe("join between scenes", () => {
     expect(joinOf(older)).toBe("seamless");
   });
 });
+
+describe("비대칭 (asymmetric faces and poses in every generated picture)", () => {
+  it("every image prompt asks for subtle asymmetry: expressions, finished panels, rough sketches, frames and the scene picture", async () => {
+    const { buildFrameHandoff, asymmetryEn } = await import("@/lib/domain/handoff");
+    for (const [mode, people] of [
+      ["cast", 1],
+      ["cast", 2],
+      ["storyboard", 2],
+    ] as const) {
+      const d = setExpressionCount(createProjectData("비대칭", people, mode), 2);
+      const prompts = [
+        ...buildExpressionHandoffs(d).map((h) => h.prompt),
+        buildSceneImageHandoff(d).prompt,
+        buildFrameHandoff(d, d.expressions[0].id, "bust").prompt,
+        ...(mode === "storyboard" ? buildSketchHandoffs(d).map((h) => h.prompt) : []),
+      ];
+      for (const p of prompts) expect(p, `${mode}/${people}`).toMatch(/natural asymmetry/i);
+    }
+    // close-ups show no hands: the line leaves them out
+    expect(asymmetryEn({ hands: false })).not.toContain("hands");
+    expect(asymmetryEn({ many: true })).toContain("Every face and pose is not mirror-symmetrical");
+  });
+});
