@@ -61,12 +61,38 @@ const FACING_EN: Record<Facing, string> = {
  */
 const HEAD_EN: Record<Facing, string> = {
   ...FACING_EN,
-  front: "toward the viewer, turned or tilted slightly off-axis so the face reads asymmetrical",
+  front: "almost toward the viewer, turned or tilted slightly off the lens axis so the face reads three-dimensional",
 };
 
 /** The same rule as one line for every cast-mode image and video prompt (written without "never"). */
 export const FACE_ANGLE_EN =
-  "Face angle: the head is always turned or tilted at least a little, so the face reads asymmetrical; a look at the viewer comes from that turned head.";
+  "Face angle: the head is always turned or tilted at least a little off the lens axis, so the face reads three-dimensional; a look at the viewer comes from that turned head.";
+/**
+ * 얼굴 비대칭 (2026-11-16): one side of the face leads, never mirror twins — on that side the brow sits
+ * higher, the eye narrows more and the mouth corner lifts, tightens or drags down, on the same side as the
+ * eyes. In the pictures (2026-11-22, the team's example sheets) it goes as far as the emotion asks: anger,
+ * contempt, a sneer or crying make the mouth itself uneven (the upper lip and teeth on one side), calm and
+ * happy faces stay slight with a small head tilt; the jaw stays natural. The video keeps the speech shapes
+ * and jaw centered (lip sync), said positively there with no added prohibition.
+ * From the team's analysis of those sheets (2026-11-22): the two brows go different ways (one lifts, the
+ * other presses), the eyes differ by their lids (never by eyeball size) and both look at one target, the
+ * cheek and jaw on the pulled side react with the mouth, and the tension carries into the neck and
+ * shoulders. The asymmetry lives in the expression muscles; the face structure stays the character's own,
+ * apart from the perspective of a turned head.
+ */
+const FACE_ASYM_EN =
+  "Eyes, brows and mouth: asymmetric, one side leading, as strongly as the emotion asks: the two brows differ in height, slope and break (one lifts, the other presses down); the eyelids open differently (one eye wider, the other narrowed, shaped by the lids, never by eyeball size) with both eyes on the same target; that mouth corner lifts, tightens or drags down with that cheek and the jaw reacting; in anger, contempt, a sneer or crying the mouth itself is uneven too (the upper lip lifts and the teeth show more on that side, or the mouth pulls toward it); calm and happy faces keep it slight, carried by a small head tilt. The tension carries into the neck and shoulders (that shoulder a little higher or drawn in). The asymmetry is in the expression muscles: the face structure and proportions stay the character's own and undistorted (apart from the perspective of a turned head), so the two halves are never a mirror image.";
+/**
+ * Near the front (2026-11-24, the team: "정면이나 정면에 가까운 각도에서는 좌우가 너무 달라서 어색해"): seen from
+ * the front every left-right difference shows in full, so the two sides stay close to even and the expression
+ * reads as one face; the full asymmetry above is for a turned head (3/4, profile), where perspective carries it.
+ */
+const FACE_NEAR_FRONT_EN =
+  "Eyes, brows and mouth: from this near-front angle the two sides stay close to even, one side leading only slightly (one brow a touch higher, one eye a little narrower), the way a real face reads from the front; any left-right difference in the text below is played small, so the face reads as one natural expression, never two halves acting differently. Only a one-sided feeling (contempt, a sneer, doubt) clearly pulls one mouth corner. Both eyes look at the same target, their openness shaped by the lids, never by eyeball size; the face structure and proportions stay the character's own and undistorted.";
+const faceAsymEn = (f: Facing) => (f === "front" ? FACE_NEAR_FRONT_EN : FACE_ASYM_EN);
+/** The same for a frame of several characters, in one line. */
+const FACE_ASYM_GROUP_EN =
+  "Eyes, brows and mouth: one side of each face leads (one brow higher, one eye narrower, that mouth corner pulling), clearly on a turned head and only slightly on a head near the front; both eyes of a character look at the same target, their openness shaped by the lids, and each face keeps its own structure and proportions.";
 
 const GAZE_EN: Record<Gaze, string> = {
   camera: "eyes looking at the viewer",
@@ -109,14 +135,27 @@ const FRAMING_COMPOSITION_EN: Record<Framing, string> = {
 const HEADROOM_EN =
   "Headroom: the top of the hair and any headwear (crown, hat, hood, hair ornaments) is fully inside the image with a clear white margin above it, never cut off at the top edge.";
 const portraitFrameEn = (hands: boolean) =>
-  `Fill the portrait frame at this shot size and never show more of the body than the shot size allows. Wide hair, clothing or shoulders may run past the side edges${
+  // 스와르다 v3 (2026-11-24): two medium-shot pictures ended in a straight cut at the waist with a white band under
+  // it, like the cut-out bust views of the character sheet
+  `Fill the portrait frame at this shot size and never show more of the body than the shot size allows: the image frame itself crops the figure, so the body runs off the bottom edge of the image, with no white band under it and no cut-off edge inside the picture (not a floating cut-out like the inset views of a character sheet). Wide hair, clothing or shoulders may run past the side edges${
     hands ? " (keep the gesturing hands inside the frame)" : ""
   }.`;
 /** Expression images are moments of ONE shot: this is what makes them connect in the video. */
 const ONE_SHOT_IMAGE_EN =
   "This image is one moment of ONE continuous shot with no cuts: every expression image of this character shares the same camera, shot size, character size and position, lighting and white background; only the acting changes.";
 
+const BUST_REACH_EN =
+  "Any reach stays close to the body: elbow bent, the hand in front of the chest inside this bust shot; the shot keeps its size and never widens to fit an arm.";
+/** Carried things follow the gesture: the design may show gear the moment does not use. */
+const PROPS_EN =
+  "Props: only the ones this body language names; the rest of the gear in the character design (a shield, a staff, a bag, a second weapon) is set aside, out of the picture.";
 /** Arm/hand acting line for the image prompt (bust and medium shots only); `text` = English gesture when there is one. */
+const ARMS_AS_WRITTEN_EN =
+  "Each hand is the one named, by its side of the picture (the screen-left hand is on the left of the image, the screen-right hand on the right): the two arms are never swapped or mirrored.";
+/** 칼리엘라 v97 (2026-11-25): the hand on the heart was drawn with its forearm coming from the other side, beside a
+ *  second hand of that side, so it read as a third hand; the video slid it across and merged the two hands */
+const ARM_PATH_EN =
+  "Each hand is joined to its own arm in plain view: its forearm comes in from that arm's own side of the picture (the screen-right hand's from the screen-right elbow, the screen-left hand's from the screen-left elbow) and runs to the wrist; one hand per arm, no extra hand.";
 function bodyLanguageEn(e: Pick<Performance, "emotion" | "gesture">, framing: Framing, text = e.gesture): string {
   if (!showsHands(framing)) return "";
   const where = framing === "bust" ? "near the face, hair or chest so the hands are inside the frame" : "readable across the whole upper body";
@@ -125,7 +164,14 @@ function bodyLanguageEn(e: Pick<Performance, "emotion" | "gesture">, framing: Fr
     : `Body language: choose a natural arm and hand gesture that expresses "${e.emotion || "the emotion"}", ${where}.`;
   return (
     `${gesture} Arms, hands and shoulders act the emotion together with the face — clearly different from a neutral arms-down pose. ` +
-    `Hands drawn clearly with natural anatomy (five fingers, no fused or extra fingers); accessories on the arms and wrists stay as in the design.`
+    // 칼리엘라 2026-11-24: "the screen-right hand" on the chest was drawn as the screen-left hand, the two arms mirrored
+    (text.trim() ? `${ARMS_AS_WRITTEN_EN} ` : "") +
+    `${ARM_PATH_EN} ` +
+    `Hands drawn clearly with natural anatomy (five fingers, no fused or extra fingers); accessories on the arms and wrists (bands, bracers, bracelets) stay as in the design.` +
+    // 에일레스 2026-11-22: the shield on the design's arm came into one expression image of three
+    (text.trim() ? ` ${PROPS_EN}` : "") +
+    // 스와르다 2026-11-23: an arm stretched out in a bust shot turned the picture into a waist-to-hip shot
+    (framing === "bust" ? ` ${BUST_REACH_EN}` : "")
   );
 }
 
@@ -175,6 +221,177 @@ function poseShort(e: Pick<Performance, "direction">): string {
   const d = e.direction;
   const head = [FACING_SHORT[d.facing], d.pitch === "up" ? "chin up" : d.pitch === "down" ? "chin down" : "", d.tilt === "none" ? "" : `tilted screen-${d.tilt}`];
   return `Pose: head ${head.filter(Boolean).join(", ")}; eyes ${GAZE_SHORT[d.gaze]}; body ${FACING_SHORT[d.body]}.`;
+}
+
+/**
+ * Sentences of the design text that set where the head turns or the eyes look ("두 눈 모두 렌즈를 계속 봅니다",
+ * "고개가 화면 왼쪽으로 조금 더 기울어집니다"). In an expression image the direction values set those:
+ * 아스퍄사 (2026-11-22) turned an expression to the front with the eyes to screen right, and the regenerated
+ * picture kept the text's lens look and left turn.
+ */
+const POSE_SENTENCE =
+  /렌즈|시선|바라보|바라봅|쳐다|응시|고개|카메라를\s*(?:보|향)|관객을\s*(?:보|향)|\blens\b|\bgaze|\beyeline|\blooks?\s+(?:at|to|toward|into|down|up|away)\b|\beyes?\s+(?:on|to|toward|stay|rest|drop|lift|slide)|\bhead\s+(?:turn|tilt|tip|sink|drop|lift|rais|bow|nod)/i;
+/** Words of the face itself (lids, brows, mouth, tears …): a sentence with these stays, even when it also names a gaze. */
+const FACE_WORDS =
+  /눈꺼풀|눈썹|눈꼬리|입꼬리|입술|입을|볼이|볼을|이마|미간|콧|좁아|가늘|반쯤|크게\s*뜨|눈물|주름|\blids?\b|\bbrows?\b|\bcheeks?\b|\blips?\b|\bmouth\b|\bforehead\b|\bnarrow|\btears?\b|\bcrease/i;
+export const withoutPose = (text: string) =>
+  clean(text)
+    .split(/(?<=[.!?。])\s+/)
+    .filter((x) => !POSE_SENTENCE.test(x) || FACE_WORDS.test(x))
+    .join(" ");
+
+/**
+ * What a head angle looks like from the camera, for the image models: the features that show from that
+ * angle, not only its name. 아스퍄사 (2026-11-22): with every reference image at three-quarter to
+ * screen-left, "full profile facing screen-right" in the middle of the prompt was ignored twice. Put first as
+ * the main change, with what shows from that angle and that the references are another angle, it turned
+ * the head with both GPT Image 2.5 and Nano Banana 2.1 (the continuity picture still attached).
+ */
+const VIEW_EN: Record<Facing, string> = {
+  front: "the head almost facing the viewer, turned only slightly to one side: both eyes fully visible, the nose near the middle of the face",
+  left_3q:
+    "the head turned three-quarter to screen-left: the nose points toward screen-left, the far eye (screen-left side) narrower and close to the nose line, the far cheek partly hidden",
+  right_3q:
+    "the head turned three-quarter to screen-right: the nose points toward screen-right, the far eye (screen-right side) narrower and close to the nose line, the far cheek partly hidden",
+  left_profile:
+    "the head in full profile facing screen-left: the nose, lips and chin seen as a silhouette pointing toward the left edge of the image, only the near eye visible, the far eye and far cheek hidden behind the nose line, the back of the head and the hair toward screen-right",
+  right_profile:
+    "the head in full profile facing screen-right: the nose, lips and chin seen as a silhouette pointing toward the right edge of the image, only the near eye visible, the far eye and far cheek hidden behind the nose line, the back of the head and the hair toward screen-left",
+};
+
+const MIRROR_EN =
+  "Turn the head, never mirror the picture: anything worn or marked on one side of the character (a side ornament, a hair parting, a single braid, a mark) stays on the character's own same side; when the head turns away from that side, it sits at the far edge of the head, partly hidden.";
+
+/** The head angle, first in an expression image prompt; `anchor` = the continuity picture, named when its angle differs. */
+/** A feature worn or marked on one side of the character, with that side (the character's own). */
+export type OneSided = { text: string; side: "left" | "right"; part: "head" | "arm" | "body" };
+
+/** Where a one-sided feature sits, from the word after its side ("own right wrist", "본인의 왼쪽 손목"). */
+function sidedPart(after: string): OneSided["part"] {
+  // the first body-part word decides ("own left upper arm only" is an arm; 칼리엘라 2026-11-24: "upper" before
+  // "arm" made an armband "on the screen-right side of the head")
+  const at = (re: RegExp) => {
+    const i = after.search(re);
+    return i < 0 ? Infinity : i;
+  };
+  const arm = at(/\b(?:wrists?|(?:upper\s+|fore)?arms?|hands?|fingers?|elbows?|sleeves?|gloves?)\b|손목|위팔|아래팔|팔뚝|팔|손|소매|장갑/i);
+  const body = at(/\b(?:shoulders?|hips?|legs?|thighs?|knees?|ankles?|foot|feet|waist|chest|side of the body)\b|어깨|허리|골반|다리|허벅지|무릎|발|가슴/i);
+  const head = at(/\b(?:temples?|ears?|cheeks?|eyes?|brows?|eyebrows?|hair|braids?|horns?|head|face|forehead|parting|bangs|fringe|lips?|nose|jaw|chin)\b|관자놀이|귀|볼|뺨|눈|눈썹|머리|땋|뿔|얼굴|이마|가르마|앞머리|입|코|턱/i);
+  const first = Math.min(arm, body, head);
+  return first === Infinity || first === head ? "head" : first === arm ? "arm" : "body";
+}
+
+/**
+ * The one-sided features: from the English feature list ("… on her own left temple", 2026-11-24), else from
+ * the Korean "유지할 특징" ("캐릭터 본인의 왼쪽 관자놀이"). At most three.
+ */
+export function oneSidedFeatures(look: string[] | null, locks: string): OneSided[] {
+  const out: OneSided[] = [];
+  for (const item of look ?? []) {
+    const m = item.match(/\bown\s+(left|right)\b(.*)/i);
+    if (m) out.push({ text: item.trim(), side: m[1].toLowerCase() as "left" | "right", part: sidedPart(m[2]) });
+  }
+  if (!out.length)
+    for (const item of locks.split(/\n+|\s+(?=\d+[.)]\s)/)) {
+      const m = item.match(/(?:본인|자신|캐릭터\s*기준)(?:의)?\s*(왼|오른)쪽(.*)/);
+      if (!m) continue;
+      const label = clean(item.replace(/^\s*(?:[-•·*]\s*)?(?:\d+[.)]\s*)?/, "")).split(/[:：]/)[0].trim();
+      const side = m[1] === "왼" ? "left" : "right";
+      if (label) out.push({ text: `${label} (on the character's own ${side} side)`, side, part: sidedPart(m[2]) });
+    }
+  return out.filter((x, i, a) => a.findIndex((y) => y.text === x.text) === i).slice(0, 3);
+}
+
+/**
+ * Where each one-sided feature shows in this picture, said in screen terms (아스퍄사 2026-11-24: "the
+ * character's own left" alone, three times, still came out mirrored — every reference showed the ornament
+ * near and in full, and the turned picture kept it near by flipping the whole image). In the front and 3/4
+ * views a feature on the character's own left is on the screen-right half of the head; only how much of it
+ * shows changes. In profile it is either on the visible side or hidden on the far side.
+ * A feature on an arm or on the body goes by the body's direction and is said as that (스와르다 v3 2026-11-24:
+ * bangles on her own right wrist were called "on the screen-left side of the head").
+ */
+function sideCheckEn(head: Facing, body: Facing, items: OneSided[]): string {
+  return items
+    .map(({ text, side, part }) => {
+      const screen = side === "left" ? "screen-right" : "screen-left";
+      const other = side === "left" ? "screen-left" : "screen-right";
+      if (part !== "head") {
+        const near = body.startsWith(side);
+        const what = part === "arm" ? "the arm" : "the side of the body";
+        const where = body.endsWith("profile")
+          ? near
+            ? `on ${what} nearer the viewer, in view`
+            : `on ${what} farther from the viewer, mostly hidden behind the body`
+          : `on ${what} at the ${screen} shoulder${body === "front" ? "" : near ? ", the one nearer the viewer" : ", the one farther from the viewer"}`;
+        return `SIDE CHECK: ${noEndDot(text)} — in this picture it is ${where}${part === "arm" ? ", and it stays on that arm wherever the hand goes" : ""}${
+          body.endsWith("profile") ? "" : `; on the ${other} one the picture would be a mirror image`
+        }.`;
+      }
+      const f = head;
+      const near = f.startsWith(side);
+      const where =
+        f === "front"
+          ? `on the ${screen} side of the head, in view`
+          : f.endsWith("profile")
+            ? near
+              ? "on the visible side of the head, facing the viewer, in clear view"
+              : "on the far side of the head, hidden from view"
+            : near
+              ? `on the ${screen} side of the head, on the near side, in clear view`
+              : `on the ${screen} side of the head, at its far edge, mostly hidden behind the head and hair (at most a small part shows)`;
+      return `SIDE CHECK: ${noEndDot(text)} — in this picture it is ${where}${
+        f.endsWith("profile") ? "" : `; with it on the ${other} side the picture would be a mirror image`
+      }.`;
+    })
+    .join(" ");
+}
+
+function headAngleEn(e: Pick<Performance, "direction">, anchor?: { facing: Facing; ref: number; no: number }, oneSided: OneSided[] = []): string {
+  const d = e.direction;
+  const profile = d.facing === "left_profile" || d.facing === "right_profile";
+  const gaze = profile && d.gaze === "camera" ? "the visible eye glancing back toward the viewer from the corner of the eye" : GAZE_EN[d.gaze];
+  // which side of the character faces the camera (아스퍄사 2026-11-24: turned to screen-right from 3/4-left
+  // references, the picture came out mirrored, the ornament of her own left temple on the near side)
+  const sideToward = d.facing.startsWith("right") ? "right" : d.facing.startsWith("left") ? "left" : "";
+  const away = sideToward === "right" ? "left" : "right";
+  const sides = sideToward
+    ? `From this angle we see more of the character's own ${sideToward} cheek and ear; the character's own ${away} side turns away, so whatever is worn on the ${away} side of the head sits at the far edge, mostly hidden. `
+    : "";
+  const other =
+    anchor && anchor.facing !== d.facing
+      ? `Image reference ${anchor.ref} (expression ${anchor.no}) shows the head ${FACING_EN[anchor.facing]}; this picture is a different camera angle on the character, so turn the whole head to the angle above. `
+      : "";
+  return (
+    `HEAD ANGLE (the main change in this picture): ${VIEW_EN[d.facing]}; ${PITCH_EN[d.pitch]}${TILT_EN[d.tilt] ? `, ${TILT_EN[d.tilt]}` : ""}; ${gaze}; shoulders/body ${FACING_EN[d.body]}.\n` +
+    (oneSided.length ? `${sideCheckEn(d.facing, d.body, oneSided)}\n` : "") +
+    `${sides}${other}Take only identity, hair, accessories, colors and drawing style from the reference images, never their head angle; this angle holds over any head or eye direction in the text.\n` +
+    // 아스파샤 (2026-11-22): turned to screen-right from a 3/4-left reference, the picture came out mirrored,
+    // the one-sided headband ornament on the wrong side of the head
+    MIRROR_EN
+  );
+}
+
+/**
+ * The expression for an image: the face texts and the notes. When the team set the direction by hand, the
+ * text's own head and gaze sentences may be from before the change, so those are left out (the direction
+ * values say it); an AI-designed direction was written together with its text.
+ */
+function expressionImageEn(e: Pick<Expression, "emotion" | "intensity" | "brows" | "eyes" | "mouth" | "notes" | "directionStatus">, face?: string): string {
+  const fit = (t: string) => (e.directionStatus === "manual" ? withoutPose(t) : clean(t));
+  const part = (label: string, t: string) => {
+    const kept = fit(t);
+    return kept && `${label}: ${sentence(noEndDot(kept))}`;
+  };
+  const kept = face === undefined ? "" : fit(face);
+  return clean(
+    (face === undefined
+      ? [`${INTENSITY_EN[e.intensity]} ${e.emotion}.`, part("Brows", e.brows), part("Eyes", e.eyes), part("Mouth", e.mouth), fit(e.notes)]
+      : [`${INTENSITY_EN[e.intensity]} ${e.emotion}.`, kept && sentence(kept)]
+    )
+      .filter(Boolean)
+      .join(" "),
+  );
 }
 
 export type ReferenceSlot = { role: string; assetId: string; why: string; characterId?: string };
@@ -361,6 +578,8 @@ export function buildExpressionHandoffs(data: ProjectData, fixes: Record<string,
   // 영어 정리: short English for the parts that still match the design (the Korean is used otherwise)
   const en = freshEnglish(data);
   const style = studioStyle(en.style ?? clean(data.style), data.dimension);
+  // features on one side of a character: where they show is said for each picture's angle (Facial Acting Studio 2026-11-24)
+  const oneSidedOf = new Map(data.cast.map((c) => [c.id, oneSidedFeatures(en.cast.get(c.id)?.look ?? null, [c.locks, c.appearance, c.outfit].join("\n"))]));
   return data.expressions.map((e, i) => {
     const eb = en.beats.get(e.id);
     const actor = beatActor(data, e);
@@ -381,9 +600,7 @@ export function buildExpressionHandoffs(data: ProjectData, fixes: Record<string,
         assetId: anchor!.imageAssetId!,
         why: `연결 기준: ${anchorNo}번 표정 그림 (같은 쇼트의 다른 순간)`,
       });
-    const expression = eb
-      ? `${INTENSITY_EN[e.intensity]} ${eb.emotion}. ${sentence(eb.face)} ${directionEn(e)}`
-      : expressionLine(e, i, "en").replace(/^Panel \d+: /, "");
+    const expression = eb ? expressionImageEn({ ...e, emotion: eb.emotion }, eb.face) : expressionImageEn(e);
     const refSheet =
       usesRef &&
       `Image reference ${refIndex} is a grid of ${s.refColumns}x${s.refRows} expression panels drawn in another style. Use ONLY panel ${e.panel} (counting left to right, top to bottom) as a guide for ${
@@ -392,23 +609,31 @@ export function buildExpressionHandoffs(data: ProjectData, fixes: Record<string,
     const styleLine = style && `Art style: ${style.replace(/[.。]+$/, "")}. Keep this ${dimensionEn(data)} animation style${multi ? " for every character" : ""}; never photorealistic.`;
 
     if (!multi) {
+      // a panel whose pose is followed sets the head itself: no second, conflicting angle
+      const posed = usesRef && s.transfer === "expression_and_pose";
       const prompt = [
+        // the head angle first (Facial Acting Studio 2026-11-22: in the middle it lost to the reference images' angle)
+        !posed &&
+          headAngleEn(e, usesAnchor ? { facing: anchor!.direction.facing, ref: references.length, no: anchorNo } : undefined, oneSidedOf.get(actor.id) ?? []),
         `Single character illustration of ONE character, portrait ${aspect}, ${FRAMING_IMAGE_EN[framing]}. Eye-level camera, plain white background. Not a sheet, not multiple panels, no other characters.`,
         ONE_SHOT_IMAGE_EN,
         `Composition: ${FRAMING_COMPOSITION_EN[framing]}.`,
+        FACE_ANGLE_EN,
+        faceAsymEn(e.direction.facing),
         HEADROOM_EN,
         portraitFrameEn(hands),
         usesAnchor &&
-          `Image reference ${references.length} is another moment of this SAME shot (expression ${anchorNo}): match its camera distance, framing, head size and position, body placement and stance, lighting and line quality exactly; change only the facial acting, head direction${
-            hands ? ", arms and hands" : ""
-          } as described below. Do not copy its expression${hands ? " or gesture" : ""}.`,
+          // its head angle and gaze are another moment's
+          `Image reference ${references.length} is another moment of this SAME shot (expression ${anchorNo}): match its camera distance, framing, head size and position, where the body sits in the frame, lighting and line quality exactly. Do not copy its head angle, gaze${
+            hands ? ", expression or gesture" : " or expression"
+          }: this moment's are set in this prompt.`,
+        // the acting comes before the identity and costume, so a long costume text never pushes the face to the end
+        refSheet,
+        `Expression: ${expression}`,
+        bodyLanguageEn(e, framing, eb ? eb.body : e.gesture),
         ...castIdentityEn(data, references, en),
         ...castLookEn(data, en, { appearance: true, outfit: true }),
         styleLine,
-        refSheet,
-        `Expression: ${expression}`,
-        FACE_ANGLE_EN,
-        bodyLanguageEn(e, framing, eb ? eb.body : e.gesture),
         s.instruction && `Additional direction: ${clean(s.instruction)}`,
         `Keep exactly the same shot size, head size and position, and white background as the other expression images of this character so they work as a matching set; only the face, head direction${
           hands ? ", arms and hands" : ""
@@ -447,8 +672,19 @@ export function buildExpressionHandoffs(data: ProjectData, fixes: Record<string,
       refSheet,
       `Acting in this moment — every character at once (the listeners keep their mouths closed unless their line says otherwise):`,
       ...lines,
+      // where each character's one-sided features show from their own angle in this frame
+      ...performancesOf(data, e).flatMap((p) => {
+        const items = (oneSidedOf.get(p.characterId) ?? []).slice(0, 2);
+        return items.length ? [`${castName(data, p.characterId)} — ${sideCheckEn(p.direction.facing, p.direction.body, items)}`] : [];
+      }),
+      `Each head is turned to its own angle above, whatever angle the reference images show. ${MIRROR_EN}`,
       FACE_ANGLE_EN.replace("the head is", "every head is").replace("so the face reads", "so each face reads"),
-      hands && `Arms, hands and shoulders act together with each face; hands drawn clearly with natural anatomy (five fingers, no fused or extra fingers).`,
+      FACE_ASYM_GROUP_EN,
+      hands &&
+        `Arms, hands and shoulders act together with each face; hands drawn clearly with natural anatomy (five fingers, no fused or extra fingers). ${ARMS_AS_WRITTEN_EN} ${ARM_PATH_EN}${
+          framing === "bust" ? ` ${BUST_REACH_EN}` : ""
+        }`,
+      `The image frame itself crops the figures at this shot size: the bodies run off the bottom edge of the image, with no white band under them and no cut-off edge inside the picture.`,
       s.instruction && `Additional direction: ${clean(s.instruction)}`,
       `Keep exactly the same camera, character positions and sizes, and white background as the other frames of this scene so they work as a matching set; only the faces, head directions${
         hands ? ", arms and hands" : ""

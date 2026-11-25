@@ -285,7 +285,8 @@ describe("composition rule (cast mode)", () => {
     d.expressions = d.expressions.map((e) => ({ ...e, direction: { ...e.direction, facing: "front" as const, body: "front" as const } }));
     const img = buildExpressionHandoffs(d)[0].prompt;
     expect(img).toContain(FACE_ANGLE_EN);
-    expect(img).toContain("Head toward the viewer, turned or tilted slightly off-axis");
+    // the direction comes first, as the head angle (a head set to the front is drawn slightly off the lens axis)
+    expect(img.startsWith("HEAD ANGLE (the main change in this picture): the head almost facing the viewer, turned only slightly to one side")).toBe(true);
     expect(img).toContain("body facing the viewer");
     expect(buildFrameHandoff(d, d.expressions[0].id, "bust").prompt).toContain(FACE_ANGLE_EN);
     const h = buildVideoHandoff(d, "references");
