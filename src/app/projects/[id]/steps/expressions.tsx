@@ -845,7 +845,7 @@ function StoryboardStep({ onNavigate }: { onNavigate: (s: StepIndex) => void }) 
         <GuidePanel />
         <SketchGenerator />
         {conti && <PendingProposal step={1} kinds={["check_sheet"]} />}
-        <ol className="grid xl:grid-cols-2 gap-4">
+        <ol className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           {d.expressions.map((e, i) => (
             <PanelCard key={e.id} e={e} index={i} />
           ))}
@@ -1131,7 +1131,7 @@ function CastExpressionStep({ onNavigate }: { onNavigate: (s: StepIndex) => void
           {unconfirmed > 0 && <span className="pill pill-warn">방향 확인 필요 {unconfirmed}개</span>}
         </div>
         <GuidePanel />
-        <div className="grid xl:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           {doc.data.expressions.map((e, i) => <ExpressionCard key={e.id} e={e} index={i} />)}
         </div>
       </section>

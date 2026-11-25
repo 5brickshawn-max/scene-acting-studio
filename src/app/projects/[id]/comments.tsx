@@ -89,7 +89,7 @@ export function Comments({ step }: { step: number }) {
         </ul>
       )}
       <form onSubmit={add} className="flex flex-wrap gap-2 items-start">
-        <select className="select w-auto" value={target} onChange={(e) => setTarget(e.target.value)} aria-label="의견 대상">
+        <select className="select w-auto max-w-full" value={target} onChange={(e) => setTarget(e.target.value)} aria-label="의견 대상">
           <option value="all">단계 전체</option>
           {step >= 1 &&
             doc.data.expressions.map((e, i) => (
