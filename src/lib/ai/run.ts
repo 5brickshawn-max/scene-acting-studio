@@ -21,7 +21,7 @@ import {
   type PromptCheckOutT,
 } from "./schemas";
 import { ACTION_ORDER_KO, HU_ITEMS_KO } from "@/lib/domain/principles";
-import { BASE_SYSTEM, STEP_CONTEXT, projectContext, sceneDesignNote, sceneDialogueNote } from "./prompts";
+import { ACTING_PRINCIPLES, BASE_SYSTEM, STEP_CONTEXT, projectContext, sceneDesignNote, sceneDialogueNote } from "./prompts";
 import { buildVideoHandoff } from "@/lib/domain/handoff";
 import { preRenderCheck } from "@/lib/domain/check";
 import { resolveFix } from "@/lib/domain/fixes";
@@ -175,8 +175,21 @@ async function callClaude<S extends z.ZodType>(
 /** The expressions are moments of ONE shot: consecutive ones must be reachable from each other. */
 const CONTINUITY_NOTE =
   `표정들은 컷 없이 이어지는 하나의 쇼트 속 순간들입니다(표정 1 → 2 → 3 … 순서로 이어짐). 서 있는 위치·하체 자세·카메라 거리는 모든 표정에서 같게 두고, ` +
-  `얼굴·몸 방향은 이웃한 표정끼리 한 단계씩만 바뀌도록(예: 정면 → 3/4, 3/4 → 옆) 설계하세요. 앞 표정의 손 위치에서 몇 박자 안에 옮겨 갈 수 있는 동작으로 이어 주고, ` +
+  `얼굴·몸 방향은 이웃한 표정끼리 한 단계씩만 바뀌도록(예: 정면 → 3/4, 3/4 → 옆) 설계하세요. ` +
+  // Facial Acting Studio 2026-11-24: no symmetric there-and-back of the head across the expressions
+  `방향을 두 값 사이에서 번갈아 두지 마세요(3/4 → 정면 → 3/4 → 정면, 기울임 오른쪽 → 왼쪽 → 오른쪽 같은 왕복): 한 번 옮긴 고개는 다음 표정에서 그 자리에 머물거나 같은 쪽으로 더 가고, 되돌아와야 하면 턱 높이나 기울임이 앞과 다른 자리로 갑니다. 앞 표정의 손 위치에서 몇 박자 안에 옮겨 갈 수 있는 동작으로 이어 주고, ` +
   `완전히 다른 전신 포즈로 갑자기 바뀌지 않게 하세요.`;
+
+/**
+ * The acting rules of Facial Acting Studio that hold in any mode (2026-11-25), for the storyboard design and
+ * its acting plan: two speeds of a change of face, a calm head with the body carrying the size, no there-and-back
+ * of eyes and head, the same hand carrying on. The face is not designed part by part in a storyboard.
+ */
+const STORY_ACTING_NOTE =
+  `인물의 표정이 바뀌는 순간은 두 속도 중 하나로 쓰세요: 아주 천천히(얼굴이 한 부분씩 눈 → 눈썹·눈꺼풀 → 입 순서로, 2초쯤) 또는 빠른 스냅(숨을 들이쉬고 깜빡인 뒤 몇 프레임 만에 바뀜, 고개 각도는 그대로). 중간 속도로 스르르 바뀌면 얼굴이 녹듯 바뀝니다(모핑). 깨달음·충격·분노·결심은 스냅, 차오르는 슬픔·그리움·풀어짐은 천천히. ` +
+  `고개와 머리카락은 차분하게 두고 연기의 크기는 어깨·상체·팔이 맡게 하세요(숨·깜빡임·시선만으로 컷을 채우지 않음). ` +
+  `시선과 고개가 갔다가 같은 자리로 되돌아오는 왕복(렌즈 → 옆 → 렌즈, 왼쪽 → 오른쪽 → 왼쪽)은 쓰지 말고, 한 번 옮긴 시선·고개는 그 자리에 머물거나 다른 곳으로 더 나아가게 하세요. ` +
+  `한 손이 하던 일은 다음 컷에서도 그 손이 이어 가고, 두 팔의 자세를 좌우로 맞바꾼 거울 자세는 쓰지 않습니다.`;
 
 /** The field guide's per-beat rule for the character-by-character design. */
 const PRINCIPLE_NOTE =
@@ -184,6 +197,10 @@ const PRINCIPLE_NOTE =
   `고른 원칙이 notes·gesture에 실제 움직임으로 드러나게 쓰세요(눈·고개·몸이 동시에 돌지 않게, 숨을 내쉬며 눈썹과 어깨가 풀림 같은 순서). '자연스럽게'처럼 모호한 말 대신 부위와 순서를 쓰세요.\n` +
   `구도(팀 규칙): 좌우가 거울처럼 같은 정면 얼굴과, 그 얼굴로 렌즈를 똑바로 보는 것은 쓰지 않습니다. facing을 front로 둘 때도 고개를 조금 돌리거나 기울여(tilt·pitch) 얼굴이 비대칭으로 읽히게 하고, 관객을 볼 때는 그 돌린 고개에서 보게 하세요.\n` +
   `진행 중인 행동(먹기·마시기·담배·소품 만지기)이 있으면 표정이 바뀌는 동안에도 이어 가게 notes·gesture에 쓰세요: 반응은 그 위에 겹쳐 일어나고(눈 → 눈썹 → 고개) 끝나면 다시 그 행동으로(예: '면을 씹던 채로 눈이 커짐').`;
+
+/** Facial Acting Studio 2026-11-24: without its side, a one-sided feature flips when the head turns the other way. */
+const ONE_SIDED_NOTE =
+  `- 한쪽에만 있는 장식·마크·가르마·땋은 머리·문신·팔 장신구는 어느 쪽에 있는지 locks에 꼭 적으세요: 캐릭터 본인 기준과 그림의 화면 기준을 함께(예: '캐릭터 본인의 왼쪽 관자놀이(그림의 화면 오른쪽)'). 정면·3/4 그림에서 캐릭터 본인의 왼쪽은 화면 오른쪽입니다. 반대쪽에도 있는지 모르면 그것만 questions에 남기고, 보이는 쪽은 locks에 적습니다(쪽이 빠지면 고개를 반대로 돌린 그림이 좌우로 뒤집혀 나옵니다).\n`;
 
 function gestureNote(data: ProjectData) {
   const f = data.expressionSetup.framing;
@@ -195,7 +212,7 @@ function gestureNote(data: ProjectData) {
     return `${head} 팔·손은 화면에 보이지 않으니 gesture는 빈 문자열로 두고, 얼굴 근육·시선·고개로 감정을 표현하세요.\n${PRINCIPLE_NOTE}`;
   const where =
     f === "bust"
-      ? `손은 가슴선 위 화면 안에 들어와야 보입니다. 얼굴·턱·입가·뺨·가슴·머리카락 근처의 동작이 좋습니다 (예: 손끝으로 입을 가림, 주먹을 턱 아래 쥠, 땋은 머리를 만지작거림, 손을 가슴에 얹음, 검지로 관객을 가리킴, 손바닥을 펴서 막는 시늉).`
+      ? `손은 가슴선 위 화면 안에 들어와야 보입니다. 얼굴·턱·입가·뺨·가슴·머리카락 근처의 동작이 좋습니다 (예: 손끝으로 입을 가림, 주먹을 턱 아래 쥠, 땋은 머리를 만지작거림, 손을 가슴에 얹음, 검지로 관객을 가리킴, 손바닥을 펴서 막는 시늉). 팔을 내미는 동작은 팔꿈치를 굽혀 손이 가슴 앞 화면 안에 머물게 하세요(팔을 쭉 뻗으면 그림이 허리까지 보이는 넓은 구도로 바뀝니다).`
       : `허리 위 상반신 전체로 읽히는 동작이 좋습니다 (예: 팔짱, 허리에 손, 어깨를 으쓱하며 두 손바닥을 펼침, 한 손으로 뒷머리를 긁음, 두 손을 앞에 모음, 자기 몸을 감싸 안음, 손가락으로 가리킴).`;
   return (
     `${head} gesture에는 이 표정의 감정이 몸으로도 읽히도록 팔·손·어깨 동작을 구체적으로 쓰세요 (어느 손이 어디에, 손 모양, 팔 위치, 어깨). ${where} ` +
@@ -254,6 +271,7 @@ async function buildRequest(job: JobRow, data: ProjectData) {
               (pictured.length
                 ? `- ${pictured.join(", ")}은(는) 위에 설정화(참고 그림)가 있습니다. 이 인물들의 locks·appearance·outfit은 반드시 그 그림에 보이는 그대로 쓰세요: 머리 색·길이·모양, 눈 색, 피부, 의상의 색·모양·장신구, 체형. 아래 '팀이 적어 둔 인물 메모'가 그림과 다르면(이전 AI 제안이 남아 있을 수 있음) 메모를 버리고 그림을 따르세요. 메모를 실제로 고친 경우에만 무엇을 고쳤는지 questions에 한 줄로 남기고, 메모가 비었거나 그림과 같아 고친 것이 없으면 그 내용은 questions에 쓰지 마세요. 시나리오가 요구하는 이 장면만의 소품·상태(예: 건네받는 숄, 모래 묻은 머리)는 그림의 의상 위에 덧붙이세요. 단, 팀의 확인 답변이 정한 의상·변장은 그 답을 따르세요.\n`
                 : "") +
+              ONE_SIDED_NOTE +
               `- 설정화가 없는 인물은 팀 메모를 따르고, 없는 부분은 시나리오의 시대·장소·분위기에 맞게 정하되 지어낸 핵심 결정은 questions에 '…로 정했습니다, 맞나요?'처럼 남기세요.\n` +
               `- style: ${data.baseAssetId || refs.length ? "참고 그림의 그림체를 따라" : `시나리오의 장르·분위기에 맞는 ${dimensionEn(data)} 애니메이션 그림체로`} 선·채색·명암·색감을 구체적으로.\n` +
               (data.dimension === "2d"
@@ -310,6 +328,8 @@ async function buildRequest(job: JobRow, data: ProjectData) {
               `- locks: 표정이 바뀌어도 절대 변하면 안 되는 식별 요소를 번호 목록으로\n` +
               `- appearance: 얼굴 비율, 눈·코·입, 피부, 머리\n- outfit: 화면에 보이는 의상·장신구만\n- style: 장면 전체의 선, 채색, 명암, 색감 (그림체는 '3D & 2.5D' 애니메이션으로 표기, 2D라고 쓰지 말 것)\n` +
               sheetNote +
+              ONE_SIDED_NOTE +
+              `- 그림의 구도·얼굴 방향·시선·크롭(예: 정면, 시선 정면, 흉상 크롭)은 locks·appearance·outfit 어디에도 쓰지 마세요. 표정마다 따로 정하며, 섞이면 표정 그림이 그 방향으로 끌려갑니다.\n` +
               `보이지 않거나 확신할 수 없는 것은 지어내지 말고 questions에 확인 질문으로 남기세요.\n\n현재 입력값:\n${ctx}${extra}`,
           },
         ] as Content,
@@ -340,6 +360,7 @@ async function buildRequest(job: JobRow, data: ProjectData) {
                 `- action: 그 순간 화면 전체에서 일어나는 일을 2~3문장(250자 안팎)으로. 주요 인물은 이름으로, 군중·배경 인물은 무리로(예: "뒤쪽 군중이 놀라 물러선다"). 컷마다 핵심 행동은 하나로 정하고, 그 행동을 '${ACTION_ORDER_KO}' 순서로 관찰할 수 있는 몸의 움직임으로 쓰세요(예: "목표를 본다 → 무릎을 굽힌다 → 바닥을 밀어 뛴다 → 발부터 닿는다 → 무릎으로 충격을 받고 멈춘다"). 시선·얼굴·몸의 방향은 따로 적고, 좌우에는 기준을 붙이세요(화면 기준 '화면 왼쪽', 몸 기준 '인물의 오른손'). '자연스럽게', '생동감 있게', '역동적으로' 같은 모호한 말 대신 어느 부위가 어떻게 움직이는지 쓰세요. 시간이 짧은 컷은 행동 수를 줄이세요. 무게감은 숫자('중력 2배')가 아니라 눈에 보이는 결과로 쓰세요: 쿵쿵 내딛는 발, 바닥에 박히는 발, 짧은 체공과 빠른 낙하, 착지 때 무릎·몸통이 눌리는 충격, 힘겹게 일어남, 빨리 떨어지는 머리카락·옷. 넘어짐·낙하는 아주 짧은 순간(0.5초 안팎)으로 쓰고 같은 컷의 나머지는 다른 동작으로 채우세요. 슬로모션처럼 늘어지는 묘사는 쓰지 마세요.\n` +
                 `- camera: 고정이거나 한 가지 분명한 이동(팬·틸트·트랙(이동 촬영)·줌·오빗 중 하나)만, 시작 구도와 끝 구도(샷 크기·높이·바라보는 방향)를 한 문장으로. 여러 이동을 섞지 마세요(예: '돌며 트랙인하고 틸트업' 금지). 인물 손끝의 호와 카메라 오빗을 한 문장에 섞지 마세요. 카메라가 잡는 인물(초점)을 밝히고, 다른 인물이 화면에 걸리면 어디에 어떻게 걸리는지도 쓰세요(예: '레이나 어깨 너머, 전경의 레이나는 흐리게, 가운데 미라에 초점'). 같은 쇼트 안에서는 앞 컷 카메라가 끝난 위치·구도에서 시작하세요.\n` +
                 `- ★ 감정이 주인공입니다(팀 시댄스 시험 SH04_3): 장면 전체를 감정 상태 3~5개의 흐름으로 설계하고, 상태가 바뀌는 컷에는 그 계기(무엇을 보거나 듣거나 손에 쥐는 순간)를 action에 쓰세요. 계기 없이 감정이 바뀌지 않게. 상태마다 눈썹·이마·눈·몸의 보이는 표시를 쓰고, 바뀔 때는 눈이 먼저 → 고개 → 몸 순서로. 감정의 정점은 '무빙 홀드'(자세는 멈추고 숨·어깨·눈물만 움직임)로 시간을 주고, 동작은 실제 속도로 무게 있게(슬로모션처럼 늘이지 않기). 멈춘 순간에도 손이 작은 연기(소품을 문지름 등)를 하게 하세요.\n` +
+                `- ${STORY_ACTING_NOTE}\n` +
                 `- 화면에 있는 주요 인물은 말하지 않아도 컷마다 각자 구체적인 반응 하나를 action에 적으세요(예: '제로는 잔을 홀짝이며 입꼬리만 올린다', '전경의 레이나는 고개를 살짝 돌려 듣는다') — 아무도 얼어 있지 않게.\n` +
                 `- 진행 중인 행동(먹기·마시기·담배·소품 만지기)은 반응하는 동안에도 이어 가게 쓰세요. 반응은 그 위에 겹쳐 일어나고(눈 → 눈썹 → 고개) 끝나면 다시 그 행동으로 돌아갑니다(예: '면을 씹던 채로 눈이 커지며 쓰러진 괴물을 보고, 씹기를 멈추지 않은 채 다시 먹는다').\n` +
                 `- 시선은 방향과 양을 정해(오래 가만히 봄 → 감음 → 먼 곳으로 천천히) 두리번거리지 않게.\n` +
@@ -393,6 +414,10 @@ async function buildRequest(job: JobRow, data: ProjectData) {
                   ? `참고 시트가 없으니 panel은 null로 두세요.\n`
                   : `참고 시트가 없으니 캐릭터 성격에 맞게 서로 구분되는 표정을 제안하고, panel은 null로 두세요.\n`) +
               `${gestureNote(data)}\n` +
+              // the acting principles of Facial Acting Studio (2026-11-25), for every cast member
+              `${ACTING_PRINCIPLES}\n이 원칙대로 brows·eyes·mouth는 좌우를 나눠(화면 기준) 주도하는 쪽부터 쓰고(방향이 정면인 표정은 좌우 차이를 아주 조금만), notes에는 반응 대상과 의도(상대에게 바라는 것), 주도 요소, 이 상태의 눈썹·이마의 모양과 시선의 방향·양을, gesture에는 얼굴과 같은 감정의 분명한 손·팔·어깨 동작과 그 동작이 말없이 전하는 뜻을 쓰세요(손의 작은 일은 무빙 홀드 표정에서만).` +
+              (multi ? ` reactions의 인물도 같은 원칙으로 쓰되 짧게: 누구(무엇)에 반응하는지, 주도 요소, 그리고 분명한 몸 동작 하나.` : "") +
+              `\n` +
               // the team's scene (상황 설정·기초 대사) decides the emotional arc and the order
               (data.expressionSetup.scene.trim() ? `\n${sceneDesignNote(data, ref.length > 0)}\n` : "") +
               `\n현재 입력값:\n${ctx}${extra}`,
@@ -493,8 +518,13 @@ async function buildRequest(job: JobRow, data: ProjectData) {
               `duration은 반드시 ${data.acting.duration}으로 두고, 구간은 0초에서 시작해 빈틈없이 이어져 ${data.acting.duration}초에서 끝나야 합니다. 모든 표정을 한 번씩 쓰세요. ` +
               `대사를 말할 시간이 충분하도록 하고(한국어 기준 1초에 약 4~5음절), transition에는 다음 표정으로 넘어가는 연기를 짧게 적으세요. 진행 중인 행동(먹기·마시기·담배·소품)이 있으면 넘어가는 동안에도 이어 가게 하세요. 넘어짐·낙하·충돌처럼 빠른 동작만 있는 구간은 짧게 주어(0.5초 안팎) 영상 모델이 슬로모션으로 늘이지 않게 하세요.` +
               (data.mode === "storyboard"
-                ? ` 스토리보드 방식이라 컷 순서는 2단계 순서(컷 1, 2, 3 …) 그대로 두고 시간만 나누세요 — 순서를 바꾸면 컷 사이 연결이 깨집니다. transition은 다음 컷으로 넘어가는 방식입니다: 원 씬 원 컷이라 끊기지 않으므로, 카메라와 몸이 어떻게 이어서 움직여 다음 컷의 구도·자세에 닿는지 쓰세요. 초 단위 시각은 쓰지 마세요. transition은 이 컷의 장면 묘사·연결 상태 '끝'의 자세에서 출발해 다음 컷 '시작'의 자세로 이어져야 합니다 — 설계(그리고 그것으로 그린 러프 콘티)에 없는 새 자세·손 모양·동작을 만들지 마세요. 컷 길이는 그 컷 action의 동작을 모두 보여 줄 수 있게 주세요(동작이 많은 컷을 너무 짧게 주지 않기). 동작은 실제 속도로 무게 있게 하고, 남는 시간은 감정의 정점의 무빙 홀드(자세는 멈추고 숨·어깨·눈물만 움직임)와 동작 사이 멈춤에 주세요 — 동작을 느리게 늘이지 마세요.`
-                : ` transition에서 고개가 돌아가는 동안에도 정면 대칭 얼굴로 렌즈를 똑바로 보는 순간을 만들지 마세요 — 고개를 조금 돌리거나 기울인 채로 넘어가게 하세요.`) +
+                ? ` 스토리보드 방식이라 컷 순서는 2단계 순서(컷 1, 2, 3 …) 그대로 두고 시간만 나누세요 — 순서를 바꾸면 컷 사이 연결이 깨집니다. transition은 다음 컷으로 넘어가는 방식입니다: 원 씬 원 컷이라 끊기지 않으므로, 카메라와 몸이 어떻게 이어서 움직여 다음 컷의 구도·자세에 닿는지 쓰세요. 초 단위 시각은 쓰지 마세요. transition은 이 컷의 장면 묘사·연결 상태 '끝'의 자세에서 출발해 다음 컷 '시작'의 자세로 이어져야 합니다 — 설계(그리고 그것으로 그린 러프 콘티)에 없는 새 자세·손 모양·동작을 만들지 마세요. 컷 길이는 그 컷 action의 동작을 모두 보여 줄 수 있게 주세요(동작이 많은 컷을 너무 짧게 주지 않기). 동작은 실제 속도로 무게 있게 하고, 남는 시간은 감정의 정점의 무빙 홀드(자세는 멈추고 숨·어깨·눈물만 움직임)와 동작 사이 멈춤에 주세요 — 동작을 느리게 늘이지 마세요. ${STORY_ACTING_NOTE}`
+                : ` transition에서 고개가 돌아가는 동안에도 정면 대칭 얼굴로 렌즈를 똑바로 보는 순간을 만들지 마세요 — 고개를 조금 돌리거나 기울인 채로 넘어가게 하세요. ` +
+                  // Facial Acting Studio 2026-11-24: a change at a medium speed melts the face; very slow or a snap
+                  `transition은 두 속도 중 하나로 씁니다: '아주 천천히'(2초쯤, 얼굴이 한 부분씩 눈 → 눈썹·눈꺼풀 → 입, 몸도 함께 흘러감) 또는 '스냅'(숨을 들이쉬고 깜빡이는 짧은 준비 뒤 얼굴이 몇 프레임 만에 바뀜. 고개 각도는 그대로 두고, 다음 표정의 방향이 다르면 곧장 작게 감. 뒤따르는 것은 장신구·머리카락 끝이 한 번 흔들리고 멈추는 정도). 중간 속도로 바뀌면 얼굴이 녹듯 바뀝니다(모핑). 깨달음·충격·분노·결심은 스냅, 차오르는 슬픔·그리움·풀어짐은 천천히처럼 상황에 맞춰 고르고, transition 첫머리에 '아주 천천히' 또는 '스냅'을 밝히세요. ` +
+                  `'아주 천천히'로 넘어가서 도착하는 구간(그 transition 바로 다음 구간)은 4초 이상 주세요: 전환에만 2초쯤 걸리고, 바뀐 표정이 읽히고 그 구간의 연기를 할 시간이 더 필요합니다. 그만큼 줄 시간이 없으면 그 전환을 '스냅'으로 정하세요. ` +
+                  `표정 사이의 연기는 부위별로 차례로 적고(눈썹이 풀림 → 숨을 내쉼 → 입꼬리가 올라감), 스냅의 준비는 숨과 깜빡임까지만 쓰고(고개를 반대쪽으로 숙이거나 지나쳤다 되돌아오는 동작은 쓰지 않음), 바뀐 표정은 한 호흡 머문 뒤 다음 동작으로 씁니다. ` +
+                  `transition은 계기(무엇 때문에 바뀌는지)와, 그 변화를 실어 나르는 몸의 동작을 눈 → 고개 → 몸 순서로 씁니다(예: "그녀가 발을 내딛자 숨을 들이켜며 눈이 먼저 화면 오른쪽으로, 이어 고개가, 마지막에 손이 가슴 앞으로"). 감정이 가장 높은 구간에는 무빙 홀드를 둘 시간을 조금 더 주세요.\n${ACTING_PRINCIPLES}\n`) +
               (data.expressionSetup.scene.trim() ? ` '상황 설정·기초 대사'의 흐름(순서와 템포, 숨을 고르는 순간)을 따르세요.` : "") +
               `\n\n${ctx}${extra}`,
           },
@@ -688,6 +718,7 @@ async function consultMessages(job: JobRow, data: ProjectData): Promise<Anthropi
     }))
     .filter((t) => t.message && t.reply);
   const current =
+    (data.mode !== "storyboard" && (job.step === 1 || job.step === 3) ? `${ACTING_PRINCIPLES}\n\n` : "") +
     `지금 단계: ${STEP_CONTEXT[job.step] ?? ""}\n현재 입력값:\n${projectContext(data, job.step)}\n\n` +
     `요청: ${job.input.message ?? ""}\n\n` +
     (earlier.length && images.length ? `(그림은 대화 맨 앞에 있으며, 지금 상태의 그림입니다.)\n` : "") +
