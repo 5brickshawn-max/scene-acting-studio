@@ -208,9 +208,21 @@ export function EnglishBar() {
                   </strong>{" "}
                   {b.face} {b.body} {b.transition && <span className="text-muted">→ {b.transition}</span>}
                   {b.delivery && <span className="text-muted"> · 말투: {b.delivery}</span>}
+                  {b.action && (
+                    <span className="block">
+                      <strong>{b.mood}</strong>
+                      {b.change && <span className="text-muted"> ({b.change === "slow" ? "아주 천천히" : "스냅"})</span>} {b.action}
+                      {b.facework && <span className="block text-muted">얼굴: {b.facework}</span>}
+                    </span>
+                  )}
                 </li>
               ))}
             </ol>
+            {en.acting?.scene && (
+              <p>
+                <strong>연기 흐름</strong> {en.acting.scene} <span className="text-muted">첫 프레임: {en.acting.frameZero} · 시선: {en.acting.eyeline}</span>
+              </p>
+            )}
           </div>
         </details>
       )}

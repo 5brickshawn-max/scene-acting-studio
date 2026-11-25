@@ -272,8 +272,33 @@ export const EnglishSheetSchema = z.object({
       state: z.string().default(""),
       /** group scenes: every other character's acting in this beat */
       others: z.array(z.object({ characterId: z.string(), emotion: z.string(), face: z.string(), body: z.string() })).default([]),
+      /*
+       * Character-by-character mode, the acting written as states (Facial Acting Studio's acting sheet, 2026-11-25).
+       * `mood` is the name of the emotional state (the facial app calls it `state`; here `state` is the storyboard's
+       * continuity state), `change` the speed of the change into this beat.
+       */
+      mood: z.string().default(""),
+      signs: z.string().default(""),
+      facework: z.string().default(""),
+      change: z.enum(["", "slow", "snap"]).default(""),
+      trigger: z.string().default(""),
+      action: z.string().default(""),
+      hold: z.string().default(""),
+      result: z.string().default(""),
     }),
   ),
+  /** character-by-character mode: the performance as a whole, written together with the beats' states */
+  acting: z
+    .object({
+      key: z.string(),
+      scene: z.string(),
+      eyeline: z.string(),
+      frameZero: z.string(),
+      weight: z.string(),
+      heavy: z.string(),
+      light: z.string(),
+    })
+    .default({ key: "", scene: "", eyeline: "", frameZero: "", weight: "", heavy: "", light: "" }),
 });
 export type EnglishSheet = z.infer<typeof EnglishSheetSchema>;
 

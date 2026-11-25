@@ -36,7 +36,35 @@ export function englishSources(d: ProjectData) {
       voice: effectiveText(d, "voice", c.id, c.voice).trim(),
     })),
     beats: d.expressions.map((e, i) => ({ expressionId: e.id, source: beatSources(d)[i] })),
+    acting: actingSource(d, beatSources(d)),
   };
+}
+
+/**
+ * Version of the acting instructions (character-by-character mode). act-v1 is Facial Acting Studio's acting sheet
+ * as of 2026-11-25 (its acting-v22): states and triggers, ordered actions, each beat's face work, one of two
+ * speeds for every change of expression, no there-and-back of eyes and head, the hand the design names, one
+ * sizable body action per beat with a calm head. A new version makes the acting written before it due once.
+ */
+const ACTING_VERSION = "act-v1";
+
+/**
+ * What the acting English (states, triggers, ordered actions, first frame, end pose, eyeline, scene) is made
+ * from: every beat's texts, plus what those keys leave out — the order on the timeline, every character's
+ * direction (the team may set one by hand) and each picture. Empty in storyboard mode, which has no such part.
+ */
+function actingSource(d: ProjectData, beats: string[]): string {
+  if (d.mode === "storyboard") return "";
+  const scene = d.expressionSetup.scene.trim();
+  if (!scene && !beats.length) return "";
+  return JSON.stringify([
+    ACTING_VERSION,
+    scene,
+    d.cast.map((c) => [c.id, c.locks.trim(), c.outfit.trim()]),
+    ...beats,
+    d.acting.segments.map((x) => x.expressionId),
+    d.expressions.map((x) => [x.direction, x.directionStatus, x.imageAssetId ?? "", x.reactions.map((r) => [r.characterId, r.direction])]),
+  ]);
 }
 
 function beatSources(d: ProjectData): string[] {
@@ -72,6 +100,7 @@ function beatSources(d: ProjectData): string[] {
 
 export type EnglishBeat = EnglishSheet["beats"][number];
 export type FreshCast = { look: string[] | null; outfit: string | null; voice: string | null };
+export type FreshActing = { scene: string; eyeline: string; frameZero: string; weight: string; heavy: string; light: string };
 export type FreshEnglish = {
   language: string | null;
   style: string | null;
@@ -83,6 +112,8 @@ export type FreshEnglish = {
   cast: Map<string, FreshCast>;
   /** fresh beats by expression id */
   beats: Map<string, EnglishBeat>;
+  /** the performance as a whole (character-by-character mode), null when missing or out of date */
+  acting: FreshActing | null;
 };
 
 const NO_CAST: FreshCast = { look: null, outfit: null, voice: null };
@@ -91,7 +122,7 @@ const NO_CAST: FreshCast = { look: null, outfit: null, voice: null };
 export function freshEnglish(d: ProjectData): FreshEnglish {
   const en = d.english;
   const blank = new Map(d.cast.map((c) => [c.id, NO_CAST]));
-  const none: FreshEnglish = { language: null, style: null, continuity: null, arc: null, cast: blank, beats: new Map() };
+  const none: FreshEnglish = { language: null, style: null, continuity: null, arc: null, cast: blank, beats: new Map(), acting: null };
   if (!en) return none;
   const src = englishSources(d);
   const ok = (key: string, source: string, text: string) => Boolean(source && text.trim() && key === textKey(source));
@@ -121,6 +152,11 @@ export function freshEnglish(d: ProjectData): FreshEnglish {
     arc: ok(en.arc.key, src.arc, en.arc.text) ? en.arc.text.trim() : null,
     cast,
     beats,
+    acting:
+      // (a sheet made before this part existed has none: a job result is applied as it arrives, unparsed)
+      src.acting && en.acting && en.acting.key === textKey(src.acting)
+        ? { scene: en.acting.scene, eyeline: en.acting.eyeline, frameZero: en.acting.frameZero, weight: en.acting.weight, heavy: en.acting.heavy, light: en.acting.light }
+        : null,
   };
 }
 
@@ -146,6 +182,7 @@ export function englishStale(d: ProjectData): string[] {
   if (!current(en?.style.key, src.style)) out.push("그림체");
   if (!current(en?.continuity.key, src.continuity)) out.push("연결 규칙");
   if (!current(en?.arc.key, src.arc)) out.push("감정 흐름");
+  if (!current(en?.acting?.key, src.acting)) out.push("연기 흐름");
   if (!current(en?.language.key, src.language)) out.push("대사 언어");
   src.beats.forEach((b, i) => {
     const eb = en?.beats.find((x) => x.expressionId === b.expressionId);
@@ -178,13 +215,30 @@ type EnglishOut = {
     delivery: string;
     state?: string;
     others?: { character: number; emotion: string; face: string; body: string }[];
+    mood?: string;
+    signs?: string;
+    facework?: string;
+    change?: "" | "slow" | "snap";
+    trigger?: string;
+    action?: string;
+    hold?: string;
+    result?: string;
   }[];
+  scene?: string;
+  eyeline?: string;
+  frameZero?: string;
+  weight?: string;
+  heavy?: string;
+  light?: string;
 };
 
 /** The AI's English, tied to the Korean it was made from (built on the server from the checked version). */
 export function buildEnglishSheet(d: ProjectData, out: EnglishOut): EnglishSheet {
   const src = englishSources(d);
   const piece = (text: string, source: string, max: number) => ({ text: fitText(text, max), key: textKey(source) });
+  const cast1 = d.mode !== "storyboard";
+  // the first beat of the video has nothing before it: no change into it
+  const firstId = d.acting.segments[0]?.expressionId;
   return {
     language: piece(out.language, src.language, 60),
     style: piece(out.style, src.style, 200),
@@ -223,8 +277,25 @@ export function buildEnglishSheet(d: ProjectData, out: EnglishOut): EnglishSheet
               ? [{ characterId: id, emotion: fitText(o.emotion, 60), face: fitText(o.face, 160), body: fitText(o.body, 120) }]
               : [];
           }),
+          mood: cast1 ? fitText(b.mood ?? "", 40).toUpperCase() : "",
+          signs: cast1 ? fitText(b.signs ?? "", 200) : "",
+          facework: cast1 ? fitText(b.facework ?? "", 260) : "",
+          change: cast1 && e.id !== firstId && (b.change === "slow" || b.change === "snap") ? b.change : "",
+          trigger: cast1 ? fitText(b.trigger ?? "", 140) : "",
+          action: cast1 ? fitText(b.action ?? "", 300) : "",
+          hold: cast1 ? fitText(b.hold ?? "", 180) : "",
+          result: cast1 ? fitText(b.result ?? "", 180) : "",
         },
       ];
     }),
+    acting: {
+      key: src.acting ? textKey(src.acting) : "",
+      scene: cast1 ? fitText(out.scene ?? "", 420) : "",
+      eyeline: cast1 ? fitText(out.eyeline ?? "", 300) : "",
+      frameZero: cast1 ? fitText(out.frameZero ?? "", 240) : "",
+      weight: cast1 ? fitText(out.weight ?? "", 200) : "",
+      heavy: cast1 ? fitText(out.heavy ?? "", 120) : "",
+      light: cast1 ? fitText(out.light ?? "", 120) : "",
+    },
   };
 }

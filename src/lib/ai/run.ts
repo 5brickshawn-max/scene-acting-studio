@@ -3,7 +3,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { z } from "zod";
 import sharp from "sharp";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { readProjectData, dimensionEn, usesConti, castLabel, effectiveText, maxCastFor, MAX_EXPRESSIONS, MAX_PANELS_STORYBOARD, FRAMING_CUT, FRAMING_LABEL, imageAspectFor, INTENSITY_LABEL, POSITION_LABEL, showsHands, type ProjectData } from "@/lib/domain/project";
+import { readProjectData, dimensionEn, usesConti, castLabel, effectiveText, maxCastFor, MAX_EXPRESSIONS, MAX_PANELS_STORYBOARD, FACING_LABEL, FRAMING_CUT, FRAMING_LABEL, GAZE_LABEL, imageAspectFor, INTENSITY_LABEL, PITCH_LABEL, POSITION_LABEL, showsHands, TILT_LABEL, timelineOrder, type ProjectData } from "@/lib/domain/project";
 import {
   ActingOut,
   CharacterOut,
@@ -219,6 +219,41 @@ function gestureNote(data: ProjectData) {
     `표정마다 서로 다른 동작으로 하고, 팔을 그냥 내린 밋밋한 자세는 피하세요. 얼굴·몸 방향(facing, body)과 맞추고 의상·장신구와 어울리게 하며, 손가락이 복잡하게 얽히는 동작은 피하세요.\n${PRINCIPLE_NOTE}`
   );
 }
+
+/**
+ * How the acting part of 영어 정리 is written in the character-by-character mode: Facial Acting Studio's
+ * instructions as of 2026-11-25, with its `state` called `mood` here.
+ */
+const ACTING_ENGLISH_NOTE =
+  `- 표정 사이는 사람의 관절을 따라 움직입니다: 고개는 목에서 돌고 어깨가 뒤따름, 팔은 어깨 → 팔꿈치 → 손목 차례로 한 길로 움직이고 손은 화면 안에 보인 채 이동. 손이 얼굴로 가거나 몸이 돌아서는 큰 변화는 0.5~1초쯤 걸립니다. 의상은 몸에 걸친 한 벌 그대로 따라옵니다. 관객을 가리키는 손은 팔 길이에서 몸과 같은 깊이에 둡니다.\n` +
+  `- change는 이 구간으로 넘어오는 변화의 속도이고 둘 중 하나뿐입니다: 'slow'(아주 천천히, 2초쯤 얼굴이 한 부분씩 눈 → 눈썹·눈꺼풀 → 입 순서로, 몸도 함께 흘러감) 또는 'snap'(숨을 들이쉬고 깜빡이는 짧은 준비 뒤 얼굴이 몇 프레임 만에 바뀜. 고개 각도는 그대로 두고, 다음 표정의 방향이 다르면 곧장 작게 감. 뒤따르는 것은 장신구·머리카락 끝이 한 번 흔들리고 멈추는 정도). 중간 속도로 스르르 바뀌면 얼굴이 녹듯 바뀌는 모핑이 생깁니다. 상황에 맞춰 고르세요: 깨달음·충격·분노·결심·말을 끊는 순간은 snap, 차오르는 슬픔·그리움·풀어짐·체념은 slow. 설계의 '다음 표정으로'에 속도가 적혀 있으면 따르세요. 영상의 첫 구간은 빈 문자열. action의 첫머리(넘어오는 동작)도 같은 속도로 쓰세요(slow: 'Slowly, over a long breath, …', snap: 'On a quick breath and a blink, her face …'). snap에는 고개를 반대쪽으로 숙이는 준비, 크게 휘두르는 고개, 지나쳤다 되돌아오는 동작, 날리는 머리카락을 쓰지 마세요(설계의 '다음 표정으로'에 적혀 있어도 작게 줄여 씁니다). 영상에서 고개가 크게 흔들리고 머리카락이 다시 그려집니다.\n` +
+  `- 표정 사이의 연결은 팀의 애니메이션 8원칙을 따릅니다. action 첫머리의 넘어오는 동작에: ① 예고(안티시페이션): 눈이나 숨이 먼저 바뀔 것을 알림. snap의 준비는 숨을 들이쉬고 깜빡이는 것까지(고개는 움직이지 않음) ② 포즈 투 포즈: 앞 표정과 새 표정 사이의 연기를 부위별로 차례로('her brows release, she exhales, then the mouth corners rise') ③ 슬로우 인·아웃: slow는 앞 표정에서 천천히 빠져나와 새 표정에 천천히 들어앉음 ④ 팔로우 스루: snap 뒤에는 장신구·머리카락 끝이 한 번 흔들리고 멈춤(몸이나 머리카락 덩어리가 지나쳤다 되돌아오지 않음) ⑤ 타이밍: 바뀐 표정이 한 호흡 머물러 읽힌 뒤 다음 동작.\n` +
+  `연기 쪽 항목(mood·signs·facework·change·trigger·action·hold·result와 scene·eyeline·frameZero·weight·heavy·light)은 감정을 주인공으로 씁니다(영상 연기 제작에서 효과가 확인된 방식).\n` +
+  `- 표정마다 감정 상태 하나: mood는 상태 이름(영어 대문자 1~3단어), signs는 그 상태의 눈썹·이마·눈·몸의 표시. 상태가 바뀔 때마다 계기(trigger)가 있어야 합니다(원인 → 반응). 상황 설정과 대사 뜻에서 찾으세요.\n` +
+  `- action은 그 구간의 연기를 순서대로 씁니다. 앞 상태에서 넘어오는 몸의 동작(숨, 깜빡임, 고개 돌림)으로 시작해 눈이 먼저, 그다음 고개, 그다음 몸. 감정이 바뀌는 순간의 동작은 분명하고 크게 씁니다(어깨가 들리고 상체가 기울고 팔이 움직임. 고개 각도와 머리카락은 차분하게 둡니다). 멈춤은 대사 사이나 감정 정점처럼 필요한 곳에만 두고, 손의 작은 일(엄지로 끈을 문지름 등)은 무빙 홀드나 긴 멈춤에서만 씁니다. 한 상태가 3초 이상 이어지는 구간은 그 안에서도 몸이 크게 한 번 움직이는 순간을 넣습니다(무너질 듯 흔들림, 고개가 떨어짐, 무게 중심이 옮겨감 등). 숨·깜빡임만으로 채우지 않습니다(감정 정점의 무빙 홀드는 예외). 첫 구간은 0초부터 이미 움직이는 중입니다. action은 220자 이내로, 핵심 동작만 씁니다(영상 프롬프트 길이 한도). 구간마다 action에 숨(대사 전 들이쉼, 말끝 내쉼, 숨에 오르내리는 어깨)과 깜빡임, 그리고 고개와 따로 움직이는 눈동자(고개는 그대로 두고 눈만 흘끗 봤다 돌아오기, 아래로 떨궜다 올리기)를 한 번 이상 넣습니다.\n` +
+  `- 이런 디테일을 action에 글자로 쓰세요(일반적인 동작 설명 대신): 눈이 먼저 닿은 뒤 따라오는 몸('her eyes reach Sharhwina first; once they land, her chin rises'), 고개와 어깨가 시선을 차례로 따라감('her head, then her shoulders, follow the look to screen right'), 흔들리는 시선('her gaze wavers'), 이름·힘준 말 직후 걸리는 숨('right after "Mīka'el" her breath catches once'), 말이 끝난 뒤의 작은 반응('only after the last vowel of "-ma" has fully sounded does her lower lip tremble once'). 구간마다 이 중 둘 이상.\n` +
+  `- facework는 이 구간의 얼굴 근육을 네 부분으로 따로 씁니다: 'brows: …; lids: …; eyes: …; cheeks: …'. 눈썹은 안쪽·꼬리·좌우 높이, 눈꺼풀은 위·아래와 좌우의 열림·힘, 눈동자는 어디를 보고 언제 옮기는지(고개와 따로), 볼은 올라감·굳음·떨림과 좌우. 언제 바뀌는지(on "원문 단어", after the line)와 크기(보이는 말)까지, 200자 이내. 얼굴 근육은 facework에만 쓰고 action에는 몸·고개·시선·숨의 순서를 씁니다(겹치지 않게). 예: 'brows: inner ends lift, screen-left higher; lids: lower lids tense, screen-right narrower; eyes: fixed low left, slide alone to the lens on "Ul"; cheeks: the near-jaw cheek firms, softens after the line'.\n` +
+  `- action의 첫머리에 이 구간의 의도(상대에게 바라는 것)를 짧은 영어 구로 밝힙니다(예: 'To halt the story, …', 'Cutting him down, …'). 손짓·고갯짓에는 말없이 전하는 뜻을 짧게 붙입니다(as if to halt them, a rewind roll of the hand, a pointed nod: 'right there'). 동작에는 인물의 태도를 나타내는 말(calmly, lazily, unbothered, eagerly, hesitantly)을 붙이되 전체 속도는 바꾸지 않습니다.\n` +
+  `- 대사가 있는 구간은 action의 핵심 동작(손짓, 시선 옮김, 고개 끄덕임, 눈 굴림, 눈썹)을 대사의 특정 단어에 묶으세요: on "단어" … 처럼, 대사 원문의 단어나 짧은 구를 글자 그대로 따옴표로(번역하지 않음). 한 구간에 1~3개, 대사 순서대로. 힘주어 말하는 단어가 있으면 그 단어에서 동작이 일어나게 하세요(예: on "wait, wait" both palms rise to halt; on "HER" her eyes and a nod go to screen left).\n` +
+  `- 하던 동작(잔을 든 채, 먹던 중, 담배 등)은 감정이 바뀌는 동안에도 이어집니다: 'all while still holding the cup'처럼 쓰세요.\n` +
+  `- 대사가 없는 구간에서 한숨·숨·짧은 웃음·콧소리처럼 말이 아닌 소리가 연기에 있으면 action에 그 소리를 쓰세요(말은 하지 않음).\n` +
+  `- 대사나 연기가 바람·비·폭발·소리처럼 화면에 없는 것을 말하거나 흉내 내면, 그것이 실제로 일어나지 않는 모습을 보이는 결과로 쓰세요(예: 'her hair hangs still; the wind is only in her voice').\n` +
+  `- delivery에는 소리 크기를 꼭 쓰세요(whisper, low, normal, raised 중 하나). 느낌표가 있어도 조용한 대사면 whisper·low로, 힘주는 단어가 있으면 stress on "원문 단어".\n` +
+  `- 구도: 얼굴은 좌우 대칭인 정면이 되지 않습니다. action·hold·result·frameZero·eyeline·transition·trigger에서 관객(렌즈)을 보는 순간도 살짝 돌린 고개에서 보는 것으로 쓰세요(from a slightly turned head). 기울였던 고개가 돌아오는 순간도 돌린 채로 쓰세요(her head comes back up, still turned slightly to one side). 고개를 정면으로 바로 세우거나 렌즈 쪽으로 똑바로 돌리는 말(her head straightens, straightens her head, faces the viewer, squares up to the lens, stares straight into the lens)은 쓰지 마세요. 영상이 좌우 대칭 정면 자세로 바뀝니다.\n` +
+  `- 왕관·보석·장신구가 빛나는 말(glint, gleam, glimmer, glow, shine, shimmer, sparkle, twinkle, catch the light)은 쓰지 마세요. 영상 모델이 빛 효과로 그립니다. 장신구는 흔들림·부딪힘·자리 잡음(swing, sway, tap, settle)으로만 씁니다.\n` +
+  `- 양쪽 눈·눈썹은 거울처럼 같지 않습니다. face·signs·action에 좌우 차이를 화면 기준으로 쓰세요(예: the screen-left brow lifts while the screen-right brow presses down, the screen-right lids narrow). 한쪽이 앞서고 다른 쪽이 따라옵니다. 차이의 크기는 그 표정의 방향을 따릅니다: 방향이 '정면'이면 아주 조금만(the screen-left brow a touch higher), 3/4·옆 각도이거나 한쪽 감정(비웃음·경멸·의심)일 때만 분명하게. 정면에서 좌우가 크게 다르면 어색합니다. 눈은 눈꺼풀 모양으로 크게 뜨거나 좁히고, 두 눈은 같은 곳을 봅니다.\n` +
+  `- 입도 거울처럼 같지 않게, 그러나 어색하지 않게: 눈썹·눈이 앞서는 쪽의 입꼬리와 볼만 조금(예: the screen-left mouth corner and cheek tighten). 대사 입 모양과 턱은 가운데 그대로. 비웃음·경멸·능청·의심 같은 한쪽 감정은 분명하게, 기쁨·놀람·두려움·크게 웃음은 아주 조금만. 얼굴의 긴장은 목·어깨까지 이어집니다(body·action에, 예: the screen-left shoulder rises a little).\n` +
+  `- 고개는 차분히, 몸은 크게: snap을 작게 쓰고 왕복을 빼더라도 구간을 숨·깜빡임·시선만으로 채우지 마세요. 구간마다 어깨·상체 기울임·팔의 크고 분명한 몸 동작을 하나 쓰세요(예: 'her shoulders drop and her torso leans in', 'she draws her shoulders back and her chest opens'). 고개 각도와 머리카락만 차분하게 둡니다.\n` +
+  `- 어느 손인지는 설계의 '팔·손' 글이 정합니다. body·frameZero·action·hold·result의 손(screen-left hand / screen-right hand)은 설계에 적힌 화면 기준의 손 그대로 쓰세요. 표정 그림이 설계와 다른 손으로 그려져 있어도 설계의 손을 씁니다(그 그림은 다시 그립니다). 이웃한 구간에서 두 팔의 역할을 맞바꾸는 동작('her right hand sinks as the other rises to her heart')은 설계에 손을 바꾼다고 적혀 있을 때만 쓰고, 그 밖에는 같은 손이 이어서 움직입니다.\n` +
+  `- 시선과 고개의 왕복을 쓰지 마세요: 'her eyes dip, rise', 'a glance away and back', 'she leans right and back', 'her head turns and returns'처럼 갔다가 같은 자리로 돌아오는 동작, 좌우로 번갈아 가는 동작, 구간마다 같은 눈 동작이 되풀이되는 것(action·facework·hold·eyeline 모두). 눈·고개가 옮겨 가면 그 자리에 머물거나 다른 곳으로 가고, 돌아와야 하면 다른 높이·기울임에 다른 박자로 닿게 쓰세요(예: 'her eyes drop to her hand and stay; on "me" they lift, slower, to just beside the lens'). 설계 글에 그런 왕복이 여러 번 적혀 있어도 영상 전체에서 한 번만 살리고 나머지는 머무는 시선·고개로 줄여 쓰세요.\n` +
+  `- hold는 감정이 가장 높은 구간 하나에만: 포즈는 멈추고 숨·어깨·눈만 움직이는 무빙 홀드. result는 마지막 구간에만: 끝 자세와 시선.\n` +
+  `- 눈은 자연스러운 크기로 둡니다. 놀람도 조금만 커집니다. 동작이 크면 크다고, 작으면 작다고 분명히 쓰세요.\n` +
+  `- eyeline은 시선의 길과 양(오래 머무는 곳, 옮기는 순간, 고개와 따로 눈만 옮기는 순간)을 화면 기준(screen left/right)으로 한 문장에. 각 표정의 '시선' 값을 따르세요.\n` +
+  `- 방향에 '팀이 직접 정함'이 붙은 표정은 그 방향(얼굴·고개 위아래·기울임·시선)이 설계 글의 고개·시선 문장보다 우선입니다. 설계 글과 다르면 action·hold·result·frameZero·eyeline을 방향 값대로 쓰세요(그 표정 그림도 이 방향으로 그려졌습니다).\n` +
+  `- scene은 상황 설정을 2~3문장으로: 무슨 일인지, 이 숏에서 생겨나는 감정(무게감·속도는 앱이 정하니 쓰지 마세요). frameZero는 첫 프레임의 자세와 손 위치.\n` +
+  `- weight는 몸의 무게를 동사로(어깨가 처진다, 손이 무겁게 내려앉는다). heavy·light는 몸 다음에 따라오는 이 캐릭터의 무거운 것(머리카락 덩어리, 땋은 머리, 망토)과 가벼운 것(귀걸이, 잔머리, 끈).\n` +
+  `- "never", "no" 같은 금지 표현 대신 보이는 결과를 긍정문으로 쓰세요. 배율·초 같은 숫자는 쓰지 마세요. 금지 문장이 많을수록 연기가 작아집니다.\n` +
+  `- 속도는 실제 그대로입니다. 설계에 없는 빠르기(quick, fast, rapid 등)를 더하지 마세요. 설계가 빠른 동작이라고 한 곳만 그대로 옮기세요(무게감은 앱이 제약사항에서 따로 정합니다).\n`;
 
 function refGridNote(data: ProjectData) {
   const s = data.expressionSetup;
@@ -603,8 +638,14 @@ async function buildRequest(job: JobRow, data: ProjectData) {
       const fx = (t: "notes" | "gesture" | "transition" | "delivery" | "voice", id: string | null, s: string) => effectiveText(data, t, id, s);
       const framing = data.expressionSetup.framing;
       const storyboard = data.mode === "storyboard";
-      const beats = data.expressions
-        .map((e, i) => {
+      // character-by-character: in the order of the video (the timeline), each with its expression number and time
+      const dirKo = (x: { direction: (typeof data.expressions)[number]["direction"]; directionStatus?: string }) =>
+        `얼굴 ${FACING_LABEL[x.direction.facing]}, ${PITCH_LABEL[x.direction.pitch]}, ${TILT_LABEL[x.direction.tilt]}, 시선 ${GAZE_LABEL[x.direction.gaze]}, 몸 ${FACING_LABEL[x.direction.body]}${
+          x.directionStatus === "manual" ? " (팀이 직접 정함: 설계 글의 고개·시선 문장보다 우선)" : ""
+        }`;
+      const beats = (storyboard ? data.expressions : timelineOrder(data))
+        .map((e) => {
+          const i = data.expressions.findIndex((x) => x.id === e.id);
           const seg = data.acting.segments.find((s) => s.expressionId === e.id);
           const line = data.dialogue.lines.find((l) => l.expressionId === e.id);
           if (storyboard)
@@ -619,12 +660,13 @@ async function buildRequest(job: JobRow, data: ProjectData) {
                 : "  대사: 없음",
             ].join("\n");
           return [
-            `표정 ${i + 1}: ${multi ? `${castLabel(data, e.characterId)} · ` : ""}${e.emotion || "(감정 미정)"} · 강도 ${INTENSITY_LABEL[e.intensity]}`,
+            `표정 ${i + 1}${seg ? ` (영상 ${seg.start}~${seg.end}초)` : ""}: ${multi ? `${castLabel(data, e.characterId)} · ` : ""}${e.emotion || "(감정 미정)"} · 강도 ${INTENSITY_LABEL[e.intensity]}`,
             `  눈썹: ${e.brows}`,
             `  눈: ${e.eyes}`,
             `  입: ${e.mouth}`,
             `  메모: ${fx("notes", e.id, e.notes)}`,
             showsHands(framing) ? `  팔·손: ${fx("gesture", e.id, e.gesture)}` : "  팔·손: (손이 화면에 안 보이는 구도)",
+            `  방향: ${dirKo(e)}`,
             ...(multi
               ? e.reactions.map(
                   (r) =>
@@ -662,16 +704,23 @@ async function buildRequest(job: JobRow, data: ProjectData) {
                 : `- style: 장면 그림체를 영어 한 문장 ('3D & 2.5D animation'으로 표기, 2D라고 쓰지 말 것)\n`) +
               `- cast: 인물마다 하나씩(character = 인물 번호). look은 '유지할 특징'과 '외형'에서 그림에 보이는 식별 요소를 색·모양·위치까지 구체적인 영어 명사구로, 중요한 순서로 최대 8개${
                 multi ? " (다른 인물과 구별되는 요소를 앞에)" : ""
-              }. outfit, voice는 각각 영어 한 문장\n` +
+              }. 한쪽에만 있는 장식·마크·가르마·땋은 머리·문신·팔 장신구는 캐릭터 본인 기준의 쪽을 꼭 넣으세요(예: 'temple ornament on her own left temple'). 화면 기준(screen-left)으로는 쓰지 마세요: 고개가 돌면 화면의 쪽이 바뀝니다. outfit, voice는 각각 영어 한 문장\n` +
               (storyboard
                 ? `- beats: 컷마다 하나씩(panel = 컷 번호). 이 장면은 스토리보드 방식이라 필드를 이렇게 씁니다: emotion = 컷 제목(영어 2~6단어), face = 장면 묘사(누가 무엇을 하는지, 군중 포함, 대사하는 인물의 동작까지 끝까지, 영어 1~2문장, 350자 이내), body = 카메라(시작 구도와 움직임까지, 영어 한 문장, 220자 이내), delivery = 대사 말투(크기·강세 단어·단어에 맞춘 동작이나 시선을 살려 on \"word\" — action 형태로), others = 빈 배열, state = 연결 상태(화면 위치·보는 방향·이동·의상/소품 상태·빛을 빠짐없이). continuity에는 장면의 연결 규칙을 영어로\n`
                 : `- beats: 표정마다 하나씩(panel = 표정 번호). face는 중심 인물의 얼굴 연기, body는 팔·손·몸 연기, delivery는 대사 말투(크기·강세 단어·단어에 맞춘 동작이나 시선을 살려 on \"word\" — action 형태로)${
                     multi ? ". others에는 '같은 순간' 나머지 인물마다 하나씩(character = 인물 번호) emotion·face·body" : ""
+                  }. 아래 표정은 영상에 나오는 순서대로 적혀 있습니다(panel은 영상 순서가 아니라 '표정 N'의 N). mood·signs·facework·change·trigger·action·hold·result는 중심 인물의 연기 흐름이고, 맨 아래 '연기 흐름' 규칙대로 씁니다${
+                    multi ? "(나머지 인물은 others에 짧게: 누구에게 반응하는지와 분명한 몸 동작 하나)" : ""
                   }\n`) +
               `- arc: 장면 전체의 감정 흐름(EMOTIONAL ARC) — 영상 프롬프트의 주인공입니다. ${storyboard ? "컷들" : "표정들"}을 따라 중심 인물의 감정 상태 3~5개를 순서대로 대문자 이름으로 쓰고(예: SPENT, STRUCK, GRIEF, WILL), 상태마다 괄호 안에 눈썹·이마·눈·몸의 보이는 표시를, 상태 사이에는 그 감정을 바꾸는 계기(무엇을 보거나 듣거나 손에 쥐는 순간)를 '→ 계기 →'로 넣으세요. 계기 없이 바뀌는 상태는 쓰지 마세요. 설계에 있는 감정과 사건만 쓰고, 미소가 설계에 없으면 미소 표시는 넣지 마세요\n` +
               `- transition은 얼굴이 녹듯 바뀌는 모핑을 막는 핵심입니다. 다음 표정으로 넘어가는 변화를 실어 나르는 몸의 동작 하나로 쓰세요(눈을 깜빡이는 사이, 숨을 들이쉬며, 고개를 돌리며, 손이 얼굴 앞을 지나가며 등). 설계의 '다음 표정으로'가 있으면 그 동작을 살리세요. 마지막 표정은 빈 문자열\n` +
-              `- 초 단위 시간, 발음 설명, 얼굴·몸·시선 방향(정면·3/4·화면 왼쪽 등)은 쓰지 마세요. 방향은 앱이 확인된 값으로 따로 넣습니다. 대사 원문은 옮기지 마세요.\n\n` +
+              (storyboard
+                ? `- 초 단위 시간, 발음 설명, 얼굴·몸·시선 방향(정면·3/4·화면 왼쪽 등)은 쓰지 마세요. 방향은 앱이 확인된 값으로 따로 넣습니다. 대사 원문은 옮기지 마세요.\n` +
+                  `- 스토리보드 방식이라 mood·signs·facework·change·trigger·action·hold·result와 scene·eyeline·frameZero·weight·heavy·light는 모두 빈 문자열로 두세요.\n\n`
+                : `- 초 단위 시간, 발음 설명은 쓰지 마세요. emotion·face·body·transition에는 얼굴·몸 방향(정면·3/4)을 쓰지 말고(앱이 확인된 값으로 따로 넣습니다), 시선의 길은 eyeline과 action에 화면 기준으로 쓰세요. 대사 전체는 옮기지 마세요(영상 프롬프트에 따로 들어갑니다).\n\n` +
+                  `연기 흐름 (인물별 연기 방식)\n${ACTING_ENGLISH_NOTE}\n`) +
               `출연진\n${cast}\n\n${storyboard && data.extras.trim() ? `군중·배경 인물: ${data.extras}\n\n` : ""}${storyboard && data.expressionSetup.continuity.trim() ? `연결 규칙: ${data.expressionSetup.continuity}\n\n` : ""}그림체(장면 공통): ${data.style}\n\n` +
+              (storyboard ? "" : `상황 설정:\n${data.expressionSetup.scene.trim() || "(없음)"}\n\n`) +
               `대사 언어: ${data.dialogue.language}\n표정 그림 구도: ${FRAMING_LABEL[framing]} (${FRAMING_CUT[framing]})\n\n${beats}`,
           },
         ] as Content,

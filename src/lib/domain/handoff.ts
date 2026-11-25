@@ -997,11 +997,66 @@ const BUDGETS: Budget[] = [
   { face: 0, gesture: 60, note: 0, transition: 70, delivery: 50, style: 80, voice: 80, features: 4, enPose: false, enBody: true, principles: 1 },
   { face: 0, gesture: 0, note: 0, transition: 60, delivery: 40, style: 50, voice: 50, features: 3, enPose: false, enBody: false, principles: 0 },
 ];
+/**
+ * The same ladder for the acting written as states: the listed features go first (the pictures show them), then
+ * the weight sentence and the listeners' poses, the eyeline last. THE SCENE, the arc and the beats always stay.
+ */
+type ActBudget = Budget & { enWeight: boolean; enEyeline: boolean; enSummary: boolean };
+const ACT_BUDGETS: ActBudget[] = [
+  { ...BUDGETS[0], enWeight: true, enEyeline: true, enSummary: true },
+  { ...BUDGETS[1], enWeight: true, enEyeline: true, enSummary: false },
+  { ...BUDGETS[2], features: 4, enWeight: true, enEyeline: true, enSummary: false },
+  { ...BUDGETS[3], features: 3, enWeight: false, enEyeline: true, enSummary: false },
+  { ...BUDGETS[3], features: 2, enWeight: false, enEyeline: false, enSummary: false },
+];
 /** Room the studio block takes beyond its earlier ~700 characters (added to the length target). */
 const constraintsExtra = (constraints: string) => Math.max(0, constraints.length - 700) + 150;
 
 /** Video models follow prompts up to roughly this length well (constraints included); longer ones get diluted. */
 export const VIDEO_PROMPT_TARGET = 3500;
+/**
+ * With the acting written as states (영어 정리's acting part, from Facial Acting Studio 2026-11-25): the director's
+ * notes, a state and an ordered action per beat. The facial app's target for the same prompt is 7,100 with its
+ * 500-character constraints; the studio block here is counted apart (constraintsExtra).
+ */
+export const VIDEO_PROMPT_TARGET_ACTING = 6600;
+/** Added to that target for each beat past three, each beat's face line, each beat that names the speed of its change, each beat without a picture. */
+export const EXTRA_PER_BEAT = 350;
+export const FACE_LINE_ROOM = 180;
+export const CHANGE_ROOM = 230;
+export const NO_PICTURE_ROOM = 420;
+/** Added once for a scene of several characters written as states: who speaks, and everyone staying live. */
+export const GROUP_NOTES_ROOM = 500;
+/**
+ * The two speeds of a change of expression (Facial Acting Studio 2026-11-24: a change at a medium speed keeps
+ * morphing the face; either very slow, or a snap led by a breath and a blink with the head keeping its angle).
+ * Each speed is described once, in the continuity note; a beat carries only a short mark.
+ */
+export const CHANGE_DEF_EN = {
+  slow: "SLOW CHANGE: about two seconds, eyes first, then brows and lids, then mouth, stepping through in-between poses into the next expression.",
+  snap: "SNAP CHANGE: a breath in and a blink, then the face changes in a few frames, the head keeping its angle or going straight to a new one in one small move, as the beat says, while the shoulders, torso and arms act the change at full size; accessories and hair ends sway once and rest.",
+} as const;
+export const CHANGE_EN = {
+  slow: "SLOW CHANGE.",
+  snap: "SNAP CHANGE, the head keeping its angle.",
+  snapTurn: "SNAP CHANGE, the head straight to its new angle.",
+} as const;
+/** Said in the director's notes, whatever the constraints block holds (Facial Acting Studio 2026-11-23/24). */
+export const BREATH_BLINK_EN =
+  "BREATH, BLINKS AND EYES, the whole time: chest and shoulders rise and fall with each breath, a breath in before each line; natural blinks every few seconds; the eyes often move on their own while the head stays still, and the gaze wavers when the feeling does. Eyes and head move unevenly, like a person: each look or turn lands somewhere new, in its own time; one that comes back settles at a different height or tilt than where it left.";
+/** After the features to keep, when one of them is one-sided. */
+const SAME_SIDE_EN = "A feature on one side stays on the character's own same side at every head angle.";
+const FACE_ASYM_VIDEO_EN =
+  "one side of the face leading slightly (one brow higher, one eye narrower; clearer only in a turned head or a one-sided feeling like a sneer; speech shapes and jaw centered)";
+/** A beat that looks into the lens names its head angle next to its expression target (one character). */
+const LENS_HEAD: Record<Exclude<Facing, "front">, string> = {
+  left_profile: "head in profile to screen-left",
+  left_3q: "head three-quarter to screen-left",
+  right_3q: "head three-quarter to screen-right",
+  right_profile: "head in profile to screen-right",
+};
+const lensHead = (d: Performance["direction"]) => (d.gaze === "camera" && d.facing !== "front" ? ` (${LENS_HEAD[d.facing]}, eyes on the lens)` : "");
+const upperFirst = (t: string) => (t ? t[0].toUpperCase() + t.slice(1) : t);
 /** With 영어 정리 the beats carry real acting in short English, worth a little more room. */
 export const VIDEO_PROMPT_TARGET_EN = 5000;
 /** Extra room for each character after the first (cast line, voice, their acting in every beat). */
@@ -1194,11 +1249,40 @@ export function buildVideoHandoff(
             body: hands ? reconcile(b.body, "motion", `${i + 1}번 표정 팔·손 동작 (영어)`, adjustments) : "",
             transition: reconcile(b.transition, "motion", `${i + 1}번 표정 다음 표정으로 (영어)`, adjustments),
             delivery: reconcile(b.delivery, "voice", `${i + 1}번 표정 대사 말투 (영어)`, adjustments),
+            mood: b.mood ?? "",
+            signs: reconcile(b.signs ?? "", "face", `${i + 1}번 표정 상태의 표시 (영어)`, adjustments),
+            facework: reconcile(b.facework ?? "", "face", `${i + 1}번 구간 얼굴 근육 (영어)`, adjustments),
+            change: b.change ?? "",
+            trigger: reconcile(b.trigger ?? "", "motion", `${i + 1}번 표정 다음 상태로 가는 계기 (영어)`, adjustments),
+            action: reconcile(b.action ?? "", "motion", `${i + 1}번 구간 연기 (영어)`, adjustments),
+            hold: reconcile(b.hold ?? "", "motion", `${i + 1}번 구간 무빙 홀드 (영어)`, adjustments),
+            result: reconcile(b.result ?? "", "motion", `${i + 1}번 구간 끝 자세 (영어)`, adjustments),
           },
         ] as const,
       ];
     }),
   );
+  // The performance as a whole (scene, eyeline, first frame, weight), when it matches the design.
+  const acting = en.acting
+    ? {
+        scene: reconcile(en.acting.scene, "motion", "장면 (영어)", adjustments),
+        eyeline: reconcile(en.acting.eyeline, "face", "시선 (영어)", adjustments),
+        frameZero: reconcile(en.acting.frameZero, "motion", "첫 프레임 (영어)", adjustments),
+        weight: reconcile(en.acting.weight, "motion", "몸의 무게 (영어)", adjustments),
+        heavy: reconcile(en.acting.heavy, "motion", "무거운 것 (영어)", adjustments),
+        light: reconcile(en.acting.light, "motion", "가벼운 것 (영어)", adjustments),
+      }
+    : null;
+  // Acting written as states (Facial Acting Studio's acting sheet): every beat has its state and its ordered
+  // action, written together with the current whole-performance part (so never from an older instruction).
+  const asStates =
+    Boolean(acting) &&
+    data.acting.segments.length > 0 &&
+    data.acting.segments.every((x) => Boolean(enBeats.get(x.expressionId)?.action && enBeats.get(x.expressionId)?.mood));
+  // beats that name the speed of their change (slow / snap); the first beat of the video has none
+  const changeOf = (k: number) => (asStates && k > 0 ? enBeats.get(data.acting.segments[k].expressionId)?.change || "" : "");
+  const changes = data.acting.segments.filter((_, k) => changeOf(k)).length;
+  const usesSpeed = (v: "slow" | "snap") => data.acting.segments.some((_, k) => changeOf(k) === v);
   const fixedExpr = new Map(
     data.expressions
       .map((e, i) => [e, i] as const)
@@ -1295,6 +1379,42 @@ export function buildVideoHandoff(
     realBackground && `그림체: 인물은 ${dimensionEn(data)} 애니메이션 그대로, 배경만 추가 연출의 실사 스타일을 따름 (앱의 ‘never photorealistic’은 인물에만 적용)`,
   ].filter((x): x is string => Boolean(x));
 
+  /** The direction of a character in the beat `k` of the timeline (the lead's, or their reaction's). */
+  const directionAt = (k: number, characterId: string) => {
+    const e = byId.get(data.acting.segments[k]?.expressionId ?? "")?.e;
+    return e ? performancesOf(data, e).find((p) => p.characterId === characterId)?.direction : undefined;
+  };
+  /** Whether the lead of beat `k` keeps the head direction (face side, chin height, tilt) they had in the beat before. */
+  const sameHead = (k: number) => {
+    const e = byId.get(data.acting.segments[k]?.expressionId ?? "")?.e;
+    if (!e) return false;
+    const a = directionAt(k - 1, beatActor(data, e).id);
+    const b = e.direction;
+    return Boolean(a && a.facing === b.facing && a.pitch === b.pitch && a.tilt === b.tilt);
+  };
+  /**
+   * A beat whose expression has no picture says in words what the picture would have shown: the look of the face
+   * and where the head, eyes and body point (Facial Acting Studio 2026-11-25, 스와르다 v33: beats without a picture
+   * carried no head direction, the head turned on past the front and the face came out mirrored). A near-front
+   * head keeps a little of the side that character was turned to in the nearest beat before it (else after it).
+   */
+  const frontSide = (k: number, characterId: string): "left" | "right" | null => {
+    const side = (f?: Facing) => (f && f !== "front" ? (f.startsWith("left") ? "left" : "right") : null);
+    for (let i = k - 1; i >= 0; i--) if (side(directionAt(i, characterId)?.facing)) return side(directionAt(i, characterId)?.facing);
+    for (let i = k + 1; i < data.acting.segments.length; i++) if (side(directionAt(i, characterId)?.facing)) return side(directionAt(i, characterId)?.facing);
+    return null;
+  };
+  const textTarget = (e: Expression, k: number, face: string) => {
+    const d = e.direction;
+    const side = frontSide(k, beatActor(data, e).id);
+    const head = [
+      d.facing !== "front" ? FACING_EN[d.facing] : side ? `almost facing the viewer, a little toward screen-${side}` : "almost facing the viewer, turned slightly to one side",
+      d.pitch === "level" ? "" : PITCH_EN[d.pitch],
+      d.tilt === "none" ? "" : `tilted toward screen-${d.tilt}`,
+    ].filter(Boolean);
+    return `${multi ? "Frame" : "Expression"} from this text (the text is this beat's reference): ${face ? `${sentence(noEndDot(face))} ` : ""}Head ${head.join(", ")}; ${GAZE_EN[d.gaze]}; body ${FACING_EN[d.body]}.`;
+  };
+
   /** `fixed` = the texts for the model (English where fresh, reconciled); otherwise the team's original wording (for the summary). */
   const beatsWith = (L: Budget | Limits, fixed = true) =>
     data.acting.segments.map((seg, k) => {
@@ -1326,6 +1446,28 @@ export function buildVideoHandoff(
           : multi
             ? `${who} says exactly (${lang}): "${text}"`
             : `Say exactly (${lang}): "${text}"`;
+      if (eb && original && asStates) {
+        // the acting sheet's beat: time and state, the speed of the change, the ordered action, the peak's moving
+        // hold, the end pose; then the face part by part, the picture (or its words), everyone else, the line
+        const span = `${fmtSec(seg.start)}–${fmtSec(seg.end)}s`;
+        return [
+          `${span}, ${eb.mood}${who ? ` — ${who}` : ""}: ${[
+            k > 0 && eb.change && (eb.change === "snap" && !sameHead(k) ? CHANGE_EN.snapTurn : CHANGE_EN[eb.change]),
+            sentence(noEndDot(eb.action)),
+            eb.hold && `A moving hold: ${sentence(noEndDot(eb.hold))}`,
+            last && eb.result && `Result pose: ${sentence(noEndDot(eb.result))}`,
+          ]
+            .filter(Boolean)
+            .join(" ")}`,
+          eb.facework && `Face: ${sentence(noEndDot(eb.facework))}`,
+          n ? `${multi ? "Frame" : "Expression"} target: ${n}${multi ? "" : lensHead(original.direction)}.` : textTarget(original, k, eb.face),
+          principleLine(original, "principles" in L ? L.principles : 2),
+          ...reactionLines(L),
+          l?.line ? `${says(l.line)}${eb.delivery ? ` — ${eb.delivery}` : ""}` : "Wordless beat: acting in full; only breath and natural sounds are heard.",
+        ]
+          .filter(Boolean)
+          .join("\n");
+      }
       if (eb && original) {
         // short English: face, hands, the checked direction, then the move into the next expression
         const B = "enPose" in L ? L : BUDGETS[0];
@@ -1386,17 +1528,58 @@ export function buildVideoHandoff(
     }).filter(Boolean);
   };
   const styleText = studioStyle(en.style ?? data.style, data.dimension);
+  // lines both forms of the prompt share (the reference list, the style, who speaks, the voices)
+  const refListEn =
+    refs.length
+    ? [
+        `Reference images (upload in this order):`,
+        ...refs.map((r, i) => {
+          if (r.role === "identity")
+            return multi
+              ? `${i + 1}. scene reference drawing of the whole cast — ${data.cast.map((c) => spotEn(data, c, en)).join("; ")}; use it for identity and relative sizes only`
+              : `${i + 1}. character design — may show several views of the same character; use it for identity only`;
+          if (r.parts)
+            return `${i + 1}. ${multi ? "frames" : "expressions"} ${r.parts.map((p) => numberOf(p.expressionId)).join(", ")} side by side, left to right — consecutive ${multi ? "approved scene frames" : "approved expression targets"}`;
+          const eb = r.expressionId ? enBeats.get(r.expressionId) : undefined;
+          const label = multi ? "approved scene frame" : "approved expression target";
+          return `${i + 1}. ${eb ? `${multi ? "frame" : "expression"} ${numberOf(r.expressionId!)} (${multi ? `${nameOf(r.expressionId!)}: ` : ""}${eb.emotion}) — ${label}` : r.label}`;
+        }),
+      ].join("\n")
+    : `Use the start frame as the exact ${multi ? "design of every character, their positions and the first poses" : "character design and the first pose"}.${
+        endFrame
+          ? " The shot ends exactly on the end frame (its framing, pose and expression): move the camera and the acting continuously from the start frame to the end frame."
+          : ""
+      }`;
+  const refMomentsEn =
+    refs.some((r) => r.role === "expression") &&
+    (multi
+      ? `Frame references are successive moments of this same shot of the whole cast.${refs.some((r) => r.parts) ? " A reference with frames side by side holds consecutive moments, played one after another in full frame." : ""} Do not render a grid or split screen; never duplicate a character.`
+      : refs.length > 1 && `Expression references are successive moments of this same shot for the same character.${refs.some((r) => r.parts) ? " A reference with frames side by side holds consecutive moments, played one after another in full frame." : ""} Do not render a grid, split screen or multiple faces.`);
+  const styleLineEn = (B: Budget) =>
+    styleText.trim() &&
+    `Art style: ${((s) => (s ? `${sentence(s)} ` : ""))(en.style ? clip(studioStyle(en.style, data.dimension), Math.max(B.style, 160)) : clip(studioStyle(data.style, data.dimension), B.style))}${
+      realBackground
+        ? `Keep the character in this ${dimensionEn(data)} animation style (never photorealistic); only the background follows the DIRECTOR'S DIRECTION.`
+        : `Stay in this ${dimensionEn(data)} animation style; never photorealistic.`
+    }${keepPainted(styleText, data.dimension)}`;
+  const dialogueRuleEn =
+    multi &&
+    `Dialogue: only the character named for a line speaks it, with their own voice and lip movement; while one character speaks the others keep their mouths closed and listen (reacting with eyes, brows, breath and small head moves). Lines never overlap unless a beat says so.${
+      data.dialogue.lines.some((l) => l.line.trim() && isVoiceOver(l)) ? " Lines marked voice-over are heard over the picture; nobody lip-syncs them." : ""
+    } A character a beat describes as silently mouthing words moves their lips without sound.`;
+  const voicesEn = (B: Budget) =>
+    voices.length &&
+    (multi
+      ? `Voices (each character keeps their own voice): ${voices
+          .map((v) => `${castName(data, v.id)} — ${noEndDot(clip(v.text, v.fresh ? Math.max(B.voice, 160) : B.voice) || clean(v.text).slice(0, 60))}`)
+          .join("; ")}. Speak only the exact dialogue below; never read direction text aloud.`
+      : `Voice: ${((s) => (s ? `${sentence(s)} ` : ""))(clip(voices[0].text, voices[0].fresh ? Math.max(B.voice, 160) : B.voice))}Speak only the exact dialogue below; never read direction text aloud.`);
   const headerWith = (B: Budget) =>
     [
       `ONE single continuous shot with no cuts: a ${data.acting.duration}-second ${multi ? `${data.cast.length}-character scene` : "character acting shot"}, ${data.video.aspectRatio}. Every beat below is a moment of this same shot; never cut away or change the shot.`,
       multi && `Cast (exactly these ${data.cast.length} characters, always in these screen positions; nobody else): ${blockingEn(data)}.`,
       lookFor(B).length && `Keep visible${multi ? " — " : ": "}${lookFor(B).join(multi ? " | " : "; ")}.`,
-      styleText.trim() &&
-        `Art style: ${((s) => (s ? `${sentence(s)} ` : ""))(en.style ? clip(studioStyle(en.style, data.dimension), Math.max(B.style, 160)) : clip(studioStyle(data.style, data.dimension), B.style))}${
-          realBackground
-            ? `Keep the character in this ${dimensionEn(data)} animation style (never photorealistic); only the background follows the DIRECTOR'S DIRECTION.`
-            : `Stay in this ${dimensionEn(data)} animation style; never photorealistic.`
-        }${keepPainted(styleText, data.dimension)}`,
+      styleLineEn(B),
       multi
         ? `Match the reference images exactly: every character keeps their own face, hair, colors, costume and the shared drawing style; never swap or blend features between characters. Each character's face shape, eye shape and size, nose, hairline and body proportions stay identical in every beat; only the expression muscles (brows, eyelids, mouth) and the poses change.`
         : `Match the reference images exactly: same face, hair, colors, costume and drawing style. Only one character appears. The face shape, eye shape and size, nose, hairline and body proportions stay identical in every beat; only the expression muscles (brows, eyelids, mouth) and the pose change.`,
@@ -1410,42 +1593,12 @@ export function buildVideoHandoff(
       `${background ? "Background as in the DIRECTOR'S DIRECTION below" : "White background"}, ${cameraMove ? `starting at ${FRAMING_VIDEO_EN[framing]}` : FRAMING_VIDEO_EN[framing]}${
         angle ? "" : ", eye-level"
       }${vertical ? ", composed for a vertical frame" : ""}. ${camera} No extra characters, text or subtitles.`,
-      multi &&
-        `Dialogue: only the character named for a line speaks it, with their own voice and lip movement; while one character speaks the others keep their mouths closed and listen (reacting with eyes, brows, breath and small head moves). Lines never overlap unless a beat says so.${
-          data.dialogue.lines.some((l) => l.line.trim() && isVoiceOver(l)) ? " Lines marked voice-over are heard over the picture; nobody lip-syncs them." : ""
-        } A character a beat describes as silently mouthing words moves their lips without sound.`,
+      dialogueRuleEn,
       hands &&
         `Arms and hands act together with the face, stepping through in-between poses from one expression reference's gesture to the next (never jumping straight to the next pose); hands always correctly drawn.`,
-      refs.length
-        ? [
-            `Reference images (upload in this order):`,
-            ...refs.map((r, i) => {
-              if (r.role === "identity")
-                return multi
-                  ? `${i + 1}. scene reference drawing of the whole cast — ${data.cast.map((c) => spotEn(data, c, en)).join("; ")}; use it for identity and relative sizes only`
-                  : `${i + 1}. character design — may show several views of the same character; use it for identity only`;
-              if (r.parts)
-                return `${i + 1}. ${multi ? "frames" : "expressions"} ${r.parts.map((p) => numberOf(p.expressionId)).join(", ")} side by side, left to right — consecutive ${multi ? "approved scene frames" : "approved expression targets"}`;
-              const eb = r.expressionId ? enBeats.get(r.expressionId) : undefined;
-              const label = multi ? "approved scene frame" : "approved expression target";
-              return `${i + 1}. ${eb ? `${multi ? "frame" : "expression"} ${numberOf(r.expressionId!)} (${multi ? `${nameOf(r.expressionId!)}: ` : ""}${eb.emotion}) — ${label}` : r.label}`;
-            }),
-          ].join("\n")
-        : `Use the start frame as the exact ${multi ? "design of every character, their positions and the first poses" : "character design and the first pose"}.${
-            endFrame
-              ? " The shot ends exactly on the end frame (its framing, pose and expression): move the camera and the acting continuously from the start frame to the end frame."
-              : ""
-          }`,
-      refs.some((r) => r.role === "expression") &&
-        (multi
-          ? `Frame references are successive moments of this same shot of the whole cast.${refs.some((r) => r.parts) ? " A reference with frames side by side holds consecutive moments, played one after another in full frame." : ""} Do not render a grid or split screen; never duplicate a character.`
-          : refs.length > 1 && `Expression references are successive moments of this same shot for the same character.${refs.some((r) => r.parts) ? " A reference with frames side by side holds consecutive moments, played one after another in full frame." : ""} Do not render a grid, split screen or multiple faces.`),
-      voices.length &&
-        (multi
-          ? `Voices (each character keeps their own voice): ${voices
-              .map((v) => `${castName(data, v.id)} — ${noEndDot(clip(v.text, v.fresh ? Math.max(B.voice, 160) : B.voice) || clean(v.text).slice(0, 60))}`)
-              .join("; ")}. Speak only the exact dialogue below; never read direction text aloud.`
-          : `Voice: ${((s) => (s ? `${sentence(s)} ` : ""))(clip(voices[0].text, voices[0].fresh ? Math.max(B.voice, 160) : B.voice))}Speak only the exact dialogue below; never read direction text aloud.`),
+      refListEn,
+      refMomentsEn,
+      voicesEn(B),
       lang === "Old English" && OLD_ENGLISH_HINT,
       arcLine(en.arc),
       ACTING_EN,
@@ -1461,16 +1614,193 @@ export function buildVideoHandoff(
     : "";
   const constraints = constraintsFor(rig, data.video.weight, data.video.cadence, data.dimension);
   const assemble = (B: Budget) => [headerWith(B), beatsWith(B).join("\n\n"), directorBlock, constraints].filter(Boolean).join("\n\n");
+
+  // ── The acting written as states (Facial Acting Studio's prompt, 2026-11-25): header → director's notes →
+  //    shot → who speaks and the voices → first frame and beats → the director's own words → studio constraints ──
+  const isSided = (x: string) => /\bown\s+(?:left|right)\b/i.test(x);
+  const sidedFirst = (items: string[]) => [...items.filter(isSided), ...items.filter((x) => !isSided(x))];
+  // the features to keep, one-sided ones first so a short list never loses them
+  const keepVisibleWith = (B: ActBudget) => {
+    const per = multi ? Math.max(2, B.features - data.cast.length + 1) : B.features;
+    let sided = false;
+    const lines = data.cast
+      .map((c) => {
+        const f = en.cast.get(c.id);
+        const who = multi ? `${castName(data, c.id)}: ` : "";
+        if (f?.look) {
+          const items = sidedFirst(f.look).slice(0, per);
+          sided ||= items.some(isSided);
+          return items.length ? `${who}${items.join("; ")}` : "";
+        }
+        const locks = shortLocks(c.locks, per);
+        if (locks.length) return `${who}${locks.join(", ")}`;
+        const look = clip(c.appearance, 200);
+        return look ? `${who}${noEndDot(look)}` : "";
+      })
+      .filter(Boolean);
+    return lines.length ? `Keep visible${multi ? " — " : ": "}${lines.join(multi ? " | " : "; ")}.${sided ? ` ${SAME_SIDE_EN}` : ""}` : "";
+  };
+  // the emotion is the protagonist: the states in order, a trigger for every change
+  const arcStates = () =>
+    `THE EMOTIONAL ARC: THIS IS THE WHOLE POINT. A LIVE, CHANGING performance, ${multi ? "every face" : "the face"} alive in every moment, and every change has a trigger: ${data.acting.segments
+      .map((seg, k, segs) => {
+        const eb = enBeats.get(seg.expressionId)!;
+        const next = k < segs.length - 1 ? (eb.trigger ? ` → ${noEndDot(eb.trigger)} →` : " →") : "";
+        return `${eb.mood}${multi ? ` (${nameOf(seg.expressionId)})` : ""}${next}`;
+      })
+      .join(" ")}. Play the transitions.`;
+  const faceBodyWith = (B: ActBudget) =>
+    [
+      // the head and hair stay calm against morphing; the size of the acting is the body's
+      "FACE AND BODY: big, clear character acting, broad enough to read at a glance: a calm head and hair, the size carried by the shoulders, torso and arms, one sizable body action in every beat.",
+      keepVisibleWith(B),
+      multi
+        ? "Each character's face shape, eye shape, nose, hairline and body proportions stay identical in every beat, each character keeping their own features; only the expression muscles (brows, eyelids, mouth) and the poses change. The eyes stay a natural, moderate size."
+        : "The face shape, eye shape, nose, hairline and body proportions stay identical in every beat; only the expression muscles (brows, eyelids, mouth) and the pose change. The eyes stay a natural, moderate size.",
+      `Forehead and brows always active and matched to each state, ${FACE_ASYM_VIDEO_EN}, the whole face and the eyes alive.`,
+      "ORDER RULE: whenever the head or the body moves, the eyes go first, then the head, then the body, one after another; the eyes land on the new target before the chin and shoulders follow.",
+      "Each expression change rides on a physical action (a blink, a breath, a move of the shoulders or a hand passing the face).",
+      B.enEyeline && acting?.eyeline && `EYELINE: ${noEndDot(acting.eyeline)}; each look lands and rests a moment.`,
+      BREATH_BLINK_EN,
+      multi && "Everyone in frame is live: whoever is listening keeps reacting with the eyes, brows, breath and a body action of their own.",
+      "Ongoing business (eating, sipping, handling a prop) carries on through a reaction and resumes after it. A gesture or look written for a word lands exactly on that word; an exclamation mark is punctuation, and the loudness of a line comes from its delivery.",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  // how the body gets from one reference to the next: real movement through the joints, at one of two speeds
+  const continuityNote = [
+    refs.some((r) => r.role === "expression")
+      ? `CONTINUITY: the ${multi ? "frame" : "expression"} references show what each moment becomes; the body gets there by real movement through its joints, the way a person moves.`
+      : "CONTINUITY: the body gets from one beat to the next by real movement through its joints, the way a person moves.",
+    hands
+      ? "When the head turns, it turns on the neck and the shoulders follow, the face passing the front and settling on a turned angle; an arm travels from the shoulder through the elbow and wrist along one unbroken path, the hand staying in view."
+      : "When the head turns, it turns on the neck and the shoulders follow, the face passing the front and settling on a turned angle.",
+    changes
+      ? `Every change of expression plays at one of two speeds only, as each beat says. ${[usesSpeed("slow") && CHANGE_DEF_EN.slow, usesSpeed("snap") && CHANGE_DEF_EN.snap]
+          .filter(Boolean)
+          .join(" ")} Either way through real in-between steps, each new expression read for a breath before the next move.`
+      : "Every change of expression plays at one of two speeds only: very slow, stepping through in-between poses into the next expression, or a sharp snap of the face with a small settle; either way the face passes through real in-between steps, one part at a time, the head travelling on an arc around the neck, and each new expression lands and reads for a breath before the next move.",
+    cameraMove || endFrame
+      ? `${multi ? "The characters' sizes, proportions and costumes" : "The character's size, proportions and costume"} stay the same; the framing changes only with the camera as described${
+          hands ? "; a gesture toward the viewer stays at arm's length, level with the body" : ""
+        }.`
+      : `The framing, ${multi ? "every character's size and position, and the costumes" : "the character's size and position, and the costume"} carry over unchanged from one moment to the next${
+          hands ? "; a gesture toward the viewer stays at arm's length, level with the body" : ""
+        }.`,
+  ].join(" ");
+  // the body's own weight in this scene and what follows it (how heavy it all reads is the studio block's)
+  const weightWith = (B: ActBudget) =>
+    [
+      "WEIGHT AND FOLLOW-THROUGH:",
+      B.enWeight && acting?.weight && sentence(upperFirst(noEndDot(acting.weight))),
+      `Every reaction has a cause, in order: the body first, then ${noEndDot(acting?.heavy || "the hair and the heavier costume")}, then ${noEndDot(
+        acting?.light || "the lighter accessories",
+      )}; they follow the body and settle.`,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  // the camera as one line of feel (the studio block's [CAMERA] says how the hand-held camera breathes)
+  const theChars = multi ? "the characters'" : "the character's";
+  const cameraNote = directorCamera
+    ? `CAMERA: exactly as in the DIRECTOR'S DIRECTION below (rig, path, speed, height and angle); one continuous take, and ${theChars} proportions stay the same.`
+    : cameraMove
+      ? `CAMERA: hand-held, following the moves in the beats; one continuous take, and ${theChars} proportions stay the same.`
+      : endFrame
+        ? `CAMERA: one continuous take from the start frame's framing to the end frame's framing, and ${theChars} proportions stay the same.`
+        : `CAMERA: the framing holds on the ${multi ? "group" : "character"} for the whole shot, with only the faint sway of a hand-held camera; ${
+            multi ? "every character stays" : "the character stays"
+          } at the same distance, size and position in the frame.`;
+  const notesWith = (B: ActBudget) =>
+    `DIRECTOR'S NOTES:\n${[
+      acting?.scene && `THE SCENE: ${sentence(noEndDot(acting.scene))}`,
+      arcStates(),
+      faceBodyWith(B),
+      continuityNote,
+      weightWith(B),
+      cameraNote,
+    ]
+      .filter((x): x is string => Boolean(x))
+      .map((x, i) => `${i + 1}. ${x}`)
+      .join("\n")}`;
+  const introWith = (B: ActBudget) =>
+    [
+      `${data.acting.duration} seconds, ${data.video.aspectRatio}, ONE continuous shot in one unbroken take${
+        multi ? ` of ${data.cast.length} characters` : ""
+      }: every beat below is a moment of this same shot. ${
+        multi
+          ? "Match the reference images: every character keeps their own face, hair, colors, costume and the shared drawing style, each feature staying with its own character."
+          : "Match the reference images: same face, hair, colors, costume and drawing style."
+      }`,
+      multi && `Cast (exactly these ${data.cast.length} characters, always in these screen positions; nobody else): ${blockingEn(data)}.`,
+      refListEn,
+      refMomentsEn,
+      styleLineEn(B),
+    ]
+      .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+      .join("\n");
+  const shotLine = `SHOT: ${cameraMove ? `starting at ${FRAMING_VIDEO_EN[framing]}` : FRAMING_VIDEO_EN[framing]}, ${
+    background ? "background as in the DIRECTOR'S DIRECTION below" : "white background"
+  }${angle ? "" : ", eye-level"}${vertical ? ", composed for a vertical frame" : ""}. COMPOSITION: ${
+    background
+      ? `${multi ? "the characters keep" : "the character keeps"} the reference proportions (face, neck, shoulders, head-to-body size); the white margins in the reference images are only padding outside the scene.`
+      : multi
+        ? "the characters in their screen positions, keeping the reference proportions (face, neck, shoulders, head-to-body size) and their relative heights, on a white background."
+        : `the character centered and keeping the reference proportions (face, neck, shoulders, head-to-body size), with white background filling the ${vertical ? "top and bottom" : "left and right"}.`
+  } FACE ANGLE: ${multi ? "every face" : "the face"} always at least slightly turned or tilted off the lens axis (three-dimensional); any look into the lens comes from that turned head. ${
+    multi ? `Only these ${data.cast.length} characters appear` : "Only this one character appears"
+  }, the frame free of text and subtitles.`;
+  // a start frame is the first frame itself: no second description of it
+  const frameZero = asStates && acting?.frameZero && refs.length ? `Frame zero: ${sentence(noEndDot(acting.frameZero))}` : "";
+  const summaryWith = (B: ActBudget) =>
+    B.enSummary
+      ? `In short: real speed; weighted movements and held pauses; eyes a natural size; AN EMOTIONAL ARC PLAYED IN FULL: ${data.acting.segments
+          .map((x) => enBeats.get(x.expressionId)!.mood)
+          .join(", ")}, each change with its trigger, eyes first, then head, then body.`
+      : "";
+  const assembleActing = (B: ActBudget) =>
+    [
+      introWith(B),
+      notesWith(B),
+      shotLine,
+      dialogueRuleEn,
+      [voicesEn(B), lang === "Old English" && OLD_ENGLISH_HINT].filter(Boolean).join("\n"),
+      [frameZero, beatsWith(B).join("\n\n")].filter(Boolean).join("\n\n"),
+      summaryWith(B),
+      directorBlock,
+      constraints,
+    ]
+      .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+      .join("\n\n");
+
   // a group scene needs room for the cast, the voices and every character's acting per beat
   // the studio block grew (weight, camera, sound): its extra length is not taken from the beats
-  const lengthTarget =
-    (enBeats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) + (multi ? VIDEO_PROMPT_EXTRA_PER_CHARACTER * (data.cast.length - 1) : 0) + constraintsExtra(constraints) + keepPainted(styleText, data.dimension).length +
-    ACTING_EN.length + arcLine(en.arc).length + FACE_ANGLE_EN.length;
+  const perCharacter = multi ? VIDEO_PROMPT_EXTRA_PER_CHARACTER * (data.cast.length - 1) : 0;
+  const faceLines = data.acting.segments.filter((x) => enBeats.get(x.expressionId)?.facework).length;
+  // a beat without a picture carries its look and head direction in words
+  const noPicture = data.acting.segments.filter((x) => !refNo(x.expressionId)).length;
+  const lengthTarget = asStates
+    ? VIDEO_PROMPT_TARGET_ACTING +
+      perCharacter +
+      (multi ? GROUP_NOTES_ROOM : 0) +
+      constraintsExtra(constraints) +
+      keepPainted(styleText, data.dimension).length +
+      EXTRA_PER_BEAT * Math.max(0, data.acting.segments.length - 3) +
+      FACE_LINE_ROOM * faceLines +
+      CHANGE_ROOM * changes +
+      (source === "references" ? NO_PICTURE_ROOM * noPicture : 0)
+    : (enBeats.size ? VIDEO_PROMPT_TARGET_EN : VIDEO_PROMPT_TARGET) + perCharacter + constraintsExtra(constraints) + keepPainted(styleText, data.dimension).length +
+      ACTING_EN.length + arcLine(en.arc).length + FACE_ANGLE_EN.length;
   let prompt = "";
-  for (const B of BUDGETS) {
-    prompt = assemble(B);
-    if (prompt.length <= lengthTarget) break;
-  }
+  if (asStates)
+    for (const B of ACT_BUDGETS) {
+      prompt = assembleActing(B);
+      if (prompt.length <= lengthTarget) break;
+    }
+  else
+    for (const B of BUDGETS) {
+      prompt = assemble(B);
+      if (prompt.length <= lengthTarget) break;
+    }
 
   return {
     recommendedModel: multi ? "Kling 4.0 (여러 인물·대사 분리에 가장 안정적) / Seedance 2.5" : "Kling 4.0 / Seedance 2.5 (참고 그림 여러 장 첨부)",
@@ -1576,6 +1906,15 @@ export const keepPainted = (style: string, dim: Dimension = "3d") =>
  */
 export const ACTING_EN =
   "FACE AND BODY: feature-film character acting, broad enough to read at a glance and grounded. Natural blinking; forehead and brows always active and matched to each state, no mask-face, no dead eyes. Eyes stay a natural, moderate size. ORDER RULE: in every change the eyes move first, then the head, then the body, one after another. Eyelines are held steady, never darting. At the emotional peak, a moving hold: the pose stops and only the breath, shoulders, eyes and tears move. Everyone in frame is live: whoever is not speaking keeps reacting with small head turns, breathing and small hand actions. Ongoing business (eating, sipping, smoking, handling a prop) carries on through a reaction: the reaction layers on top — eyes, then brows, then head — and the business resumes. A gesture or look written for a word lands exactly on that word; how loud a line is comes from its delivery, and an exclamation mark is punctuation, not volume.";
+
+/**
+ * The acting rules of Facial Acting Studio that hold in any mode (2026-11-25), for the storyboard prompt: a calm
+ * head with the body carrying the size, two speeds of a change of face (a medium speed melts it), breath and
+ * blinks with eyes that move on their own and land somewhere new, each hand keeping its job and its arm.
+ * Written once per prompt, with no prohibition of its own.
+ */
+export const FACES_IN_MOTION_EN =
+  "FACES IN MOTION: a calm head and hair, the size of the acting carried by the shoulders, torso and arms. Every change of a face plays at one of two speeds only: very slow, part by part (eyes, then brows and lids, then mouth), or a sharp snap led by a breath and a blink with the head keeping its angle; either way through real in-between steps, each new expression read for a breath. Chest and shoulders rise and fall with each breath; the eyes often move on their own while the head stays still, and a look or turn that comes back settles at a different height or tilt than where it left. A hand keeps its job from one panel to the next, each hand joined to its own arm.";
 
 /**
  * The team's composition rule (storyboard): a face is never frontal in a horizontally symmetrical frame, and
@@ -1987,6 +2326,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
         `Voices: ${voices.map((v) => `${castName(data, v.id)} — ${noEndDot(clip(v.text, 160) || clean(v.text).slice(0, 80))}`).join("; ")}. Speak only the exact dialogue below; never read direction text aloud.`,
       arcLine(en.arc),
       ACTING_EN,
+      FACES_IN_MOTION_EN,
       `Everyone stays alive between the panels (breathing, blinks, small weight shifts); every change ${multiShot ? "inside a shot " : ""}is acted through a physical action and in-between poses. Each action reads in order: look, prepare, act, contact, settle; the result pose holds long enough to read.${
         multiShot ? " Across a cut, the characters, costumes, world and light stay the same." : ""
       }`,
@@ -2012,7 +2352,7 @@ function buildStoryboardVideo(data: ProjectData, source: "start_frame" | "refere
     constraintsExtra(constraints) +
     keepPainted(en.style ?? data.style, data.dimension).length +
     // the acting doctrine, the arc and frame zero are written once and never cut
-    ACTING_EN.length + arcLine(en.arc).length + frameZero.length + COMPOSITION_EN.length;
+    ACTING_EN.length + FACES_IN_MOTION_EN.length + arcLine(en.arc).length + frameZero.length + COMPOSITION_EN.length;
   let prompt = "";
   for (const B of STORY_BUDGETS) {
     prompt = [headerWith(B), frameZero, beatsWith(B).join("\n\n"), directorBlock, constraints].filter(Boolean).join("\n\n");

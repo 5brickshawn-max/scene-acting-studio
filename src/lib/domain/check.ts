@@ -89,7 +89,7 @@ export function preRenderCheck(data: ProjectData, h: VideoHandoff): CheckItem[] 
     );
   else add("ok", "금지 표현", `금지 표현 ${negatives}개 — 권장 범위(${NEGATIVE_LIMIT}개 이하)입니다.`);
   // the team's composition rule: no mirror-symmetrical frontal face, no straight-on lens stare from one
-  if (/Face angle:|horizontally symmetrical frame/.test(h.prompt)) {
+  if (/Face angle:|FACE ANGLE:|horizontally symmetrical frame/.test(h.prompt)) {
     const frontal = data.mode !== "storyboard" && data.expressions.some((e) => e.direction.facing === "front");
     add(
       "ok",
