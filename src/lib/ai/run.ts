@@ -27,6 +27,7 @@ import { preRenderCheck } from "@/lib/domain/check";
 import { resolveFix } from "@/lib/domain/fixes";
 import { buildEnglishSheet } from "@/lib/domain/english";
 import { cacheThroughLastImage, consultConversation } from "./cache";
+import { aiErrorLog, aiErrorMessage, apiReason, refusedForFallback } from "./errors";
 
 const MODEL = process.env.CLAUDE_MODEL || "claude-opus-5-5";
 const client = new Anthropic();
@@ -124,7 +125,7 @@ async function callClaude<S extends z.ZodType>(
   effort: "low" | "medium" | "high" = "high",
 ) {
   const started = Date.now();
-  const once = (eff: "low" | "medium" | "high", maxTokens: number, timeout = 12 * 60 * 1000) =>
+  const send = (eff: "low" | "medium" | "high", maxTokens: number, timeout: number, withFallback: boolean) =>
     client.beta.messages.parse(
       {
         model: MODEL,
@@ -134,12 +135,19 @@ async function callClaude<S extends z.ZodType>(
         messages,
         output_config: { effort: eff, format: betaZodOutputFormat(schema) },
         // If a safety classifier declines, retry on Anthropic's recommended fallback model.
-        betas: ["server-side-fallback-2026-07-01"],
-        fallbacks: "default",
+        ...(withFallback ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
       },
       // an explicit timeout (within the route's 800 s) lets a non-streaming request use the larger budget
       { timeout },
     );
+  const once = (eff: "low" | "medium" | "high", maxTokens: number, timeout = 12 * 60 * 1000) =>
+    send(eff, maxTokens, timeout, true).catch((e: unknown) => {
+      // the fallback is optional: when the API refuses its header or its field (a beta retired or not enabled for
+      // the organization, a model without one), the same request goes once more without it
+      if (!refusedForFallback(e)) throw e;
+      console.warn(`[ai] the request was refused for its fallback (${apiReason(e as { message?: string })}); sent again without it`);
+      return send(eff, maxTokens, timeout, false);
+    });
   // An answer cut off at the budget comes back as unfinished JSON (the SDK fails to parse it, or reports max_tokens).
   const cutOff = (e: unknown) => e instanceof Error && /Failed to parse structured output|Unterminated string|Unexpected end of JSON/i.test(e.message);
   const TOO_LONG = "응답이 너무 길어 중간에 끊겼습니다. 컷 수를 줄이거나 시나리오를 나눠 다시 시도해주세요.";
@@ -830,10 +838,9 @@ export async function runJob(jobId: string) {
       })
       .eq("id", jobId);
   } catch (e) {
-    let message = e instanceof Error ? e.message : "알 수 없는 오류";
-    if (e instanceof Anthropic.RateLimitError) message = "AI 요청이 몰려 있습니다. 잠시 후 다시 시도해주세요.";
-    else if (e instanceof Anthropic.AuthenticationError) message = "AI 키 설정을 확인해주세요 (관리자).";
-    else if (e instanceof Anthropic.APIError) message = `AI 서버 오류 (${e.status}). 잠시 후 다시 시도해주세요.`;
+    // the API's own reason goes to the team and to the server log (a bare "400" left nothing to act on)
+    const message = aiErrorMessage(e);
+    console.error(aiErrorLog(job.kind, e));
     await sb
       .from("ai_jobs")
       .update({ status: "failed", error: message, finished_at: new Date().toISOString() })
